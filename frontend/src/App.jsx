@@ -8,8 +8,11 @@ import MarketsTab   from './tabs/MarketsTab';
 import WatchlistTab from './tabs/WatchlistTab';
 import PortfolioTab from './tabs/PortfolioTab';
 import JournalTab   from './tabs/JournalTab';
+import HelpTab from './tabs/HelpTab';
+import WelcomePage from './components/WelcomePage';
 
 export default function App() {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [activeTab, setActiveTab]         = useState('scanner');
   const [optionsTicker, setOptionsTicker] = useState('');
   const macro = useMacroData();
@@ -22,6 +25,21 @@ export default function App() {
       localStorage.setItem(key, JSON.stringify([...existing, { ticker, analysis, price, added: Date.now() }]));
     }
   };
+
+  // Add navigate handler:
+const handleNavigate = (tab) => {
+  setActiveTab(tab);
+};
+
+// Wrap your return:
+if (showWelcome) {
+  return (
+    <WelcomePage
+      onEnter={() => setShowWelcome(false)}
+      onNavigate={handleNavigate}
+    />
+  );
+}
 
   return (
     <div style={{ minHeight: '100vh', background: '#07070e', color: '#c8c8d0', fontFamily: "'Inter', sans-serif" }}>
@@ -57,9 +75,10 @@ export default function App() {
 
       {/* Content */}
       <div style={{ padding: 24 }}>
+        {activeTab === 'help' && <HelpTab />}
+        {activeTab === 'markets'   && <MarketsTab   intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
         {activeTab === 'scanner'   && <ScannerTab   macro={macro} onOpenOptions={openOptions} onAddToWatchlist={addToWatchlist} />}
         {activeTab === 'options'   && <OptionsTab   macro={macro} initialTicker={optionsTicker} />}
-        {activeTab === 'markets'   && <MarketsTab   intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
         {activeTab === 'watchlist' && <WatchlistTab macro={macro} onOpenOptions={openOptions} />}
         {activeTab === 'portfolio' && <PortfolioTab />}
         {activeTab === 'journal'   && <JournalTab />}

@@ -5,6 +5,7 @@ export const TABS = [
   { id: 'watchlist', label: 'WATCHLIST' },
   { id: 'portfolio', label: 'PORTFOLIO' },
   { id: 'journal',   label: 'JOURNAL'   },
+  { id: 'help',      label: '? HELP'    },
 ];
 
 export const SC = { BUY: '#00ff88', SELL: '#ff4444', HOLD: '#ffaa00' };
