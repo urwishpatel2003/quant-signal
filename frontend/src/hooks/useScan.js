@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain } from '../api/tradier';
 import { runPriceAnalysis } from '../api/claude';
+import { calcIndicators } from '../utils/indicators';
 
 export function useScan(macro) {
   const [ticker,       setTicker]       = useState('');
@@ -16,6 +17,7 @@ export function useScan(macro) {
   const [analysis,     setAnalysis]     = useState(null);
   const [logs,         setLogs]         = useState([]);
   const terminalRef = useRef(null);
+  const [ta, setTa] = useState(null);
 
   useEffect(() => {
     if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
@@ -32,6 +34,9 @@ export function useScan(macro) {
       const [p, q] = await Promise.all([fetchPrice(t), fetchTradierQuote(t)]);
       if (!p) throw new Error('Ticker not found');
       setOhlcv(p); setQuote(q);
+      const indicators = calcIndicators(p);
+      setTa(indicators);
+      log(`RSI: ${indicators?.rsi14} [${indicators?.rsiSignal}] | Trend: ${indicators?.trendSignal} | Vol: ${indicators?.volumeSignal}`);
       const livePrice = q?.last || p.current;
       log(`Price: $${livePrice?.toFixed(2)}`);
 
@@ -53,7 +58,7 @@ export function useScan(macro) {
       if (macro?.bonds) log(`10Y=${macro.bonds.tnx?.current?.toFixed(2)}% | Curve=${macro.bonds.yieldCurve}% ${macro.bonds.inverted ? '⚠INVERTED' : ''}`);
 
       setStage('claude'); log('Running global macro analysis...');
-      const a = await runPriceAnalysis(t, livePrice, p, f, optData, n, macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar);
+      const a = await runPriceAnalysis(t, livePrice, p, f, optData, n, macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar, indicators);
       setAnalysis(a);
       log(`Signal: ${a.signal} ${a.confidence}% | Macro: ${a.macroImpact} | Geo: ${a.geopoliticalRisk} | Global: ${a.globalMarketTrend}`);
       setStage('done');
@@ -61,5 +66,5 @@ export function useScan(macro) {
     finally { setLoading(false); }
   };
 
-  return { ticker, loading, stage, error, ohlcv, quote, fundamentals, options, news, analysis, logs, terminalRef, runScan };
+  return { ticker, loading, stage, error, ohlcv, quote, fundamentals, options, news, analysis, logs, terminalRef, runScan, ta };
 }

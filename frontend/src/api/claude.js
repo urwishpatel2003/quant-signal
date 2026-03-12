@@ -35,7 +35,7 @@ export function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
   return ctx;
 }
 
-export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar) {
+export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta) {
   const macroCtx = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
   return callClaude({
     model: 'claude-sonnet-4-20250514', max_tokens: 1400,
@@ -49,6 +49,7 @@ Return ONLY a JSON object:
 PRICE (last 5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
 FUNDAMENTALS: P/E=${fundamentals?.pe}, Beta=${fundamentals?.beta}, Target=$${fundamentals?.targetMeanPrice}, Rec=${fundamentals?.recommendationKey}
 OPTIONS FLOW: P/C=${options?.putCallRatio?.toFixed(2)}, CallIV=${options?.avgCallIV}%, PutIV=${options?.avgPutIV}%
+TECHNICAL ANALYSIS: RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)
 STOCK NEWS: ${news?.map(n => n.title).join(' | ')}
 ${macroCtx}
 How do Asian/European market moves, yield curve shape, VIX, DXY, and upcoming calendar events specifically affect ${ticker}?
@@ -57,7 +58,7 @@ Return JSON only.`
   });
 }
 
-export async function runOptionsAnalysis(ticker, price, expiry, chain, fundamentals, news, priceSignal, bonds, macroNews, intlMarkets, calendar) {
+export async function runOptionsAnalysis(ticker, price, expiry, chain, fundamentals, news, priceSignal, bonds, macroNews, intlMarkets, calendar, ta) {
   const calls = chain?.topCalls?.slice(0, 6) || [];
   const puts  = chain?.topPuts?.slice(0,  6) || [];
   const hasValidCalls = calls.some(c => c.mid > 0.10 && Math.abs(c.strike - price) <= 20);
@@ -76,6 +77,7 @@ Return ONLY this JSON:
       content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry}
 Today: ${new Date().toLocaleDateString()} | Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'}
 Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact} | Global: ${priceSignal?.globalMarketTrend}
+TECHNICALS: RSI=${ta?.rsi14} [${ta?.rsiSignal}] | Trend=${ta?.trendSignal} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x)
 
 === ATM CALLS (spot $${price?.toFixed(2)}) ===
 ${calls.map(c => `Strike=$${c.strike} | Bid=$${c.bid.toFixed(2)} | Ask=$${c.ask.toFixed(2)} | MID=$${c.mid.toFixed(2)} | IV=${c.iv}% | Delta=${c.delta} | OI=${c.oi}`).join('\n')}
