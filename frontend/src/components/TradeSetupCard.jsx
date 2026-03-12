@@ -1,83 +1,65 @@
-export default function TradeChecklist({ ta, priceSignal, optionsSignal, calendar, selectedExpiry }) {
-  if (!ta || !priceSignal || !optionsSignal) return null;
+export default function TradeSetupCard({ optionsSignal, priceSignal, ticker, selectedExpiry }) {
+  if (!optionsSignal || !priceSignal) return null;
 
-  const rec = optionsSignal.recommendation;
-  const isCall = rec === 'CALL';
+  const isCall   = optionsSignal.recommendation === 'CALL';
+  const contract = isCall ? optionsSignal.bestCall : optionsSignal.bestPut;
+  if (!contract) return null;
 
-  const earningsWarning = calendar?.some(e =>
-    ['earnings', 'results', 'quarterly'].some(k => e.title?.toLowerCase().includes(k))
-  );
-
-  const checks = [
-    {
-      label: 'Trend aligned with trade',
-      pass: isCall ? ta.trendSignal === 'BULLISH' : ta.trendSignal === 'BEARISH',
-      note: `SMA20 ${ta.trendSignal === 'BULLISH' ? '>' : '<'} SMA50 — ${ta.trendSignal}`,
-    },
-    {
-      label: 'RSI not in danger zone',
-      pass: isCall ? ta.rsi14 < 70 : ta.rsi14 > 30,
-      note: `RSI at ${ta.rsi14} — ${ta.rsiSignal}`,
-    },
-    {
-      label: 'Price signal confirms direction',
-      pass: (isCall && priceSignal.signal === 'BUY') || (!isCall && priceSignal.signal === 'SELL') || priceSignal.signal === 'HOLD',
-      note: `Signal: ${priceSignal.signal} at ${priceSignal.confidence}% confidence`,
-    },
-    {
-      label: 'Volume confirms move',
-      pass: ta.volumeSignal !== 'LOW',
-      note: `Volume ${ta.volumeRatio}x average — ${ta.volumeSignal}`,
-    },
-    {
-      label: 'Macro environment supports trade',
-      pass: priceSignal.macroImpact === 'POSITIVE' || priceSignal.macroImpact === 'NEUTRAL',
-      note: `Macro: ${priceSignal.macroImpact}`,
-    },
-    {
-      label: 'No earnings in expiry window',
-      pass: !earningsWarning,
-      note: earningsWarning ? '⚠ Earnings detected — IV crush risk' : 'No earnings detected',
-    },
-    {
-      label: 'IV environment is favorable',
-      pass: optionsSignal.ivRank === 'LOW' || optionsSignal.ivRank === 'NORMAL',
-      note: `IV is ${optionsSignal.ivRank} — ${optionsSignal.ivComment}`,
-    },
-  ];
-
-  const passCount = checks.filter(c => c.pass).length;
-  const score = Math.round((passCount / checks.length) * 100);
-  const scoreColor = score >= 70 ? '#00ff88' : score >= 50 ? '#ffaa00' : '#ff4444';
-  const verdict = score >= 70 ? 'GO' : score >= 50 ? 'CAUTION' : 'NO-GO';
+  const typeColor  = isCall ? '#00ff88' : '#ff4444';
+  const typeLabel  = isCall ? 'CALL' : 'PUT';
 
   return (
-    <div className="card" style={{ borderColor: scoreColor + '44' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em' }}>✅ TRADE CHECKLIST</div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: scoreColor }}>{verdict}</div>
-          <div style={{ fontSize: 10, color: '#555' }}>{passCount}/{checks.length} checks passed</div>
+    <div className="card" style={{ borderColor: typeColor + '33' }}>
+      <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 14 }}>
+        📋 TRADE SETUP — PLAIN ENGLISH
+      </div>
+
+      {/* Step 1 — What to buy */}
+      <div style={{ marginBottom: 12, padding: '10px 14px', background: '#070710', borderLeft: `3px solid ${typeColor}` }}>
+        <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>STEP 1 — WHAT TO BUY</div>
+        <div style={{ fontSize: 13, color: '#c8c8d0', lineHeight: 1.7 }}>
+          Buy <span style={{ color: typeColor, fontWeight: 700 }}>{ticker} ${contract.strike} {typeLabel}</span> expiring{' '}
+          <span style={{ color: '#ffaa00' }}>{selectedExpiry}</span>
+          {' '}at <span style={{ color: '#fff', fontWeight: 600 }}>${contract.mid?.toFixed(2)} per contract</span>
+          {' '}({contract.maxContracts} contracts = <span style={{ color: '#ffaa00' }}>${contract.totalCost?.toFixed(0)} total</span>)
         </div>
       </div>
 
-      <div className="bar-bg" style={{ marginBottom: 12 }}>
-        <div className="bar-fill" style={{ width: `${score}%`, background: scoreColor }} />
+      {/* Step 2 — When to enter */}
+      <div style={{ marginBottom: 12, padding: '10px 14px', background: '#070710', borderLeft: '3px solid #ffaa00' }}>
+        <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>STEP 2 — WHEN TO ENTER</div>
+        <div style={{ fontSize: 13, color: '#c8c8d0', lineHeight: 1.7 }}>
+          {contract.entryTiming || '—'}
+        </div>
       </div>
 
-      {checks.map((c, i) => (
-        <div key={i} style={{
-          display: 'flex', gap: 10, padding: '6px 0',
-          borderBottom: i < checks.length - 1 ? '1px solid #1a1a26' : 'none',
-          alignItems: 'flex-start'
-        }}>
-          <span style={{ fontSize: 14, lineHeight: 1.2 }}>{c.pass ? '✅' : '❌'}</span>
-          <div>
-            <div style={{ fontSize: 11, color: c.pass ? '#c8c8d0' : '#667', fontWeight: c.pass ? 500 : 400 }}>{c.label}</div>
-            <div style={{ fontSize: 10, color: '#445', marginTop: 1 }}>{c.note}</div>
-          </div>
+      {/* Step 3 — When to exit */}
+      <div style={{ marginBottom: 12, padding: '10px 14px', background: '#070710', borderLeft: '3px solid #ff4444' }}>
+        <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>STEP 3 — WHEN TO EXIT</div>
+        <div style={{ fontSize: 13, color: '#c8c8d0', lineHeight: 1.7 }}>
+          {contract.exitRule || '—'}
         </div>
-      ))}
+      </div>
+
+      {/* Step 4 — Target vs Max loss */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: '10px 14px', background: '#070710', borderLeft: '3px solid #00ff88' }}>
+          <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>🎯 TARGET RETURN</div>
+          <div style={{ fontSize: 13, color: '#00ff88', fontWeight: 600 }}>{contract.targetReturn || '—'}</div>
+        </div>
+        <div style={{ padding: '10px 14px', background: '#070710', borderLeft: '3px solid #ff4444' }}>
+          <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>🛑 MAX LOSS</div>
+          <div style={{ fontSize: 13, color: '#ff4444', fontWeight: 600 }}>${contract.maxLoss?.toFixed(0) || '—'} (full premium paid)</div>
+        </div>
+      </div>
+
+      {/* Why this trade */}
+      {contract.thesis && (
+        <div style={{ padding: '10px 14px', background: '#070710', borderLeft: '3px solid #ffaa0044' }}>
+          <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>💡 WHY THIS TRADE</div>
+          <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.6, fontStyle: 'italic' }}>{contract.thesis}</div>
+        </div>
+      )}
     </div>
   );
 }
