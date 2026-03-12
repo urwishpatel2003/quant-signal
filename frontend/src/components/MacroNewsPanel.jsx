@@ -10,28 +10,27 @@ const TOPIC_LABELS = {
 };
 
 export default function MacroNewsPanel({ macroNews, calendar }) {
-  if (!macroNews?.length && !calendar?.length) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {calendar?.length > 0 && (
-        <div className="card">
-          <div style={{ fontSize: 10, color: '#ff884466', letterSpacing: '0.15em', marginBottom: 10 }}>📅 ECONOMIC CALENDAR</div>
-          {calendar.slice(0, 5).map((e, i) => (
-            <div key={i} style={{ padding: '5px 0', borderBottom: '1px solid #1a1208', fontSize: 10 }}>
-              <div style={{ color: '#ffaa0077', fontSize: 9, marginBottom: 2 }}>{e.category?.split(' ').slice(0, 3).join(' ')?.toUpperCase()}</div>
-              <div style={{ color: '#aab', lineHeight: 1.4 }}>{e.title}</div>
-            </div>
-          ))}
-        </div>
-      )}
       {macroNews?.length > 0 && (
         <div className="card">
-          <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>🌍 MACRO & GEO NEWS</div>
-          {macroNews.slice(0, 7).map((n, i) => (
-            <div key={i} style={{ padding: '5px 0', borderBottom: '1px solid #1a1a26', fontSize: 10 }}>
-              <div style={{ color: '#ffaa0055', fontSize: 9, marginBottom: 2 }}>{TOPIC_LABELS[n.topic] || n.topic?.split(' ').slice(0, 2).join(' ')?.toUpperCase()}</div>
-              <div style={{ color: '#aab', lineHeight: 1.4 }}>{n.title}</div>
-              <div style={{ color: '#334', fontSize: 9, marginTop: 2 }}>{n.publisher}</div>
+          <div style={{ fontSize: 11, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 12 }}>🌍 MACRO & GEO NEWS</div>
+          {macroNews.slice(0, 8).map((n, i) => (
+            <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #1a1a26' }}>
+              <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 4, letterSpacing: '0.1em' }}>
+                {n.topic?.split(' ').slice(0, 3).join(' ')?.toUpperCase()}
+              </div>
+              {n.url ? (
+                <a href={n.url} target="_blank" rel="noopener noreferrer"
+                  style={{ color: '#aab', fontSize: 12, lineHeight: 1.5, textDecoration: 'none' }}
+                  onMouseEnter={ev => ev.target.style.color = '#ffaa00'}
+                  onMouseLeave={ev => ev.target.style.color = '#aab'}>
+                  {n.title}
+                </a>
+              ) : (
+                <div style={{ color: '#aab', fontSize: 12, lineHeight: 1.5 }}>{n.title}</div>
+              )}
+              {n.publisher && <div style={{ fontSize: 10, color: '#445', marginTop: 3 }}>{n.publisher}</div>}
             </div>
           ))}
         </div>

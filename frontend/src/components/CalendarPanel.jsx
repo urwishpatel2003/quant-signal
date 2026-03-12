@@ -21,20 +21,25 @@ export default function CalendarPanel({ calendar }) {
   if (!calendar?.length) return null;
   return (
     <div className="card">
-      <div style={{ fontSize: 10, color: '#ff884466', letterSpacing: '0.15em', marginBottom: 12 }}>📅 ECONOMIC CALENDAR</div>
-      {calendar.slice(0, 10).map((e, i) => {
-        const { impact, color, icon } = getImpact(e.title);
-        return (
-          <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #1a1208', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 14 }}>{icon}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, color: '#aab', lineHeight: 1.4 }}>{e.title}</div>
-              <div style={{ fontSize: 9, color: '#445', marginTop: 2 }}>{e.publisher}</div>
-            </div>
-            <span style={{ fontSize: 9, color, border: `1px solid ${color}44`, padding: '2px 6px', whiteSpace: 'nowrap' }}>{impact}</span>
+      <div style={{ fontSize: 11, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 12 }}>📅 ECONOMIC CALENDAR</div>
+      {calendar.slice(0, 8).map((e, i) => (
+        <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #1a1a26' }}>
+          <div style={{ fontSize: 10, color: '#ffaa0088', marginBottom: 4, letterSpacing: '0.1em' }}>
+            {e.category?.split(' ').slice(0, 3).join(' ')?.toUpperCase()}
           </div>
-        );
-      })}
+          {e.url ? (
+            <a href={e.url} target="_blank" rel="noopener noreferrer"
+              style={{ color: '#aab', fontSize: 12, lineHeight: 1.5, textDecoration: 'none', cursor: 'pointer' }}
+              onMouseEnter={ev => ev.target.style.color = '#ffaa00'}
+              onMouseLeave={ev => ev.target.style.color = '#aab'}>
+              {e.title}
+            </a>
+          ) : (
+            <div style={{ color: '#aab', fontSize: 12, lineHeight: 1.5 }}>{e.title}</div>
+          )}
+          {e.publisher && <div style={{ fontSize: 10, color: '#445', marginTop: 3 }}>{e.publisher}</div>}
+        </div>
+      ))}
     </div>
   );
 }

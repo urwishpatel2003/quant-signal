@@ -1,10 +1,8 @@
 require('dotenv').config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-// ─── SET YOUR KEYS HERE ───────────────────────────────────────────────────────
 process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 process.env.TRADIER_TOKEN     = process.env.TRADIER_TOKEN;
-// ─────────────────────────────────────────────────────────────────────────────
 
 const express = require('express');
 const cors    = require('cors');
@@ -15,8 +13,6 @@ const app = express();
 app.use(cors());
 app.options('*', cors());
 app.use(express.json());
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function httpsGet(hostname, path, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -174,8 +170,11 @@ app.get('/calendar', async (req, res) => {
             response.on('end', () => {
               try {
                 resolve((JSON.parse(data)?.news || []).map(n => ({
-                  title: n.title, publisher: n.publisher,
-                  time: n.providerPublishTime, category: q
+                  title:     n.title,
+                  publisher: n.publisher,
+                  time:      n.providerPublishTime,
+                  category:  q,
+                  url:       n.link   // ← article URL
                 })));
               } catch { resolve([]); }
             });

@@ -38,7 +38,7 @@ export async function fetchMacroNews() {
     const results = await Promise.all(topics.map(async topic => {
       const res  = await fetch(encode(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(topic)}&newsCount=2`));
       const data = await res.json();
-      return (data?.news || []).map(n => ({ title: n.title, publisher: n.publisher, time: n.providerPublishTime, topic }));
+      return (data?.news || []).map(n => ({ title: n.title, publisher: n.publisher, time: n.providerPublishTime, topic, url: n.link }));
     }));
     return results.flat().sort((a, b) => b.time - a.time).slice(0, 16);
   } catch { return []; }
