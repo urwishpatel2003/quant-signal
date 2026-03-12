@@ -65,11 +65,22 @@ export async function runOptionsAnalysis(ticker, price, expiry, chain, fundament
   const hasValidPuts  = puts.some( p => p.mid > 0.10 && Math.abs(p.strike - price) <= 20);
   const macroCtx = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
 
+  // Pre-calculate helper values for the prompt
+  const callMid     = calls[0]?.mid || 0;
+  const putMid      = puts[0]?.mid  || 0;
+  const callContracts = Math.max(1, Math.floor(1500 / (callMid * 100)));
+  const putContracts  = Math.max(1, Math.floor(1500 / (putMid  * 100)));
+  const callStop    = (callMid * 0.50).toFixed(2);
+  const callTarget  = (callMid * 2.00).toFixed(2);
+  const putStop     = (putMid  * 0.50).toFixed(2);
+  const putTarget   = (putMid  * 2.00).toFixed(2);
+
   return callClaude({
     model: 'claude-sonnet-4-20250514', max_tokens: 1600,
     system: `You are an expert options trader with deep knowledge of global macro, geopolitics, and cross-market dynamics.
 Factor in Asian/European market trends, bond yields, VIX, USD, and economic calendar when recommending options plays.
 Use EXACT bid/ask/mid prices from the contracts provided. Never invent prices.
+entryTiming and exitRule MUST contain SPECIFIC DOLLAR PRICES, not vague descriptions.
 Return ONLY this JSON:
 {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","bestCall":{"strike":0,"expiry":"YYYY-MM-DD","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"YYYY-MM-DD","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"},"keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","positionSizing":"string"}`,
     messages: [{
@@ -91,8 +102,15 @@ ${macroCtx}
 MANDATORY RULES:
 1. Strike MUST be from contracts above, closest to $${price?.toFixed(2)}, OI > 50
 2. bid/ask/mid MUST exactly match selected contract row
-3. estimatedPremium = mid | maxContracts = floor(1500/(mid*100)), min 1
-4. totalCost = maxContracts*mid*100 | maxLoss = totalCost | expiry = exactly: ${expiry}
+3. estimatedPremium = mid exactly
+4. maxContracts = floor(1500/(mid*100)), min 1
+5. totalCost = maxContracts * mid * 100
+6. maxLoss = totalCost
+7. expiry = exactly: ${expiry}
+8. entryTiming MUST be a specific stock price trigger, e.g: "Buy if ${ticker} holds above $${price?.toFixed(2)} at market open" or "Enter when ${ticker} breaks above $${(price * 1.005).toFixed(2)}"
+9. exitRule MUST contain exact premium prices: "Sell contract at $${callTarget} (100% gain). Stop loss: sell at $${callStop} (50% loss = -$${(parseFloat(callStop) * 100 * callContracts).toFixed(0)} total)"
+10. targetReturn MUST be: "Sell at $${callTarget} per contract — total profit $${((parseFloat(callTarget) - callMid) * 100 * callContracts).toFixed(0)}"
+11. Use the same exact price format for puts using their own mid prices
 Return JSON only.`
     }]
   });
