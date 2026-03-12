@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; }
+
+.btn {
+  background: #ffaa00; color: #0a0a0f; border: none;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  padding: 10px 20px; cursor: pointer;
+}
+.btn:hover { background: #ffc533; }
+.btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+.btn-sm {
+  background: #1a1a2e; color: #888; border: 1px solid #2a2a3e;
+  font-family: inherit; font-size: 10px; padding: 5px 10px;
+  cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.btn-sm:hover:not(:disabled) { color: #ffaa00; border-color: #ffaa00; }
+.btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-danger { color: #ff4444 !important; border-color: #ff444433 !important; }
+.btn-danger:hover:not(:disabled) { background: #ff444411 !important; border-color: #ff4444 !important; }
+
+.card { background: #0f0f18; border: 1px solid #1e1e2e; padding: 16px; }
+
+.input {
+  background: #0f0f18; border: 1px solid #2a2a3a;
+  color: #fff; font-family: inherit; font-size: 12px;
+  padding: 8px 12px; outline: none; width: 100%;
+}
+.input:focus { border-color: #ffaa00; }
+
+.kv { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #1a1a26; font-size: 11px; }
+.kv:last-child { border-bottom: none; }
+.kv-key { color: #556; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.bar-bg { background: #1a1a26; height: 4px; border-radius: 2px; width: 100%; margin-top: 6px; }
+.bar-fill { height: 4px; border-radius: 2px; transition: width 1s ease; }
+
+.tab-btn {
+  background: none; border: none; color: #555;
+  font-family: inherit; font-size: 11px; letter-spacing: 0.15em;
+  text-transform: uppercase; padding: 10px 20px; cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.tab-btn.active { color: #ffaa00; border-bottom-color: #ffaa00; }
+.tab-btn:hover { color: #aaa; }
+
+.tag {
+  display: inline-block; padding: 2px 8px; border-radius: 2px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+}
+
+.drop-zone {
+  border: 2px dashed #2a2a3a; padding: 40px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+}
+.drop-zone:hover, .drop-zone.dragging { border-color: #ffaa00; background: #ffaa0008; }
+
+@keyframes pulse   { 0%,100%{ opacity:1 } 50%{ opacity:0.4 } }
+@keyframes fadeIn  { from{ opacity:0; transform:translateY(4px) } to{ opacity:1; transform:translateY(0) } }
+.fade-in { animation: fadeIn 0.4s ease forwards; }
+.pulse   { animation: pulse  1s   infinite; }
