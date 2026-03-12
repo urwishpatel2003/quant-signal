@@ -30,20 +30,28 @@ export default function TradeChecklist({ ta, priceSignal, optionsSignal, calenda
       note: `Volume ${ta.volumeRatio}x average — ${ta.volumeSignal}`,
     },
     {
-      label: 'Macro environment supports trade',
-      pass: priceSignal.macroImpact === 'POSITIVE' || priceSignal.macroImpact === 'NEUTRAL',
-      note: `Macro: ${priceSignal.macroImpact}`,
+        label: 'Macro environment supports trade',
+        pass: isCall
+            ? (priceSignal.macroImpact === 'BULLISH' || priceSignal.macroImpact === 'NEUTRAL')
+            : (priceSignal.macroImpact === 'BEARISH' || priceSignal.macroImpact === 'NEUTRAL'),
+            note: `Macro: ${priceSignal.macroImpact} — ${isCall ? 'bullish macro favors calls' : 'bearish macro favors puts'}`,
     },
     {
-      label: 'No earnings in expiry window',
-      pass: !earningsWarning,
-      note: earningsWarning ? '⚠ Earnings detected — IV crush risk' : 'No earnings detected',
-    },
+         label: isCall ? 'No earnings risk (IV crush)' : 'Earnings as catalyst (optional)',
+            pass: isCall ? !earningsWarning : true,
+            note: isCall
+            ? (earningsWarning ? '⚠ Earnings before expiry — IV crush will kill call value after report' : 'No earnings detected — safe to hold through expiry')
+            : (earningsWarning ? '✓ Earnings detected — could accelerate downside move for puts' : 'No earnings — put relies on technical/macro breakdown only'),
+},
     {
-      label: 'IV environment is favorable',
-      pass: optionsSignal.ivRank === 'LOW' || optionsSignal.ivRank === 'NORMAL',
-      note: `IV is ${optionsSignal.ivRank} — ${optionsSignal.ivComment}`,
-    },
+        label: 'IV environment is favorable',
+        pass: isCall
+            ? (optionsSignal.ivRank === 'LOW' || optionsSignal.ivRank === 'MEDIUM')
+            : (optionsSignal.ivRank === 'HIGH' || optionsSignal.ivRank === 'MEDIUM'),
+             note: isCall
+            ? `IV is ${optionsSignal.ivRank} — low IV favors buying calls (cheaper premium)`
+            : `IV is ${optionsSignal.ivRank} — high IV means puts are priced for a big move`,
+},
   ];
 
   const passCount = checks.filter(c => c.pass).length;

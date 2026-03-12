@@ -12,19 +12,24 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
   const premium   = contract.estimatedPremium || contract.mid || 0;
   const contracts = contract.maxContracts || 1;
   const totalCost = premium * 100 * contracts;
+  const price     = livePrice || strike;
 
-  // Fall back to strike price if livePrice not passed
-  const price = livePrice || strike;
+  // Slider range: ±10% around current price, in $0.50 steps
+  const rangeAmt  = Math.round(price * 0.10 / 0.5) * 0.5;
+  const minPrice  = parseFloat((price - rangeAmt).toFixed(2));
+  const maxPrice  = parseFloat((price + rangeAmt).toFixed(2));
+  const [simPrice, setSimPrice] = useState(price);
 
-  const newPrice     = price * (1 + movePct / 100);
-  const intrinsic    = isCall
-    ? Math.max(0, newPrice - strike)
-    : Math.max(0, strike - newPrice);
-  const estValue     = Math.max(0, intrinsic * 0.7 + premium * 0.3 * (1 - Math.abs(movePct) / 20));
+  const intrinsic = isCall
+    ? Math.max(0, simPrice - strike)
+    : Math.max(0, strike - simPrice);
+  const priceDelta   = Math.abs(simPrice - price) / price;
+  const estValue     = Math.max(0, intrinsic * 0.7 + premium * 0.3 * (1 - priceDelta * 5));
   const plPerShare   = estValue - premium;
   const totalPL      = plPerShare * 100 * contracts;
-  const plPct        = ((totalPL / totalCost) * 100).toFixed(0);
+  const plPct        = totalCost > 0 ? ((totalPL / totalCost) * 100).toFixed(0) : 0;
   const plColor      = totalPL >= 0 ? '#00ff88' : '#ff4444';
+  const movePctDisplay = (((simPrice - price) / price) * 100).toFixed(1);
 
   const breakeven = isCall
     ? (strike + premium).toFixed(2)
@@ -39,24 +44,28 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
           <span style={{ fontSize: 11, color: '#667' }}>
-            If {optionsSignal.ticker || 'stock'} moves{' '}
-            <span style={{ color: movePct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
-              {movePct >= 0 ? '+' : ''}{movePct}%
-            </span>
+            If {optionsSignal.ticker || 'stock'} moves to{' '}
+            <span style={{ color: '#ffaa00', fontWeight: 700 }}>${simPrice?.toFixed(2)}</span>
           </span>
-          <span style={{ fontSize: 11, color: '#556' }}>
-            ${price?.toFixed(2)} → <span style={{ color: '#ffaa00' }}>${newPrice?.toFixed(2)}</span>
+          <span style={{ fontSize: 11, color: movePctDisplay >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
+            {movePctDisplay >= 0 ? '+' : ''}{movePctDisplay}%
           </span>
         </div>
 
         <input
-          type="range" min="-20" max="20" step="0.5" value={movePct}
-          onChange={e => setMovePct(parseFloat(e.target.value))}
+          type="range"
+          min={minPrice}
+          max={maxPrice}
+          step="0.50"
+          value={simPrice}
+          onChange={e => setSimPrice(parseFloat(e.target.value))}
           style={{ width: '100%', accentColor: '#ffaa00', cursor: 'pointer' }}
         />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#334', marginTop: 2 }}>
-          <span>-20%</span><span>0</span><span>+20%</span>
+          <span>${minPrice?.toFixed(2)}</span>
+          <span style={{ color: '#ffaa0066' }}>${price?.toFixed(2)} now</span>
+          <span>${maxPrice?.toFixed(2)}</span>
         </div>
       </div>
 
@@ -73,18 +82,18 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 10, color: '#445' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
         <div style={{ background: '#070710', padding: 8, textAlign: 'center' }}>
-          <div style={{ marginBottom: 2 }}>BREAK-EVEN</div>
+          <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>BREAK-EVEN</div>
           <div style={{ color: '#ffaa00', fontSize: 12, fontWeight: 600 }}>${breakeven}</div>
         </div>
         <div style={{ background: '#070710', padding: 8, textAlign: 'center' }}>
-          <div style={{ marginBottom: 2 }}>EST. CONTRACT VALUE</div>
+          <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>EST. CONTRACT VALUE</div>
           <div style={{ color: '#c8c8d0', fontSize: 12, fontWeight: 600 }}>${estValue?.toFixed(2)}</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 10, color: '#445', marginTop: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 10, color: '#445' }}>
         <div style={{ background: '#070710', padding: 8, textAlign: 'center' }}>
           <div style={{ marginBottom: 2 }}>CONTRACTS</div>
           <div style={{ color: '#c8c8d0', fontSize: 12, fontWeight: 600 }}>{contracts} × 100</div>
@@ -100,7 +109,7 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
       </div>
 
       <div style={{ fontSize: 9, color: '#334', marginTop: 10, textAlign: 'center' }}>
-        ⚠ Simulation uses simplified intrinsic value approximation. Actual P&L depends on IV, theta decay, and time to expiry.
+        ⚠ Simplified intrinsic value estimate. Actual P&L depends on IV, theta decay, and time to expiry.
       </div>
     </div>
   );

@@ -1,10 +1,32 @@
-export default function ContractCard({ data, type }) {
+export default function ContractCard({ data, type, selected, onClick }) {
   if (!data) return null;
   const color    = type === 'CALL' ? '#00ff88' : '#ff4444';
   const colorDim = color + '33';
 
   return (
-    <div className="card" style={{ borderColor: colorDim }}>
+    <div
+      className="card"
+      onClick={onClick}
+      style={{
+        borderColor: selected ? color : colorDim,
+        cursor: 'pointer',
+        boxShadow: selected ? `0 0 12px ${color}33` : 'none',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+        position: 'relative',
+      }}
+    >
+      {/* Selected badge */}
+      {selected && (
+        <div style={{
+          position: 'absolute', top: 10, right: 10,
+          fontSize: 9, fontWeight: 700, color, background: color + '22',
+          border: `1px solid ${color}66`, padding: '2px 8px', borderRadius: 2,
+          letterSpacing: '0.1em'
+        }}>
+          ACTIVE
+        </div>
+      )}
+
       <div style={{ fontSize: 10, color: color + '66', letterSpacing: '0.15em', marginBottom: 10 }}>
         {type === 'CALL' ? '🟢' : '🔴'} BEST {type} PLAY
       </div>
