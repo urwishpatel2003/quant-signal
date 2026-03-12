@@ -1,8 +1,8 @@
-const encode = url => url.replace('https://query1.finance.yahoo.com', '/yahoo');
+const encode = url => url.replace('https://query1.finance.yahoo.com', `${import.meta.env.VITE_API_BASE}/yahoo`);
 
 export async function fetchPrice(ticker) {
   try {
-    const res    = await fetch(encode(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`));
+    const res = await fetch(encode(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo`));
     const data   = await res.json();
     const result = data?.chart?.result?.[0];
     if (!result) return null;

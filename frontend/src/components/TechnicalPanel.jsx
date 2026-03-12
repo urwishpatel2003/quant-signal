@@ -1,67 +1,81 @@
-// Calculate RSI
-export function calcRSI(closes, period = 14) {
-  if (closes.length < period + 1) return null;
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = closes[i] - closes[i - 1];
-    if (diff >= 0) gains += diff; else losses -= diff;
-  }
-  let avgGain = gains / period;
-  let avgLoss = losses / period;
-  for (let i = period + 1; i < closes.length; i++) {
-    const diff = closes[i] - closes[i - 1];
-    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
-    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
-  }
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return parseFloat((100 - 100 / (1 + rs)).toFixed(2));
-}
+export default function TechnicalPanel({ ta }) {
+  if (!ta) return null;
 
-// Calculate SMA
-export function calcSMA(closes, period) {
-  if (closes.length < period) return null;
-  const slice = closes.slice(-period);
-  return parseFloat((slice.reduce((a, b) => a + b, 0) / period).toFixed(2));
-}
+  const rsiColor  = ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00';
+  const trendColor = ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444';
+  const volColor   = ta.volumeSignal === 'HIGH' ? '#ffaa00' : ta.volumeSignal === 'LOW' ? '#445' : '#c8c8d0';
 
-// Calculate average volume
-export function calcAvgVolume(volumes, period = 20) {
-  if (!volumes || volumes.length < period) return null;
-  const slice = volumes.filter(Boolean).slice(-period);
-  return Math.round(slice.reduce((a, b) => a + b, 0) / slice.length);
-}
-
-// Build full TA summary object
-export function calcIndicators(ohlcv) {
-  if (!ohlcv?.close) return null;
-  const closes  = ohlcv.close.filter(Boolean);
-  const volumes = ohlcv.volume || [];
-
-  const rsi14  = calcRSI(closes, 14);
-  const sma20  = calcSMA(closes, 20);
-  const sma50  = calcSMA(closes, 50);
-  const price  = closes[closes.length - 1];
-  const avgVol = calcAvgVolume(volumes, 20);
-  const curVol = volumes.filter(Boolean).slice(-1)[0] || 0;
-
-  const rsiSignal  = rsi14 > 70 ? 'OVERBOUGHT' : rsi14 < 30 ? 'OVERSOLD' : 'NEUTRAL';
-  const trendSignal = sma20 && sma50
-    ? (sma20 > sma50 ? 'BULLISH' : 'BEARISH')
-    : 'UNKNOWN';
-  const priceVsSma20 = sma20 ? ((price - sma20) / sma20 * 100).toFixed(2) : null;
-  const priceVsSma50 = sma50 ? ((price - sma50) / sma50 * 100).toFixed(2) : null;
-  const volumeRatio  = avgVol ? parseFloat((curVol / avgVol).toFixed(2)) : null;
-  const volumeSignal = volumeRatio > 1.5 ? 'HIGH' : volumeRatio < 0.5 ? 'LOW' : 'NORMAL';
-
-  return {
-    rsi14, rsiSignal,
-    sma20, sma50,
-    trendSignal,
-    priceVsSma20, priceVsSma50,
-    currentVolume: curVol,
-    avgVolume: avgVol,
-    volumeRatio,
-    volumeSignal,
+  const RsiBar = () => {
+    const pct = ta.rsi14 || 50;
+    return (
+      <div style={{ position: 'relative', height: 6, background: '#1a1a26', borderRadius: 3, marginTop: 4 }}>
+        <div style={{ position: 'absolute', left: '0%', width: '30%', height: '100%', background: '#00ff8822', borderRadius: '3px 0 0 3px' }} />
+        <div style={{ position: 'absolute', left: '70%', width: '30%', height: '100%', background: '#ff444422', borderRadius: '0 3px 3px 0' }} />
+        <div style={{ position: 'absolute', left: `${pct}%`, top: -2, width: 3, height: 10, background: rsiColor, borderRadius: 2, transform: 'translateX(-50%)' }} />
+      </div>
+    );
   };
+
+  return (
+    <div className="card">
+      <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 12 }}>📐 TECHNICAL ANALYSIS</div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+          <span style={{ fontSize: 10, color: '#556' }}>RSI (14)</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: rsiColor }}>{ta.rsi14} — {ta.rsiSignal}</span>
+        </div>
+        <RsiBar />
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+          <span style={{ fontSize: 9, color: '#00ff8844' }}>OVERSOLD 30</span>
+          <span style={{ fontSize: 9, color: '#ff444444' }}>70 OVERBOUGHT</span>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 10, color: '#556', marginBottom: 6 }}>MOVING AVERAGES</div>
+        {[
+          ['SMA 20', ta.sma20, ta.priceVsSma20],
+          ['SMA 50', ta.sma50, ta.priceVsSma50],
+        ].map(([label, val, pct]) => val && (
+          <div key={label} className="kv">
+            <span className="kv-key">{label}</span>
+            <span style={{ textAlign: 'right' }}>
+              <span style={{ color: '#c8c8d0', fontSize: 11 }}>${val}</span>
+              <span style={{ color: parseFloat(pct) >= 0 ? '#00ff88' : '#ff4444', fontSize: 10, marginLeft: 6 }}>
+                {parseFloat(pct) >= 0 ? '▲' : '▼'}{Math.abs(pct)}%
+              </span>
+            </span>
+          </div>
+        ))}
+        <div className="kv">
+          <span className="kv-key">TREND</span>
+          <span style={{ color: trendColor, fontSize: 11, fontWeight: 600 }}>
+            {ta.trendSignal === 'BULLISH' ? '▲ SMA20 > SMA50' : '▼ SMA20 < SMA50'}
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 10, color: '#556', marginBottom: 6 }}>VOLUME</div>
+        <div className="kv">
+          <span className="kv-key">TODAY</span>
+          <span style={{ color: volColor, fontSize: 11 }}>{ta.currentVolume?.toLocaleString()}</span>
+        </div>
+        <div className="kv">
+          <span className="kv-key">20D AVG</span>
+          <span style={{ color: '#667', fontSize: 11 }}>{ta.avgVolume?.toLocaleString()}</span>
+        </div>
+        <div className="kv">
+          <span className="kv-key">RATIO</span>
+          <span style={{ color: volColor, fontSize: 11, fontWeight: 600 }}>
+            {ta.volumeRatio}x — {ta.volumeSignal}
+          </span>
+        </div>
+        <div className="bar-bg">
+          <div className="bar-fill" style={{ width: `${Math.min((ta.volumeRatio || 1) * 50, 100)}%`, background: volColor }} />
+        </div>
+      </div>
+    </div>
+  );
 }
