@@ -1,3 +1,4 @@
+require('dotenv').config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 // ─── SET YOUR KEYS HERE ───────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ const https   = require('https');
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: ['http://localhost:5173', 'https://quantsignal-swart.vercel.app'],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
