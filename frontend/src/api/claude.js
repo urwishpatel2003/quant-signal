@@ -10,6 +10,27 @@ async function callClaude(payload) {
   return JSON.parse(text.replace(/```json|```/g, '').trim());
 }
 
+function categorizeNews(headlines) {
+  return (headlines || []).map(n => {
+    const t = n.title?.toLowerCase() || '';
+    if (t.includes('upgrade') || t.includes('outperform') || t.includes('buy rating') || t.includes('overweight') || t.includes('initiated') || t.includes('initiates coverage'))
+      return `[UPGRADE] ${n.title}`;
+    if (t.includes('downgrade') || t.includes('underperform') || t.includes('sell rating') || t.includes('underweight') || t.includes('cuts to'))
+      return `[DOWNGRADE] ${n.title}`;
+    if (t.includes('price target') || t.includes('raises target') || t.includes('lowers target') || t.includes('pt raised') || t.includes('pt cut') || t.includes('target to $'))
+      return `[ANALYST TARGET] ${n.title}`;
+    if (t.includes('13f') || t.includes('insider') || t.includes('stake') || t.includes('position') || t.includes('holding') || t.includes('buffett') || t.includes('soros') || t.includes('ackman') || t.includes('bought shares') || t.includes('sold shares'))
+      return `[INSIDER/FUND] ${n.title}`;
+    if (t.includes('earnings') || t.includes('eps') || t.includes('revenue') || t.includes('beat') || t.includes('miss') || t.includes('guidance') || t.includes('outlook'))
+      return `[EARNINGS] ${n.title}`;
+    if (t.includes('fda') || t.includes('approval') || t.includes('approved') || t.includes('rejected') || t.includes('trial') || t.includes('lawsuit') || t.includes('sec') || t.includes('investigation') || t.includes('merger') || t.includes('acquisition'))
+      return `[REGULATORY/EVENT] ${n.title}`;
+    if (t.includes('short') || t.includes('short seller') || t.includes('hindenburg') || t.includes('citron'))
+      return `[SHORT ATTACK] ${n.title}`;
+    return `[NEWS] ${n.title}`;
+  });
+}
+
 export function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
   let ctx = '\n=== GLOBAL MACRO CONTEXT ===\n';
   if (bonds) {
@@ -36,23 +57,36 @@ export function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
 }
 
 export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta) {
-  const macroCtx = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
+  const macroCtx     = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
+  const categorized  = categorizeNews(news).slice(0, 10);
+  const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
+  const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
+  const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
+
   return callClaude({
     model: 'claude-sonnet-4-20250514', max_tokens: 1400,
-    system: `You are a quantitative trading analyst with expertise in global macro, geopolitics, and cross-market analysis.
+    system: `You are a quantitative trading analyst with expertise in global macro, geopolitics, cross-market analysis, and institutional flow.
 Consider how global markets (Asia, Europe), bond markets, VIX, USD, commodities, and economic calendar affect the stock.
+Weight analyst upgrades/downgrades and institutional fund activity heavily — these often precede large moves.
+[UPGRADE] and [INSIDER/FUND] tags are bullish signals. [DOWNGRADE] and [SHORT ATTACK] tags are bearish signals.
 Return ONLY a JSON object:
 {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":string,"thesis":string,"bullFactors":[str,str,str],"bearFactors":[str,str,str],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":-100,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
     messages: [{
       role: 'user',
       content: `Analyze ${ticker} at $${price?.toFixed(2)}.
 PRICE (last 5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
-FUNDAMENTALS: P/E=${fundamentals?.pe}, Beta=${fundamentals?.beta}, Target=$${fundamentals?.targetMeanPrice}, Rec=${fundamentals?.recommendationKey}
+FUNDAMENTALS: P/E=${fundamentals?.pe}, Beta=${fundamentals?.beta}, Target=$${fundamentals?.targetMeanPrice}, Rec=${fundamentals?.recommendationKey}, Analysts=${fundamentals?.numberOfAnalystOpinions}
 OPTIONS FLOW: P/C=${options?.putCallRatio?.toFixed(2)}, CallIV=${options?.avgCallIV}%, PutIV=${options?.avgPutIV}%
 TECHNICAL ANALYSIS: RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)
-STOCK NEWS: ${news?.map(n => n.title).join(' | ')}
+ANALYST CONSENSUS: ${fundamentals?.recommendationKey?.toUpperCase()} | Mean Target: $${fundamentals?.targetMeanPrice} | # Analysts: ${fundamentals?.numberOfAnalystOpinions}
+${hasUpgrade   ? '⚠ RECENT UPGRADE DETECTED — bullish analyst sentiment shift' : ''}
+${hasDowngrade ? '⚠ RECENT DOWNGRADE DETECTED — bearish analyst sentiment shift' : ''}
+${hasFund      ? '⚠ INSTITUTIONAL/FUND ACTIVITY DETECTED — smart money movement' : ''}
+
+ANALYST & NEWS FLOW (weighted by type):
+${categorized.join('\n')}
 ${macroCtx}
-How do Asian/European market moves, yield curve shape, VIX, DXY, and upcoming calendar events specifically affect ${ticker}?
+How do Asian/European market moves, yield curve shape, VIX, DXY, analyst actions, and upcoming calendar events specifically affect ${ticker}?
 Return JSON only.`
     }]
   });
@@ -65,20 +99,30 @@ export async function runOptionsAnalysis(ticker, price, expiry, chain, fundament
   const hasValidPuts  = puts.some( p => p.mid > 0.10 && Math.abs(p.strike - price) <= 20);
   const macroCtx = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
 
+  const categorized  = categorizeNews(news).slice(0, 10);
+  const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
+  const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
+  const hasTarget    = categorized.some(n => n.startsWith('[ANALYST TARGET]'));
+  const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
+  const hasShort     = categorized.some(n => n.startsWith('[SHORT ATTACK]'));
+
   // Pre-calculate helper values for the prompt
-  const callMid     = calls[0]?.mid || 0;
-  const putMid      = puts[0]?.mid  || 0;
+  const callMid       = calls[0]?.mid || 0;
+  const putMid        = puts[0]?.mid  || 0;
   const callContracts = Math.max(1, Math.floor(1500 / (callMid * 100)));
   const putContracts  = Math.max(1, Math.floor(1500 / (putMid  * 100)));
-  const callStop    = (callMid * 0.50).toFixed(2);
-  const callTarget  = (callMid * 2.00).toFixed(2);
-  const putStop     = (putMid  * 0.50).toFixed(2);
-  const putTarget   = (putMid  * 2.00).toFixed(2);
+  const callStop      = (callMid * 0.50).toFixed(2);
+  const callTarget    = (callMid * 2.00).toFixed(2);
+  const putStop       = (putMid  * 0.50).toFixed(2);
+  const putTarget     = (putMid  * 2.00).toFixed(2);
 
   return callClaude({
     model: 'claude-sonnet-4-20250514', max_tokens: 1600,
-    system: `You are an expert options trader with deep knowledge of global macro, geopolitics, and cross-market dynamics.
+    system: `You are an expert options trader with deep knowledge of global macro, geopolitics, cross-market dynamics, and institutional flow.
 Factor in Asian/European market trends, bond yields, VIX, USD, and economic calendar when recommending options plays.
+Weight analyst actions heavily: [UPGRADE] boosts CALL conviction, [DOWNGRADE] boosts PUT conviction.
+[ANALYST TARGET] raises/cuts shift price expectations — factor into priceTarget and entryTiming.
+[INSIDER/FUND] buying = bullish, selling = bearish. [SHORT ATTACK] = strong bearish signal.
 Use EXACT bid/ask/mid prices from the contracts provided. Never invent prices.
 entryTiming and exitRule MUST contain SPECIFIC DOLLAR PRICES, not vague descriptions.
 Return ONLY this JSON:
@@ -89,6 +133,15 @@ Return ONLY this JSON:
 Today: ${new Date().toLocaleDateString()} | Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'}
 Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact} | Global: ${priceSignal?.globalMarketTrend}
 TECHNICALS: RSI=${ta?.rsi14} [${ta?.rsiSignal}] | Trend=${ta?.trendSignal} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x)
+ANALYST CONSENSUS: ${fundamentals?.recommendationKey?.toUpperCase()} | Mean Target: $${fundamentals?.targetMeanPrice} | # Analysts: ${fundamentals?.numberOfAnalystOpinions}
+${hasUpgrade   ? '🟢 RECENT UPGRADE — analyst sentiment turning bullish, factor into CALL conviction' : ''}
+${hasDowngrade ? '🔴 RECENT DOWNGRADE — analyst sentiment turning bearish, factor into PUT conviction' : ''}
+${hasTarget    ? '📊 ANALYST TARGET CHANGE — adjust expected price range accordingly' : ''}
+${hasFund      ? '🏦 INSTITUTIONAL ACTIVITY — smart money movement detected' : ''}
+${hasShort     ? '⚠ SHORT ATTACK DETECTED — elevated downside risk' : ''}
+
+ANALYST & NEWS FLOW (weighted by type):
+${categorized.join('\n')}
 
 === ATM CALLS (spot $${price?.toFixed(2)}) ===
 ${calls.map(c => `Strike=$${c.strike} | Bid=$${c.bid.toFixed(2)} | Ask=$${c.ask.toFixed(2)} | MID=$${c.mid.toFixed(2)} | IV=${c.iv}% | Delta=${c.delta} | OI=${c.oi}`).join('\n')}
