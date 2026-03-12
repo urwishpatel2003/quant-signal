@@ -1,8 +1,9 @@
-const encode = url => url.replace('https://query1.finance.yahoo.com', '/yahoo');
+const BASE = import.meta.env.VITE_API_BASE;
+const encode = url => url.replace('https://query1.finance.yahoo.com', `${BASE}/yahoo`);
 
 export async function fetchBondData() {
   try {
-    const data = await (await fetch('/bonds')).json();
+    const data = await (await fetch(`${BASE}/bonds`)).json();
     const find = sym => data.find(d => d.symbol === sym);
     const tnx = find('^TNX'), irx = find('^IRX'), tyx = find('^TYX');
     const tlt = find('TLT'),  ief = find('IEF');
@@ -13,12 +14,12 @@ export async function fetchBondData() {
 }
 
 export async function fetchInternationalMarkets() {
-  try { return await (await fetch('/international')).json(); }
+  try { return await (await fetch(`${BASE}/international`)).json(); }
   catch { return []; }
 }
 
 export async function fetchEconomicCalendar() {
-  try { return await (await fetch('/calendar')).json(); }
+  try { return await (await fetch(`${BASE}/calendar`)).json(); }
   catch { return []; }
 }
 

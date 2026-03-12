@@ -1,7 +1,7 @@
 import { isMarketClosed } from './tradier';
 
 async function callClaude(payload) {
-  const res  = await fetch('/api/analyze', {
+  const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/analyze`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload), mode: 'cors', credentials: 'omit',
   });
