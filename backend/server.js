@@ -12,11 +12,7 @@ const https   = require('https');
 
 const app = express();
 
-app.use(cors({
-  origin: ['http://localhost:5173', 'https://quantsignal-swart.vercel.app'],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
-}));
+app.use(cors());
 app.options('*', cors());
 app.use(express.json());
 
