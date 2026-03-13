@@ -1,6 +1,5 @@
 require('dotenv').config();
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
+const zlib = require('zlib');
 const express = require('express');
 const https   = require('https');
 
@@ -88,18 +87,25 @@ app.get('/yahoo/*', (req, res) => {
         'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept':          'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Referer':         'https://finance.yahoo.com',
         'Origin':          'https://finance.yahoo.com',
-        'sec-fetch-dest':  'empty',
-        'sec-fetch-mode':  'cors',
-        'sec-fetch-site':  'same-site',
       }
     },
     response => {
+      const encoding = response.headers['content-encoding'];
+      let stream = response;
+
+      if (encoding === 'gzip')    stream = response.pipe(zlib.createGunzip());
+      else if (encoding === 'br') stream = response.pipe(zlib.createBrotliDecompress());
+      else if (encoding === 'deflate') stream = response.pipe(zlib.createInflate());
+
       let data = '';
-      response.on('data', c => (data += c));
-      response.on('end', () => { res.setHeader('Content-Type', 'application/json'); res.send(data); });
+      stream.on('data', c => (data += c));
+      stream.on('end', () => {
+        res.setHeader('Content-Type', 'application/json');
+        res.send(data);
+      });
+      stream.on('error', e => res.status(500).json({ error: e.message }));
     }
   );
   request.on('error', e => res.status(500).json({ error: e.message }));
