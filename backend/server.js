@@ -80,7 +80,22 @@ function yahooChart(sym) {
 app.get('/yahoo/*', (req, res) => {
   const path = req.url.replace('/yahoo', '');
   const request = https.request(
-    { hostname: 'query1.finance.yahoo.com', path, method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } },
+    {
+      hostname: 'query1.finance.yahoo.com',
+      path,
+      method: 'GET',
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept':          'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer':         'https://finance.yahoo.com',
+        'Origin':          'https://finance.yahoo.com',
+        'sec-fetch-dest':  'empty',
+        'sec-fetch-mode':  'cors',
+        'sec-fetch-site':  'same-site',
+      }
+    },
     response => {
       let data = '';
       response.on('data', c => (data += c));
