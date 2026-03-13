@@ -23,7 +23,11 @@ export default function SignalCard({ analysis, news }) {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-          {[['TARGET', `$${analysis.priceTarget?.toFixed(2)}`, '#00ff88'], ['STOP LOSS', `$${analysis.stopLoss?.toFixed(2)}`, '#ff4444'], ['RISK', analysis.riskLevel, RC[analysis.riskLevel]]].map(([l, v, c]) => (
+          {[
+            ['TARGET',    `$${analysis.priceTarget?.toFixed(2)}`, '#00ff88'],
+            ['STOP LOSS', `$${analysis.stopLoss?.toFixed(2)}`,    '#ff4444'],
+            ['RISK',      analysis.riskLevel,                      RC[analysis.riskLevel]],
+          ].map(([l, v, c]) => (
             <div key={l} style={{ background: '#070710', padding: 10, textAlign: 'center' }}>
               <div style={{ fontSize: 9, color: '#445', marginBottom: 4 }}>{l}</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: c }}>{v}</div>
@@ -31,9 +35,11 @@ export default function SignalCard({ analysis, news }) {
           ))}
         </div>
 
-        <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.7, borderLeft: `2px solid ${SC[analysis.signal]}44`, paddingLeft: 12 }}>{analysis.thesis}</div>
-        {analysis.bondSignal    && <div style={{ fontSize: 10, color: '#ffaa0077', marginTop: 8,  borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>📊 {analysis.bondSignal}</div>}
-        {analysis.calendarRisk  && <div style={{ fontSize: 10, color: '#ff884477', marginTop: 6,  borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {analysis.calendarRisk}</div>}
+        <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.7, borderLeft: `2px solid ${SC[analysis.signal]}44`, paddingLeft: 12 }}>
+          {analysis.thesis}
+        </div>
+        {analysis.bondSignal   && <div style={{ fontSize: 10, color: '#ffaa0077', marginTop: 8, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>📊 {analysis.bondSignal}</div>}
+        {analysis.calendarRisk && <div style={{ fontSize: 10, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {analysis.calendarRisk}</div>}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -60,8 +66,23 @@ export default function SignalCard({ analysis, news }) {
           <div style={{ fontSize: 10, color: '#444', marginBottom: 12 }}>RECENT NEWS</div>
           {news.slice(0, 5).map((n, i) => (
             <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 11 }}>
-              <div style={{ color: '#aab', lineHeight: 1.4, marginBottom: 2 }}>{n.title}</div>
-              <div style={{ color: '#445', fontSize: 10 }}>{n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}</div>
+             <a 
+                href={n.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: '#aab', lineHeight: 1.4, marginBottom: 2,
+                  display: 'block', textDecoration: 'none',
+                  cursor: n.url ? 'pointer' : 'default',
+                }}
+                onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}
+              >
+                {n.title}
+              </a>
+              <div style={{ color: '#445', fontSize: 10 }}>
+                {n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}
+              </div>
             </div>
           ))}
         </div>

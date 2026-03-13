@@ -43,7 +43,7 @@ function yahooChart(sym) {
     const req = https.request(
       {
         hostname: 'query1.finance.yahoo.com',
-        path: `/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`,
+        path: `/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1mo`,
         method: 'GET',
         headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
       },

@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { SC, MC, GC } from '../utils/constants';
 import { useScan } from '../hooks/useScan';
-import MiniChart from '../components/MiniChart';
-import SignalCard from '../components/SignalCard';
-import BondPanel  from '../components/BondPanel';
+import MiniChart      from '../components/MiniChart';
+import SignalCard      from '../components/SignalCard';
+import BondPanel       from '../components/BondPanel';
+import TechnicalPanel  from '../components/TechnicalPanel';
 
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [inputVal, setInputVal] = useState('AAPL');
   const scan = useScan(macro);
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
-  const pct = scan.ohlcv ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100) : null;
+  const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
+  ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
+  : null;
 
   return (
     <div>
@@ -37,7 +40,19 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         <div className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 16, background: '#0f0f18', border: '1px solid #1e1e2e', padding: '12px 16px', marginBottom: 20 }}>
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28 }}>{scan.ticker}</div>
           <div style={{ fontSize: 24, fontWeight: 600 }}>${livePrice?.toFixed(2)}</div>
-          <div style={{ fontSize: 13, color: pct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>{pct >= 0 ? '▲' : '▼'} {Math.abs(pct)?.toFixed(2)}%</div>
+        <div style={{ fontSize: 13, color: pct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
+                    {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
+        </div>
+          {scan.ta?.rsiSignal && (
+            <span style={{ fontSize: 10, color: scan.ta.rsi14 > 70 ? '#ff4444' : scan.ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>
+              RSI: {scan.ta.rsi14} [{scan.ta.rsiSignal}]
+            </span>
+          )}
+          {scan.ta?.trendSignal && (
+            <span style={{ fontSize: 10, color: scan.ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444' }}>
+              {scan.ta.trendSignal === 'BULLISH' ? '▲' : '▼'} {scan.ta.trendSignal}
+            </span>
+          )}
           {scan.analysis?.macroImpact       && <span style={{ fontSize: 10, color: MC[scan.analysis.macroImpact]       }}>MACRO: {scan.analysis.macroImpact}</span>}
           {scan.analysis?.globalMarketTrend && <span style={{ fontSize: 10, color: GC[scan.analysis.globalMarketTrend] }}>GLOBAL: {scan.analysis.globalMarketTrend}</span>}
           <div style={{ marginLeft: 'auto' }}><MiniChart data={scan.ohlcv} /></div>
@@ -57,7 +72,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <div ref={scan.terminalRef} style={{ height: 100, overflowY: 'auto', fontSize: 11, lineHeight: 1.8 }}>
               {scan.logs.length === 0 && <div style={{ color: '#333' }}>&gt; Awaiting input...</div>}
               {scan.logs.map((l, i) => (
-                <div key={i} style={{ color: l.includes('ERROR') ? '#ff4444' : l.includes('Signal:') ? '#00ff88' : l.includes('Macro:') || l.includes('10Y') ? '#ffaa00' : '#446' }}>{l}</div>
+                <div key={i} style={{ color: l.includes('ERROR') ? '#ff4444' : l.includes('Signal:') ? '#00ff88' : l.includes('RSI') || l.includes('Trend') ? '#ffaa00' : l.includes('10Y') || l.includes('Macro') ? '#ffaa00' : '#446' }}>{l}</div>
               ))}
             </div>
           </div>
@@ -79,6 +94,9 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               ))}
             </div>
           )}
+
+          {/* TA Panel */}
+          {scan.ta && <TechnicalPanel ta={scan.ta} />}
 
           {macro?.bonds && <BondPanel bonds={macro.bonds} />}
 
