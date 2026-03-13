@@ -2,42 +2,17 @@ require('dotenv').config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const express = require('express');
-const cors    = require('cors');
 const https   = require('https');
 
 const app = express();
 
-const corsOptions = {
-  origin: [
-    'https://quantsignal-swart.vercel.app',
-    'https://quant-signal-beta.vercel.app',
-    'http://localhost:5173'
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight for ALL routes
-app.use(express.json({ limit: '10mb' }));
-function httpsGet(hostname, path, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      { hostname, path, method: 'GET', headers: { Accept: 'application/json', ...headers } },
-      res => {
-        let data = '';
-        res.on('data', c => (data += c));
-        res.on('end', () => {
-          try { resolve(JSON.parse(data)); }
-          catch { resolve({ error: 'Parse error', raw: data }); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.end();
-  });
-}
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 function yahooChart(sym) {
   return new Promise(resolve => {
