@@ -1,23 +1,26 @@
 require('dotenv').config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-process.env.TRADIER_TOKEN     = process.env.TRADIER_TOKEN;
-
 const express = require('express');
 const cors    = require('cors');
 const https   = require('https');
 
 const app = express();
 
-app.use(cors({
+const corsOptions = {
   origin: [
     'https://quantsignal-swart.vercel.app',
     'https://quant-signal-beta.vercel.app',
     'http://localhost:5173'
-  ]
-}));
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
 
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight for ALL routes
+app.use(express.json({ limit: '10mb' }));
 function httpsGet(hostname, path, headers = {}) {
   return new Promise((resolve, reject) => {
     const req = https.request(
