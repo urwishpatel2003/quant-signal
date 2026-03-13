@@ -1,5 +1,7 @@
 require('dotenv').config();
 const zlib = require('zlib');
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const express = require('express');
 const https   = require('https');
 
