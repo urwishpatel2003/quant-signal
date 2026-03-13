@@ -14,6 +14,30 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(express.json({ limit: '10mb' }));
+
+// ─── httpsGet helper ──────────────────────────────────────────────────────────
+
+function httpsGet(hostname, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      { hostname, path, method: 'GET', headers: { Accept: 'application/json', ...headers } },
+      res => {
+        let data = '';
+        res.on('data', c => (data += c));
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch { resolve({ error: 'Parse error', raw: data }); }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// ─── yahooChart helper ────────────────────────────────────────────────────────
+
 function yahooChart(sym) {
   return new Promise(resolve => {
     const req = https.request(
@@ -28,9 +52,9 @@ function yahooChart(sym) {
         res.on('data', c => (data += c));
         res.on('end', () => {
           try {
-            const json   = JSON.parse(data);
-            const result = json?.chart?.result?.[0];
-            const closes = result?.indicators?.quote?.[0]?.close || [];
+            const json    = JSON.parse(data);
+            const result  = json?.chart?.result?.[0];
+            const closes  = result?.indicators?.quote?.[0]?.close || [];
             const current = closes[closes.length - 1];
             const prev    = closes[closes.length - 2];
             const meta    = result?.meta || {};
@@ -156,7 +180,7 @@ app.get('/calendar', async (req, res) => {
                   publisher: n.publisher,
                   time:      n.providerPublishTime,
                   category:  q,
-                  url:       n.link   // ← article URL
+                  url:       n.link
                 })));
               } catch { resolve([]); }
             });
@@ -173,7 +197,7 @@ app.get('/calendar', async (req, res) => {
 // ─── Claude API Proxy ─────────────────────────────────────────────────────────
 
 app.post('/api/analyze', (req, res) => {
-  const body = JSON.stringify(req.body);
+  const body = JSON.stringify(req.body || {});
   const request = https.request(
     {
       hostname: 'api.anthropic.com',
