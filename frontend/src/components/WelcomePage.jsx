@@ -99,16 +99,17 @@ export default function WelcomePage({ onEnter, onNavigate }) {
         </div>
 
         <div style={{
-          fontFamily: "'Bebas Neue', sans-serif",
-          fontSize: 'clamp(60px, 10vw, 120px)',
-          lineHeight: 0.9, letterSpacing: '0.05em',
-          background: 'linear-gradient(135deg, #ffffff 0%, #ffaa00 50%, #ff4400 100%)',
-          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          marginBottom: 24,
-        }}>
-          QUANT<br />SIGNAL
-        </div>
-
+            fontFamily: "'Bebas Neue', sans-serif",
+            fontSize: 'clamp(60px, 10vw, 120px)',
+            lineHeight: 0.9, letterSpacing: '0.05em',
+            marginBottom: 24,
+            }}>
+                <span style={{ color: '#ffaa00' }}>QU</span>
+                <span style={{ color: '#00ff88' }}>AI</span>
+                <span style={{ color: '#ffaa00' }}>NT</span>
+                <br />
+                <span style={{ color: '#ffaa00' }}>SIGNAL</span>
+                </div>
         <div style={{ fontSize: 18, color: '#8899aa', marginBottom: 12, fontWeight: 300 }}>
           Institutional-grade options analysis for every trader
         </div>

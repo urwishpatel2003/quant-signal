@@ -46,7 +46,11 @@ if (showWelcome) {
       {/* Header */}
       <div style={{ borderBottom: '1px solid #1a1a2e', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: '#ffaa00', letterSpacing: '0.05em' }}>QUANT SIGNAL</div>
+         <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: '0.05em' }}>
+           <span style={{ color: '#ffaa00' }}>Qu</span>
+           <span style={{ color: '#00ff88' }}>AI</span>
+           <span style={{ color: '#ffaa00' }}>nt Signal</span>
+           </div>
           <div style={{ fontSize: 10, color: '#333', letterSpacing: '0.2em' }}>AI-POWERED MARKET INTELLIGENCE</div>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
