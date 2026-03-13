@@ -8,8 +8,8 @@ import MarketsTab   from './tabs/MarketsTab';
 import WatchlistTab from './tabs/WatchlistTab';
 import PortfolioTab from './tabs/PortfolioTab';
 import JournalTab   from './tabs/JournalTab';
-import HelpTab from './tabs/HelpTab';
-import WelcomePage from './components/WelcomePage';
+import HelpTab      from './tabs/HelpTab';
+import WelcomePage  from './components/WelcomePage';
 
 export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -26,66 +26,70 @@ export default function App() {
     }
   };
 
-  // Add navigate handler:
-const handleNavigate = (tab) => {
-  setActiveTab(tab);
-};
+  const handleNavigate = (tab) => setActiveTab(tab);
 
-// Wrap your return:
-if (showWelcome) {
-  return (
-    <WelcomePage
-      onEnter={() => setShowWelcome(false)}
-      onNavigate={handleNavigate}
-    />
-  );
-}
+  if (showWelcome) {
+    return (
+      <WelcomePage
+        onEnter={() => setShowWelcome(false)}
+        onNavigate={handleNavigate}
+      />
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#07070e', color: '#c8c8d0', fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
-      <div style={{ borderBottom: '1px solid #1a1a2e', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-         <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: '0.05em' }}>
-           <span style={{ color: '#ffaa00' }}>Qu</span>
-           <span style={{ color: '#00ff88' }}>AI</span>
-           <span style={{ color: '#ffaa00' }}>nt Signal</span>
-           </div>
-          <div style={{ fontSize: 10, color: '#333', letterSpacing: '0.2em' }}>AI-POWERED MARKET INTELLIGENCE</div>
+
+      {/* ── Header ── */}
+      <div className="app-header">
+        <div className="app-header-logo">
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: '0.05em' }}>
+            <span style={{ color: '#ffaa00' }}>Qu</span>
+            <span style={{ color: '#00ff88' }}>AI</span>
+            <span style={{ color: '#ffaa00' }}>nt Signal</span>
+          </div>
+          <div className="app-header-subtitle" style={{ fontSize: 10, color: '#333', letterSpacing: '0.2em' }}>
+            AI-POWERED MARKET INTELLIGENCE
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <MacroBar bonds={macro.bonds} intlMarkets={macro.intlMarkets} macroNews={macro.macroNews} loading={macro.loading} />
-        </div>
+        <MacroBar
+          bonds={macro.bonds}
+          intlMarkets={macro.intlMarkets}
+          macroNews={macro.macroNews}
+          loading={macro.loading}
+        />
       </div>
 
-      {/* Tabs */}
-      <div style={{ borderBottom: '1px solid #1a1a2e', padding: '0 24px', display: 'flex', gap: 0 }}>
+      {/* ── Tabs ── */}
+      <div className="app-tabs">
         {TABS.map(tab => {
           const id    = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
           const label = typeof tab === 'string' ? tab : tab.label;
           return (
-            <button key={id} onClick={() => setActiveTab(id)}
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className="tab-btn"
               style={{
-                background: 'none', border: 'none',
                 borderBottom: activeTab === id ? '2px solid #ffaa00' : '2px solid transparent',
-                color: activeTab === id ? '#ffaa00' : '#445', padding: '12px 16px',
-                fontSize: 11, letterSpacing: '0.15em', cursor: 'pointer', transition: 'all 0.2s'
-              }}>
+                color: activeTab === id ? '#ffaa00' : '#445',
+              }}
+            >
               {label}
             </button>
           );
         })}
       </div>
 
-      {/* Content */}
-      <div style={{ padding: 24 }}>
-        {activeTab === 'help' && <HelpTab />}
-        {activeTab === 'markets'   && <MarketsTab   intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
+      {/* ── Content ── */}
+      <div className="app-content">
         {activeTab === 'scanner'   && <ScannerTab   macro={macro} onOpenOptions={openOptions} onAddToWatchlist={addToWatchlist} />}
         {activeTab === 'options'   && <OptionsTab   macro={macro} initialTicker={optionsTicker} />}
+        {activeTab === 'markets'   && <MarketsTab   intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
         {activeTab === 'watchlist' && <WatchlistTab macro={macro} onOpenOptions={openOptions} />}
         {activeTab === 'portfolio' && <PortfolioTab />}
         {activeTab === 'journal'   && <JournalTab />}
+        {activeTab === 'help'      && <HelpTab />}
       </div>
     </div>
   );
