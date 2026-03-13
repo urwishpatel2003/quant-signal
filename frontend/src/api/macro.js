@@ -1,5 +1,4 @@
 const BASE = import.meta.env.VITE_API_BASE;
-const encode = url => url.replace('https://query1.finance.yahoo.com', `${BASE}/yahoo`);
 
 export async function fetchBondData() {
   try {
@@ -24,22 +23,6 @@ export async function fetchEconomicCalendar() {
 }
 
 export async function fetchMacroNews() {
-  try {
-    const topics = [
-      'geopolitical risk war conflict',
-      'Federal Reserve interest rates policy',
-      'US Treasury bonds yield curve',
-      'trade war tariffs sanctions',
-      'China economy slowdown',
-      'Japan Bank of Japan yen',
-      'India economy growth RBI',
-      'Europe ECB recession',
-    ];
-    const results = await Promise.all(topics.map(async topic => {
-      const res  = await fetch(encode(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(topic)}&newsCount=2`));
-      const data = await res.json();
-      return (data?.news || []).map(n => ({ title: n.title, publisher: n.publisher, time: n.providerPublishTime, topic, url: n.link }));
-    }));
-    return results.flat().sort((a, b) => b.time - a.time).slice(0, 16);
-  } catch { return []; }
+  // Yahoo Finance search API blocked — returning empty until Finnhub is integrated
+  return [];
 }
