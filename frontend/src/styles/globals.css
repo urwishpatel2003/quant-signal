@@ -242,3 +242,111 @@ body { margin: 0; }
   .journal-stats { grid-template-columns: repeat(2, 1fr); }
   .journal-form-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Markets ── */
+.markets-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.markets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+/* ── Help ── */
+.help-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+}
+
+/* ── Welcome ── */
+.welcome-hero {
+  text-align: center;
+  padding: 80px 40px 60px;
+}
+.welcome-features {
+  padding: 0 40px 60px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+.welcome-features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.welcome-about {
+  padding: 60px 40px;
+  background: #0a0a14;
+  border-top: 1px solid #1e1e2e;
+}
+.welcome-about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+}
+
+/* ── Scanner ── */
+.scanner-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── Options ── */
+.options-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+}
+.options-contracts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ── Utilities ── */
+.hide-mobile { display: block; }
+.show-mobile { display: none; }
+
+/* ── 1024px ── */
+@media (max-width: 1024px) {
+  .markets-summary { grid-template-columns: repeat(2, 1fr); }
+  .markets-grid    { grid-template-columns: repeat(2, 1fr); }
+  .options-layout  { grid-template-columns: 240px 1fr; }
+  .welcome-features-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── 768px ── */
+@media (max-width: 768px) {
+  .app-header      { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px; }
+  .app-tabs        { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .app-content     { padding: 12px; }
+
+  .scanner-grid    { grid-template-columns: 1fr; }
+  .options-layout  { grid-template-columns: 1fr; }
+  .options-contracts { grid-template-columns: 1fr; }
+
+  .markets-summary { grid-template-columns: repeat(2, 1fr); }
+  .markets-grid    { grid-template-columns: 1fr; }
+
+  .help-layout     { grid-template-columns: 1fr; }
+  .hide-mobile     { display: none; }
+  .show-mobile     { display: block; }
+
+  .welcome-hero    { padding: 48px 20px 40px; }
+  .welcome-features { padding: 0 20px 40px; }
+  .welcome-features-grid { grid-template-columns: 1fr; }
+  .welcome-about   { padding: 40px 20px; }
+  .welcome-about-grid { grid-template-columns: 1fr; gap: 24px; }
+}
+
+/* ── 375px ── */
+@media (max-width: 375px) {
+  .markets-summary { grid-template-columns: 1fr; }
+  .tab-btn         { font-size: 9px; padding: 8px 8px; }
+}

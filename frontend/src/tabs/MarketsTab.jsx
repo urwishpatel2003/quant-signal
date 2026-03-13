@@ -9,17 +9,17 @@ const REGIONS = [
   },
   { label: '🇮🇳 INDIA',     syms: [{ name: 'Sensex', sym: '^BSESN', fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) }] },
   { label: '🇪🇺 EUROPE',    syms: [
-      { name: 'DAX',          sym: '^GDAXI',    fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
-      { name: 'FTSE 100',     sym: '^FTSE',     fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
-      { name: 'CAC 40',       sym: '^FCHI',     fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
-      { name: 'Euro Stoxx 50',sym: '^STOXX50E', fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
+      { name: 'DAX',           sym: '^GDAXI',    fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
+      { name: 'FTSE 100',      sym: '^FTSE',     fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
+      { name: 'CAC 40',        sym: '^FCHI',     fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
+      { name: 'Euro Stoxx 50', sym: '^STOXX50E', fmt: v => v?.toLocaleString('en-US', { maximumFractionDigits: 0 }) },
     ]
   },
   { label: '📊 SIGNALS',    syms: [
-      { name: 'VIX (Fear)',   sym: '^VIX',     fmt: v => v?.toFixed(2) },
-      { name: 'DXY (USD)',    sym: 'DX-Y.NYB', fmt: v => v?.toFixed(2) },
-      { name: 'Gold',         sym: 'GC=F',     fmt: v => `$${v?.toFixed(0)}` },
-      { name: 'Crude Oil WTI',sym: 'CL=F',     fmt: v => `$${v?.toFixed(2)}` },
+      { name: 'VIX (Fear)',    sym: '^VIX',     fmt: v => v?.toFixed(2) },
+      { name: 'DXY (USD)',     sym: 'DX-Y.NYB', fmt: v => v?.toFixed(2) },
+      { name: 'Gold',          sym: 'GC=F',     fmt: v => `$${v?.toFixed(0)}` },
+      { name: 'Crude Oil WTI', sym: 'CL=F',     fmt: v => `$${v?.toFixed(2)}` },
     ]
   },
 ];
@@ -28,7 +28,8 @@ function Row({ name, data, fmt }) {
   if (!data?.current) return null;
   const up = data.changePct >= 0;
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid #1a1a26' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '9px 0', borderBottom: '1px solid #1a1a26' }}>
       <div style={{ fontSize: 12, color: '#aab' }}>{name}</div>
       <div style={{ textAlign: 'right' }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>{fmt(data.current)}</div>
@@ -57,22 +58,25 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+
+      {/* ── Summary cards ── */}
+      <div className="markets-summary">
         {[
-          ['GLOBAL SENTIMENT', globalSentiment,             sentimentColor,                                                     `${upCount}/7 markets ↑`],
-          ['VIX · FEAR INDEX', vix?.current?.toFixed(2),    vix?.current > 25 ? '#ff4444' : vix?.current > 20 ? '#ffaa00' : '#00ff88', vix?.current > 30 ? 'EXTREME FEAR' : vix?.current > 25 ? 'HIGH FEAR' : vix?.current > 20 ? 'ELEVATED' : 'CALM'],
-          ['YIELD CURVE',      `${bonds?.yieldCurve}%`,     bonds?.inverted ? '#ff4444' : '#00ff88',                            bonds?.inverted ? '⚠ INVERTED' : 'NORMAL'],
-          ['GOLD',             `$${gold?.current?.toFixed(0)}`, gold?.changePct > 0 ? '#00ff88' : '#ff4444',                  `${gold?.changePct > 0 ? '▲' : '▼'} ${Math.abs(gold?.changePct)?.toFixed(2)}%`],
+          ['GLOBAL SENTIMENT', globalSentiment,              sentimentColor,                                                         `${upCount}/7 markets ↑`],
+          ['VIX · FEAR INDEX', vix?.current?.toFixed(2),     vix?.current > 25 ? '#ff4444' : vix?.current > 20 ? '#ffaa00' : '#00ff88', vix?.current > 30 ? 'EXTREME FEAR' : vix?.current > 25 ? 'HIGH FEAR' : vix?.current > 20 ? 'ELEVATED' : 'CALM'],
+          ['YIELD CURVE',      `${bonds?.yieldCurve}%`,      bonds?.inverted ? '#ff4444' : '#00ff88',                                bonds?.inverted ? '⚠ INVERTED' : 'NORMAL'],
+          ['GOLD',             `$${gold?.current?.toFixed(0)}`, gold?.changePct > 0 ? '#00ff88' : '#ff4444',                       `${gold?.changePct > 0 ? '▲' : '▼'} ${Math.abs(gold?.changePct)?.toFixed(2)}%`],
         ].map(([l, v, c, sub]) => (
           <div key={l} className="card" style={{ textAlign: 'center', borderColor: c + '33' }}>
             <div style={{ fontSize: 10, color: '#445', marginBottom: 4 }}>{l}</div>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: c }}>{v}</div>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(20px, 4vw, 28px)', color: c }}>{v}</div>
             <div style={{ fontSize: 10, color: c }}>{sub}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+      {/* ── Markets grid ── */}
+      <div className="markets-grid">
         {REGIONS.map(r => (
           <div key={r.label} className="card">
             <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>{r.label}</div>
@@ -95,7 +99,11 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
                 <div style={{ fontSize: 13, fontWeight: 600, color: c }}>{v}</div>
               </div>
             ))}
-            {bonds.inverted && <div style={{ marginTop: 8, fontSize: 10, color: '#ff444488', borderLeft: '2px solid #ff444433', paddingLeft: 8 }}>⚠ Inverted curve — historical recession precursor</div>}
+            {bonds.inverted && (
+              <div style={{ marginTop: 8, fontSize: 10, color: '#ff444488', borderLeft: '2px solid #ff444433', paddingLeft: 8 }}>
+                ⚠ Inverted curve — historical recession precursor
+              </div>
+            )}
           </div>
         )}
 
