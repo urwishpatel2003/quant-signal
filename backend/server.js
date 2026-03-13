@@ -52,12 +52,13 @@ function yahooChart(sym) {
         res.on('data', c => (data += c));
         res.on('end', () => {
           try {
-            const json    = JSON.parse(data);
-            const result  = json?.chart?.result?.[0];
-            const closes  = result?.indicators?.quote?.[0]?.close || [];
-            const current = closes[closes.length - 1];
-            const prev    = closes[closes.length - 2];
-            const meta    = result?.meta || {};
+            const json      = JSON.parse(data);
+            const result    = json?.chart?.result?.[0];
+            const allCloses = result?.indicators?.quote?.[0]?.close || [];
+            const closes    = allCloses.filter(c => c !== null && c !== undefined);
+            const current   = closes[closes.length - 1];
+            const prev      = closes[closes.length - 2];
+            const meta      = result?.meta || {};
             resolve({
               symbol: sym, name: meta.shortName || sym,
               current, prev,
@@ -151,22 +152,22 @@ app.get('/international', async (req, res) => {
 
 app.get('/calendar', async (req, res) => {
   const queries = [
-    'Fed FOMC meeting interest rate decision',
-    'CPI inflation report release date',
-    'nonfarm payroll jobs report',
-    'GDP report economic growth',
-    'earnings season results',
-    'ECB European Central Bank meeting',
-    'Bank of Japan BOJ meeting',
-    'China PMI economic data'
+    { q: 'Federal Reserve interest rates Fed',    category: 'FEDERAL RESERVE'  },
+    { q: 'CPI inflation consumer prices',          category: 'INFLATION'        },
+    { q: 'jobs report nonfarm payroll labor',      category: 'JOBS REPORT'      },
+    { q: 'GDP economic growth recession',          category: 'GDP GROWTH'       },
+    { q: 'earnings season stocks results',         category: 'EARNINGS'         },
+    { q: 'ECB European Central Bank rates',        category: 'ECB POLICY'       },
+    { q: 'Bank of Japan yen monetary',             category: 'JAPAN BOJ'        },
+    { q: 'China economy trade tariffs',            category: 'CHINA ECONOMY'    },
   ];
   try {
     const results = await Promise.all(
-      queries.map(q => new Promise(resolve => {
+      queries.map(({ q, category }) => new Promise(resolve => {
         const request = https.request(
           {
             hostname: 'query1.finance.yahoo.com',
-            path: `/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=2`,
+            path: `/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=5&lang=en&region=US`,
             method: 'GET',
             headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
           },
@@ -175,11 +176,12 @@ app.get('/calendar', async (req, res) => {
             response.on('data', c => (data += c));
             response.on('end', () => {
               try {
-                resolve((JSON.parse(data)?.news || []).map(n => ({
+                const news = JSON.parse(data)?.news || [];
+                resolve(news.map(n => ({
                   title:     n.title,
                   publisher: n.publisher,
                   time:      n.providerPublishTime,
-                  category:  q,
+                  category,
                   url:       n.link
                 })));
               } catch { resolve([]); }
@@ -190,7 +192,14 @@ app.get('/calendar', async (req, res) => {
         request.end();
       }))
     );
-    res.json(results.flat().sort((a, b) => b.time - a.time).slice(0, 20));
+    const flat   = results.flat().sort((a, b) => b.time - a.time);
+    const seen   = new Set();
+    const unique = flat.filter(item => {
+      if (seen.has(item.title)) return false;
+      seen.add(item.title);
+      return true;
+    });
+    res.json(unique.slice(0, 24));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
