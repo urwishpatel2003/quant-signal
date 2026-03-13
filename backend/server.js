@@ -202,6 +202,6 @@ app.post('/api/analyze', (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(process.env.PORT || 3001, () =>
-  console.log('✅  Quant Signal backend running on http://localhost:3001')
+app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
+  console.log(`✅  Quant Signal backend running on port ${process.env.PORT || 3001}`)
 );
