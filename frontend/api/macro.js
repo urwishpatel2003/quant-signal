@@ -1,5 +1,5 @@
-const https = require('https');
-const zlib  = require('zlib');
+import https from 'https';
+import zlib from 'zlib';
 
 const YAHOO_HEADERS = {
   'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -58,7 +58,7 @@ async function yahooChart(sym) {
   } catch { return { symbol: sym, current: null, source: 'yahoo' }; }
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
 
@@ -77,4 +77,4 @@ module.exports = async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-};
+}
