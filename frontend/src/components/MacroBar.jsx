@@ -1,6 +1,7 @@
 export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
   if (loading && !bonds) return (
-    <div className="pulse" style={{ background: '#08080f', border: '1px solid #1a1a2a', padding: '8px 16px', marginBottom: 16, fontSize: 10, color: '#ffaa0044' }}>
+    <div className="pulse" style={{ background: '#08080f', border: '1px solid #1a1a2a',
+      padding: '8px 16px', marginBottom: 16, fontSize: 10, color: '#ffaa0044' }}>
       LOADING MACRO DATA...
     </div>
   );
@@ -29,31 +30,66 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
     ) : null;
   };
 
-  const vix = find('^VIX');
+  const vix  = find('^VIX');
+  const gold = find('GC=F');
+  const isYahoo = bonds.isYahoo;
 
   return (
-    <div style={{ background: '#08080f', border: '1px solid #1a1a2a', borderBottom: '1px solid #ffaa0022', padding: '8px 16px', marginBottom: 16, display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', overflowX: 'auto' }}>
+    <div style={{ background: '#08080f', border: '1px solid #1a1a2a',
+      borderBottom: '1px solid #ffaa0022', padding: '8px 16px', marginBottom: 16,
+      display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', overflowX: 'auto' }}>
       <div style={{ fontSize: 9, color: '#ffaa0055', letterSpacing: '0.15em' }}>MACRO</div>
 
-      <Stat label="10Y"   val={`${bonds.tnx?.current?.toFixed(2)}%`} color={bonds.tnx?.changePct > 0 ? '#ff6666' : '#00ff88'} alert={bonds.inverted} />
-      <Stat label="CURVE" val={`${bonds.yieldCurve}%`} color={parseFloat(bonds.yieldCurve) > 0 ? '#00ff88' : '#ff4444'} alert={bonds.inverted} />
-      <Stat label="TLT"   val={`$${bonds.tlt?.current?.toFixed(2)}`} color={bonds.tlt?.changePct > 0 ? '#00ff88' : '#ff4444'} />
+      {isYahoo ? (
+        // Show real yield %
+        <>
+          <Stat label="10Y"
+            val={bonds.tnx?.current ? `${bonds.tnx.current.toFixed(2)}%` : '—'}
+            color={bonds.tnx?.changePct > 0 ? '#ff6666' : '#00ff88'}
+            alert={bonds.inverted} />
+          <Stat label="CURVE"
+            val={bonds.yieldCurve ? `${bonds.yieldCurve}%` : '—'}
+            color={parseFloat(bonds.yieldCurve) > 0 ? '#00ff88' : '#ff4444'}
+            alert={bonds.inverted} />
+        </>
+      ) : (
+        // Show ETF prices
+        <>
+          <Stat label="TLT"
+            val={bonds.tlt?.current ? `$${bonds.tlt.current.toFixed(2)}` : '—'}
+            color={bonds.tlt?.changePct > 0 ? '#00ff88' : '#ff4444'} />
+          <Stat label="CURVE"
+            val={bonds.inverted ? 'INV' : 'NORM'}
+            color={bonds.inverted ? '#ff4444' : '#00ff88'}
+            alert={bonds.inverted} />
+        </>
+      )}
+
+      <Stat label="TLT"
+        val={bonds.tlt?.current ? `$${bonds.tlt.current.toFixed(2)}` : '—'}
+        color={bonds.tlt?.changePct > 0 ? '#00ff88' : '#ff4444'} />
 
       <Div />
       <Mkt label="N225" sym="^N225" />
-      <Mkt label="HSI"  sym="^HSI" />
+      <Mkt label="HSI"  sym="^HSI"  />
       <Mkt label="DAX"  sym="^GDAXI" />
 
       <Div />
       {vix?.current && (
-        <Stat label="VIX" val={vix.current.toFixed(2)}
+        <Stat label="VIX"
+          val={vix.current.toFixed(2)}
           color={vix.current > 25 ? '#ff4444' : vix.current > 20 ? '#ffaa00' : '#00ff88'} />
       )}
-      <Mkt label="GOLD" sym="GC=F" />
-      <Mkt label="OIL"  sym="CL=F" />
+      {gold?.current && (
+        <Stat label="GOLD"
+          val={`$${gold.current.toFixed(2)}`}
+          color={gold.changePct > 0 ? '#00ff88' : '#ff4444'} />
+      )}
+      <Mkt label="OIL" sym="CL=F" />
 
       {macroNews?.length > 0 && (
-        <div style={{ fontSize: 10, color: '#334', marginLeft: 'auto', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 10, color: '#334', marginLeft: 'auto', maxWidth: 360,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           📰 {macroNews[0]?.title}
         </div>
       )}
