@@ -79,6 +79,7 @@ function yahooChart(sym) {
 // ─── Yahoo Finance proxy ──────────────────────────────────────────────────────
 
 app.get('/yahoo/*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); 
   const path = req.url.replace('/yahoo', '');
   const request = https.request(
     {
