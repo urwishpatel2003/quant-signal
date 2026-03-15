@@ -350,3 +350,7 @@ body { margin: 0; }
   .markets-summary { grid-template-columns: 1fr; }
   .tab-btn         { font-size: 9px; padding: 8px 8px; }
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

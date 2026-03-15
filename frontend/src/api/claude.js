@@ -56,29 +56,40 @@ export function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
   return ctx;
 }
 
-export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta) {
+export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing') {
   const macroCtx     = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
   const categorized  = categorizeNews(news).slice(0, 10);
   const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
   const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
   const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
 
+  const tfMeta = {
+    short:    { label: 'Short Term (1-5 days)',     focus: 'momentum, intraday price action, RSI, volume spikes, and news catalysts. Weight recent price action and momentum heavily. SMA20 is the key trend level.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg) | Trend vs SMA20=${ta?.trendSignal}` },
+    swing:    { label: 'Swing Trade (1-4 weeks)',    focus: 'trend direction, SMA20/50 crossovers, RSI momentum, and macro tailwinds/headwinds. Weight technical trend and macro conditions equally.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)` },
+    position: { label: 'Position Trade (1-3 months)', focus: 'SMA50/200 trend, fundamentals, macro environment, and sector rotation. Weight fundamentals and macro conditions more heavily than short-term price action.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | SMA200=$${ta?.sma200} (${ta?.priceVsSma200}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)` },
+    longterm: { label: 'Long Term (6-12 months)',    focus: 'fundamentals, business quality, macro cycle, SMA200 trend, and analyst consensus. Weight P/E, revenue growth, ROE, and analyst targets most heavily. Short-term noise is irrelevant.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} (${ta?.priceVsSma200}% from price) | Trend=${ta?.trendSignal} | Analyst Target=$${fundamentals?.targetMeanPrice}` },
+  };
+
+  const tf = tfMeta[timeframeKey] || tfMeta.swing;
+
   return callClaude({
     model: 'claude-sonnet-4-20250514', max_tokens: 1400,
     system: `You are a quantitative trading analyst with expertise in global macro, geopolitics, cross-market analysis, and institutional flow.
+Timeframe: ${tf.label}. Focus on: ${tf.focus}
 Consider how global markets (Asia, Europe), bond markets, VIX, USD, commodities, and economic calendar affect the stock.
 Weight analyst upgrades/downgrades and institutional fund activity heavily — these often precede large moves.
 [UPGRADE] and [INSIDER/FUND] tags are bullish signals. [DOWNGRADE] and [SHORT ATTACK] tags are bearish signals.
+The timeframe field in your response MUST reflect: "${tf.label}".
 Return ONLY a JSON object:
-{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":string,"thesis":string,"bullFactors":[str,str,str],"bearFactors":[str,str,str],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":-100,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
+{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":string,"bullFactors":[str,str,str],"bearFactors":[str,str,str],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":-100,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
     messages: [{
       role: 'user',
-      content: `Analyze ${ticker} at $${price?.toFixed(2)}.
+      content: `Analyze ${ticker} at $${price?.toFixed(2)} for a ${tf.label} trade.
+TIMEFRAME CONTEXT: ${tf.focus}
 PRICE (last 5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
-FUNDAMENTALS: P/E=${fundamentals?.pe}, Beta=${fundamentals?.beta}, Target=$${fundamentals?.targetMeanPrice}, Rec=${fundamentals?.recommendationKey}, Analysts=${fundamentals?.numberOfAnalystOpinions}
+FUNDAMENTALS: P/E=${fundamentals?.pe}, Beta=${fundamentals?.beta}, Target=$${fundamentals?.targetMeanPrice}, Rec=${fundamentals?.recommendationKey}, Analysts=${fundamentals?.numberOfAnalystOpinions}, ROE=${fundamentals?.roe}, RevGrowth=${fundamentals?.revenueGrowth}, GrossMargin=${fundamentals?.grossMargins}, D/E=${fundamentals?.debtToEquity}
 OPTIONS FLOW: P/C=${options?.putCallRatio?.toFixed(2)}, CallIV=${options?.avgCallIV}%, PutIV=${options?.avgPutIV}%
-TECHNICAL ANALYSIS: RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)
-ANALYST CONSENSUS: ${fundamentals?.recommendationKey?.toUpperCase()} | Mean Target: $${fundamentals?.targetMeanPrice} | # Analysts: ${fundamentals?.numberOfAnalystOpinions}
+TECHNICAL ANALYSIS: ${tf.indicators}
 ${hasUpgrade   ? '⚠ RECENT UPGRADE DETECTED — bullish analyst sentiment shift' : ''}
 ${hasDowngrade ? '⚠ RECENT DOWNGRADE DETECTED — bearish analyst sentiment shift' : ''}
 ${hasFund      ? '⚠ INSTITUTIONAL/FUND ACTIVITY DETECTED — smart money movement' : ''}
@@ -86,12 +97,12 @@ ${hasFund      ? '⚠ INSTITUTIONAL/FUND ACTIVITY DETECTED — smart money movem
 ANALYST & NEWS FLOW (weighted by type):
 ${categorized.join('\n')}
 ${macroCtx}
-How do Asian/European market moves, yield curve shape, VIX, DXY, analyst actions, and upcoming calendar events specifically affect ${ticker}?
+For this ${tf.label} trade: how do Asian/European market moves, yield curve shape, VIX, DXY, analyst actions, fundamentals, and upcoming calendar events specifically affect ${ticker}?
+Set priceTarget and stopLoss appropriate for a ${tf.label} hold period.
 Return JSON only.`
     }]
   });
 }
-
 export async function runOptionsAnalysis(ticker, price, expiry, chain, fundamentals, news, priceSignal, bonds, macroNews, intlMarkets, calendar, ta) {
   const calls = chain?.topCalls?.slice(0, 6) || [];
   const puts  = chain?.topPuts?.slice(0,  6) || [];

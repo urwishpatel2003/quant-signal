@@ -1,9 +1,9 @@
 const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const proxy = path => `${BASE}/yahoo${path}`;
 
-export async function fetchPrice(ticker) {
+export async function fetchPrice(ticker, range = '3mo', interval = '1d') {
   try {
-    const res    = await fetch(proxy(`/v8/finance/chart/${ticker}?interval=1d&range=3mo`));
+    const res    = await fetch(proxy(`/v8/finance/chart/${ticker}?interval=${interval}&range=${range}`));
     const data   = await res.json();
     const result = data?.chart?.result?.[0];
     if (!result) return null;
