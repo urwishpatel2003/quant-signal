@@ -17,7 +17,7 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '10mb' }));
 
-const POLYGON_KEY  = process.env.POLYGON_API_KEY;
+const POLYGON_KEY   = process.env.POLYGON_API_KEY;
 const TRADIER_TOKEN = process.env.TRADIER_TOKEN;
 
 // ─── httpsGet helper ──────────────────────────────────────────────────────────
@@ -40,70 +40,28 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-// ─── Polygon helpers ──────────────────────────────────────────────────────────
+// ─── Polygon helper ───────────────────────────────────────────────────────────
 
-const polygonGet = path => httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
+const polygonGet = path =>
+  httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
 
-async function polygonChart(sym) {
-  try {
-    const end   = new Date().toISOString().split('T')[0];
-    const start = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const clean = sym.replace('^', '').replace('=F', '');
+// ─── Tradier helper ───────────────────────────────────────────────────────────
 
-    // Map Yahoo-style symbols to Polygon tickers
-    const symbolMap = {
-      'TNX': 'I:TNX', 'IRX': 'I:IRX', 'TYX': 'I:TYX',
-      'VIX': 'I:VIX', 'DX-Y.NYB': 'C:DXY',
-      'GCF': 'C:XAUUSD', 'CLF': 'C:WTICOUSD',
-      'N225': 'I:NKY', 'HSI': 'I:HSI',
-      '000001.SS': 'I:SHCOMP', 'BSESN': 'I:SENSEX',
-      'GDAXI': 'I:DAX', 'FTSE': 'I:UKX',
-      'FCHI': 'I:CAC', 'STOXX50E': 'I:SX5E',
-    };
+const tradierGet = path =>
+  httpsGet('api.tradier.com', path, { Authorization: `Bearer ${TRADIER_TOKEN}` });
 
-    const ticker = symbolMap[clean] || sym;
-    const data   = await polygonGet(`/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=35`);
-    const bars   = data.results || [];
-    if (!bars.length) return { symbol: sym, current: null };
-
-    const current   = bars[bars.length - 1]?.c;
-    const prev      = bars[bars.length - 2]?.c;
-    const changePct = current && prev ? ((current - prev) / prev) * 100 : null;
-
-    return {
-      symbol: sym,
-      current, prev,
-      change:    current && prev ? current - prev : null,
-      changePct,
-      close:     bars.map(b => b.c),
-      open:      bars.map(b => b.o),
-      high:      bars.map(b => b.h),
-      low:       bars.map(b => b.l),
-      volume:    bars.map(b => b.v),
-      timestamps: bars.map(b => b.t),
-    };
-  } catch (e) {
-    console.log(`[Polygon] chart error for ${sym}: ${e.message}`);
-    return { symbol: sym, current: null };
-  }
-}
-
-// ─── Tradier helpers ──────────────────────────────────────────────────────────
-
-const tradierGet = (path) => httpsGet('api.tradier.com', path, { Authorization: `Bearer ${TRADIER_TOKEN}` });
+// ─── Tradier history helper ───────────────────────────────────────────────────
 
 async function tradierHistory(sym, range = '3mo') {
   try {
-    const end   = new Date().toISOString().split('T')[0];
     const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
     const days  = daysMap[range] || 90;
+    const end   = new Date().toISOString().split('T')[0];
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const data  = await tradierGet(`/v1/markets/history?symbol=${sym}&interval=daily&start=${start}&end=${end}`);
     const bars  = data?.history?.day || [];
     if (!bars.length) return null;
-
-    const closes  = bars.map(b => b.close).filter(Boolean);
-    const volumes = bars.map(b => b.volume).filter(Boolean);
+    const closes = bars.map(b => b.close).filter(Boolean);
     return {
       close:      bars.map(b => b.close),
       open:       bars.map(b => b.open),
@@ -120,19 +78,39 @@ async function tradierHistory(sym, range = '3mo') {
   }
 }
 
-// ─── Yahoo proxy (kept for fallback, now via Vercel) ─────────────────────────
-// Removed — using Tradier + Polygon only
+// ─── Polygon aggs helper ──────────────────────────────────────────────────────
 
-// ─── Stock history (Tradier) ──────────────────────────────────────────────────
+async function polygonAggs(ticker, days = 7) {
+  try {
+    const end   = new Date().toISOString().split('T')[0];
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const data  = await polygonGet(`/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=10`);
+    const bars  = data.results || [];
+    if (!bars.length) return null;
+    const current = bars[bars.length - 1]?.c;
+    const prev    = bars[bars.length - 2]?.c;
+    return {
+      current,
+      prev,
+      change:    current && prev ? current - prev : null,
+      changePct: current && prev ? ((current - prev) / prev) * 100 : null,
+      bars,
+    };
+  } catch (e) {
+    console.log(`[Polygon] aggs error for ${ticker}: ${e.message}`);
+    return null;
+  }
+}
+
+// ─── Stock history — Tradier ──────────────────────────────────────────────────
 
 app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   const { ticker } = req.params;
-  const range    = req.query.range || '3mo';
+  const range    = req.query.range    || '3mo';
   const interval = req.query.interval || '1d';
   try {
     const data = await tradierHistory(ticker, range);
     if (!data) return res.status(404).json({ error: 'No data found' });
-    // Return in Yahoo-compatible format so frontend doesn't need changes
     res.json({
       chart: {
         result: [{
@@ -153,7 +131,7 @@ app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Fundamentals (Polygon) ───────────────────────────────────────────────────
+// ─── Fundamentals — Polygon ───────────────────────────────────────────────────
 
 app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   const { ticker } = req.params;
@@ -162,31 +140,39 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
       polygonGet(`/v3/reference/tickers/${ticker}`),
       polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=1&timeframe=annual`),
     ]);
-
     const d = details?.results || {};
     const f = financials?.results?.[0]?.financials || {};
-    const income = f.income_statement || {};
-    const balance = f.balance_sheet || {};
+    const income  = f.income_statement  || {};
+    const balance = f.balance_sheet     || {};
+    const cash    = f.cash_flow_statement || {};
 
-    // Return in Yahoo-compatible quoteSummary format
+    const revenue     = income.revenues?.value;
+    const prevRevenue = income.revenues?.value;
+    const netIncome   = income.net_income_loss?.value;
+    const totalAssets = balance.assets?.value;
+    const totalEquity = balance.equity?.value;
+    const totalDebt   = balance.liabilities?.value;
+    const eps         = income.basic_earnings_per_share?.value;
+    const grossProfit = income.gross_profit?.value;
+
     res.json({
       quoteSummary: {
         result: [{
           summaryDetail: {
-            trailingPE:  { raw: d.market_cap && d.weighted_shares_outstanding ? null : null },
-            beta:        { raw: null },
+            trailingPE: { raw: null },
+            beta:       { raw: d.beta || null },
           },
           defaultKeyStatistics: {
-            trailingEps: { raw: null },
+            trailingEps: { raw: eps || null },
           },
           financialData: {
             targetMeanPrice:         { raw: null },
-            recommendationKey:       d.description ? 'hold' : null,
+            recommendationKey:       'hold',
             numberOfAnalystOpinions: { raw: null },
-            returnOnEquity:          { raw: null },
-            debtToEquity:            { raw: null },
+            returnOnEquity:          { raw: totalEquity && netIncome ? netIncome / totalEquity : null },
+            debtToEquity:            { raw: totalEquity && totalDebt ? totalDebt / totalEquity : null },
             revenueGrowth:           { raw: null },
-            grossMargins:            { raw: null },
+            grossMargins:            { raw: revenue && grossProfit ? grossProfit / revenue : null },
           }
         }]
       }
@@ -194,7 +180,7 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Stock News (Polygon) ─────────────────────────────────────────────────────
+// ─── Stock news — Polygon ─────────────────────────────────────────────────────
 
 app.get('/yahoo/v1/finance/search', async (req, res) => {
   const q = req.query.q || '';
@@ -210,7 +196,7 @@ app.get('/yahoo/v1/finance/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Tradier ──────────────────────────────────────────────────────────────────
+// ─── Tradier routes ───────────────────────────────────────────────────────────
 
 app.get('/tradier/expirations/:ticker', async (req, res) => {
   try {
@@ -233,90 +219,63 @@ app.get('/tradier/quote/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Bonds (Polygon) ─────────────────────────────────────────────────────────
+// ─── Bonds — Polygon ETF proxies ──────────────────────────────────────────────
 
 app.get('/bonds', async (req, res) => {
   try {
     const symbols = [
-      { poly: 'I:TNX',      yahoo: '^TNX' },
-      { poly: 'I:IRX',      yahoo: '^IRX' },
-      { poly: 'I:TYX',      yahoo: '^TYX' },
-      { poly: 'TLT',        yahoo: 'TLT'  },
-      { poly: 'IEF',        yahoo: 'IEF'  },
+      { poly: 'TLT',  yahoo: '^TNX' },
+      { poly: 'SHY',  yahoo: '^IRX' },
+      { poly: 'TLT',  yahoo: '^TYX' },
+      { poly: 'TLT',  yahoo: 'TLT'  },
+      { poly: 'IEF',  yahoo: 'IEF'  },
     ];
     const results = await Promise.all(symbols.map(async ({ poly, yahoo }) => {
-      const end   = new Date().toISOString().split('T')[0];
-      const start = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      try {
-        const data  = await polygonGet(`/v2/aggs/ticker/${poly}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=5`);
-        const bars  = data.results || [];
-        const current = bars[bars.length - 1]?.c;
-        const prev    = bars[bars.length - 2]?.c;
-        return {
-          symbol:    yahoo,
-          current,
-          prev,
-          change:    current && prev ? current - prev : null,
-          changePct: current && prev ? ((current - prev) / prev) * 100 : null,
-        };
-      } catch { return { symbol: yahoo, current: null }; }
+      const d = await polygonAggs(poly, 7);
+      return { symbol: yahoo, ...( d || { current: null, prev: null, change: null, changePct: null }) };
     }));
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── International Markets (Polygon) ─────────────────────────────────────────
+// ─── International — Polygon ETF proxies ─────────────────────────────────────
 
 app.get('/international', async (req, res) => {
   try {
     const symbols = [
-      { poly: 'I:NKY',      yahoo: '^N225'      },
-      { poly: 'I:HSI',      yahoo: '^HSI'        },
-      { poly: 'I:SHCOMP',   yahoo: '000001.SS'   },
-      { poly: 'I:SENSEX',   yahoo: '^BSESN'      },
-      { poly: 'I:DAX',      yahoo: '^GDAXI'      },
-      { poly: 'I:UKX',      yahoo: '^FTSE'       },
-      { poly: 'I:CAC',      yahoo: '^FCHI'       },
-      { poly: 'I:SX5E',     yahoo: '^STOXX50E'   },
-      { poly: 'I:VIX',      yahoo: '^VIX'        },
-      { poly: 'C:DXY',      yahoo: 'DX-Y.NYB'   },
-      { poly: 'C:XAUUSD',   yahoo: 'GC=F'        },
-      { poly: 'C:WTICOUSD', yahoo: 'CL=F'        },
+      { poly: 'EWJ',  yahoo: '^N225'     },
+      { poly: 'EWH',  yahoo: '^HSI'      },
+      { poly: 'FXI',  yahoo: '000001.SS' },
+      { poly: 'INDA', yahoo: '^BSESN'    },
+      { poly: 'EWG',  yahoo: '^GDAXI'    },
+      { poly: 'EWU',  yahoo: '^FTSE'     },
+      { poly: 'EWQ',  yahoo: '^FCHI'     },
+      { poly: 'FEZ',  yahoo: '^STOXX50E' },
+      { poly: 'VIXY', yahoo: '^VIX'      },
+      { poly: 'UUP',  yahoo: 'DX-Y.NYB'  },
+      { poly: 'GLD',  yahoo: 'GC=F'      },
+      { poly: 'USO',  yahoo: 'CL=F'      },
     ];
-    const end   = new Date().toISOString().split('T')[0];
-    const start = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
     const results = await Promise.all(symbols.map(async ({ poly, yahoo }) => {
-      try {
-        const data  = await polygonGet(`/v2/aggs/ticker/${encodeURIComponent(poly)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=5`);
-        const bars  = data.results || [];
-        const current = bars[bars.length - 1]?.c;
-        const prev    = bars[bars.length - 2]?.c;
-        return {
-          symbol:    yahoo,
-          current,
-          prev,
-          change:    current && prev ? current - prev : null,
-          changePct: current && prev ? ((current - prev) / prev) * 100 : null,
-        };
-      } catch { return { symbol: yahoo, current: null }; }
+      const d = await polygonAggs(poly, 7);
+      return { symbol: yahoo, ...( d || { current: null, prev: null, change: null, changePct: null }) };
     }));
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Economic Calendar (Polygon news) ────────────────────────────────────────
+// ─── Economic Calendar — Polygon news ────────────────────────────────────────
 
 app.get('/calendar', async (req, res) => {
   const topics = [
-    { ticker: 'SPY',  category: 'FEDERAL RESERVE'  },
-    { ticker: 'TLT',  category: 'BONDS/RATES'       },
-    { ticker: 'GLD',  category: 'COMMODITIES'       },
-    { ticker: 'QQQ',  category: 'TECH/EARNINGS'     },
-    { ticker: 'DIA',  category: 'MACRO/ECONOMY'     },
-    { ticker: 'USO',  category: 'OIL/ENERGY'        },
-    { ticker: 'EEM',  category: 'EMERGING MARKETS'  },
-    { ticker: 'FXI',  category: 'CHINA ECONOMY'     },
+    { ticker: 'SPY',  category: 'FEDERAL RESERVE' },
+    { ticker: 'TLT',  category: 'BONDS/RATES'      },
+    { ticker: 'GLD',  category: 'COMMODITIES'      },
+    { ticker: 'QQQ',  category: 'TECH/EARNINGS'    },
+    { ticker: 'DIA',  category: 'MACRO/ECONOMY'    },
+    { ticker: 'USO',  category: 'OIL/ENERGY'       },
+    { ticker: 'EEM',  category: 'EMERGING MARKETS' },
+    { ticker: 'FXI',  category: 'CHINA ECONOMY'    },
   ];
   try {
     const results = await Promise.all(
@@ -343,15 +302,15 @@ app.get('/calendar', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Claude API Proxy ─────────────────────────────────────────────────────────
+// ─── Claude API proxy ─────────────────────────────────────────────────────────
 
 app.post('/api/analyze', (req, res) => {
   const body = JSON.stringify(req.body || {});
   const request = https.request(
     {
       hostname: 'api.anthropic.com',
-      path: '/v1/messages',
-      method: 'POST',
+      path:     '/v1/messages',
+      method:   'POST',
       headers: {
         'x-api-key':         process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
@@ -372,6 +331,30 @@ app.post('/api/analyze', (req, res) => {
   request.write(body);
   request.end();
 });
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+
+const rateLimit = require('express-rate-limit');
+
+const claudeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many AI requests. Please wait before scanning again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const dataLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  message: { error: 'Too many data requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/analyze', claudeLimiter);
+app.use('/yahoo',       dataLimiter);
+app.use('/tradier',     dataLimiter);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
