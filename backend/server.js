@@ -99,7 +99,7 @@ async function tradierHistory(sym, range = '3mo') {
 
 // ─── Polygon aggs ─────────────────────────────────────────────────────────────
 
-async function polygonAggs(ticker, days = 7) {
+async function polygonAggs(ticker, days = 10) {
   try {
     const end   = new Date().toISOString().split('T')[0];
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -123,20 +123,20 @@ async function polygonAggs(ticker, days = 7) {
   }
 }
 
-// ─── Sequential Polygon fetch (avoids rate limit) ────────────────────────────
+// ─── Sequential Polygon batch ─────────────────────────────────────────────────
 
-async function polygonBatch(symbols, days = 7) {
+async function polygonBatch(symbols, days = 10) {
   const results = [];
   for (const { poly, yahoo } of symbols) {
     const d = await polygonAggs(poly, days);
     results.push({
-      symbol: yahoo,
+      symbol:    yahoo,
       current:   d?.current   ?? null,
       prev:      d?.prev      ?? null,
       change:    d?.change    ?? null,
       changePct: d?.changePct ?? null,
     });
-    await sleep(30); // 120ms between calls — stays under 5 req/sec free limit
+    await sleep(50);
   }
   return results;
 }
@@ -216,6 +216,52 @@ app.get('/yahoo/v1/finance/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Ticker Search — Polygon ──────────────────────────────────────────────────
+
+app.get('/search', async (req, res) => {
+  const q = req.query.q || '';
+  if (q.length < 1) return res.json([]);
+  try {
+    const [byTicker, byName] = await Promise.all([
+      polygonGet(`/v3/reference/tickers?ticker=${encodeURIComponent(q)}&active=true&market=stocks&limit=5&sort=ticker&order=asc`),
+      polygonGet(`/v3/reference/tickers?search=${encodeURIComponent(q)}&active=true&market=stocks&limit=10&sort=ticker&order=asc`),
+    ]);
+
+    const seen    = new Set();
+    const results = [];
+
+    // Exact ticker match first
+    for (const t of (byTicker.results || [])) {
+      if (!seen.has(t.ticker)) {
+        seen.add(t.ticker);
+        results.push({ ticker: t.ticker, name: t.name, type: t.type });
+      }
+    }
+
+    // Name/partial matches — CS stocks first, ETFs after
+    const nameResults = (byName.results || [])
+      .filter(t => !seen.has(t.ticker))
+      .sort((a, b) => {
+        const aStarts = a.ticker.startsWith(q) ? 0 : 1;
+        const bStarts = b.ticker.startsWith(q) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        const aCS = a.type === 'CS' ? 0 : 1;
+        const bCS = b.type === 'CS' ? 0 : 1;
+        if (aCS !== bCS) return aCS - bCS;
+        return a.ticker.length - b.ticker.length;
+      });
+
+    for (const t of nameResults) {
+      if (!seen.has(t.ticker)) {
+        seen.add(t.ticker);
+        results.push({ ticker: t.ticker, name: t.name, type: t.type });
+      }
+    }
+
+    res.json(results.slice(0, 8));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Tradier routes ───────────────────────────────────────────────────────────
 
 app.get('/tradier/expirations/:ticker', async (req, res) => {
@@ -250,7 +296,7 @@ app.get('/bonds', async (req, res) => {
       { poly: 'TLT',  yahoo: 'TLT'  },
       { poly: 'IEF',  yahoo: 'IEF'  },
     ];
-    const results = await polygonBatch(symbols, 14);
+    const results = await polygonBatch(symbols, 10);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -273,7 +319,7 @@ app.get('/international', async (req, res) => {
       { poly: 'GLD',  yahoo: 'GC=F'      },
       { poly: 'USO',  yahoo: 'CL=F'      },
     ];
-    const results = await polygonBatch(symbols, 14);
+    const results = await polygonBatch(symbols, 10);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -344,32 +390,6 @@ app.post('/api/analyze', (req, res) => {
   request.on('error', e => res.status(500).json({ error: e.message }));
   request.write(body);
   request.end();
-});
-
-// ─── Ticker Search — Polygon ──────────────────────────────────────────────────
-app.get('/search', async (req, res) => {
-  const q = req.query.q || '';
-  if (q.length < 1) return res.json([]);
-  try {
-    const data = await polygonGet(
-      `/v3/reference/tickers?search=${encodeURIComponent(q)}&active=true&market=stocks&order=asc&limit=20&sort=ticker`
-    );
-    const results = (data.results || [])
-      .map(t => ({ ticker: t.ticker, name: t.name, type: t.type }))
-      // Sort: exact match first, then CS (common stock), then others
-      .sort((a, b) => {
-        const aExact = a.ticker === q ? 0 : 1;
-        const bExact = b.ticker === q ? 0 : 1;
-        if (aExact !== bExact) return aExact - bExact;
-        const aCS = a.type === 'CS' ? 0 : 1;
-        const bCS = b.type === 'CS' ? 0 : 1;
-        if (aCS !== bCS) return aCS - bCS;
-        // Prefer shorter tickers (closer match)
-        return a.ticker.length - b.ticker.length;
-      })
-      .slice(0, 8);
-    res.json(results);
-  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
