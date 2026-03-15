@@ -55,25 +55,63 @@ function yahooFetch(path) {
       { hostname: 'query2.finance.yahoo.com', path, method: 'GET', headers: YAHOO_HEADERS },
       response => {
         const encoding = response.headers['content-encoding'];
-        let stream = response;
-        if      (encoding === 'gzip')    stream = response.pipe(zlib.createGunzip());
-        else if (encoding === 'br')      stream = response.pipe(zlib.createBrotliDecompress());
-        else if (encoding === 'deflate') stream = response.pipe(zlib.createInflate());
+        const chunks = [];
 
-        let data = '';
-        stream.on('data', c => (data += c));
-        stream.on('end', () => {
-          console.log(`[Yahoo] ${path.slice(0, 60)} → ${response.statusCode} enc=${encoding || 'none'} len=${data.length}`);
-          resolve({ statusCode: response.statusCode, body: data });
+        response.on('data', chunk => chunks.push(chunk));
+        response.on('end', () => {
+          const raw = Buffer.concat(chunks);
+          console.log(`[Yahoo] ${path.slice(0, 60)} status=${response.statusCode} enc=${encoding || 'none'} bytes=${raw.length}`);
+
+          if (raw.length === 0) {
+            return resolve({ statusCode: response.statusCode, body: '{"error":"empty"}' });
+          }
+
+          // Try decompression if needed, fall back to raw
+          if (encoding === 'gzip') {
+            zlib.gunzip(raw, (err, decoded) => {
+              if (err) {
+                console.log(`[Yahoo] gunzip failed, using raw: ${err.message}`);
+                resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
+              } else {
+                resolve({ statusCode: response.statusCode, body: decoded.toString('utf8') });
+              }
+            });
+          } else if (encoding === 'br') {
+            zlib.brotliDecompress(raw, (err, decoded) => {
+              if (err) {
+                console.log(`[Yahoo] brotli failed, using raw: ${err.message}`);
+                resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
+              } else {
+                resolve({ statusCode: response.statusCode, body: decoded.toString('utf8') });
+              }
+            });
+          } else if (encoding === 'deflate') {
+            zlib.inflate(raw, (err, decoded) => {
+              if (err) {
+                console.log(`[Yahoo] inflate failed, using raw: ${err.message}`);
+                resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
+              } else {
+                resolve({ statusCode: response.statusCode, body: decoded.toString('utf8') });
+              }
+            });
+          } else {
+            resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
+          }
         });
-        stream.on('error', reject);
+
+        response.on('error', e => {
+          console.log(`[Yahoo] Response error: ${e.message}`);
+          reject(e);
+        });
       }
     );
-    req.on('error', reject);
+    req.on('error', e => {
+      console.log(`[Yahoo] Request error: ${e.message}`);
+      reject(e);
+    });
     req.end();
   });
 }
-
 // ─── yahooChart helper ────────────────────────────────────────────────────────
 
 async function yahooChart(sym) {
