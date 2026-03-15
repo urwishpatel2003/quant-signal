@@ -1,38 +1,41 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
 
+/* ── Base ── */
+html { font-size: 16px; }
 
-/* ── iOS Safe Area ── */
+* { box-sizing: border-box; }
+
 body {
+  margin: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  color: #c8c8d0;
+  background: #07070e;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  background: #07070e;
 }
-
-.app-header {
-  padding-top: calc(12px + env(safe-area-inset-top));
-}
-
-* { box-sizing: border-box; }
-body { margin: 0; }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #111; }
 ::-webkit-scrollbar-thumb { background: #333; }
 
+/* ── Buttons ── */
 .btn {
   background: #ffaa00; color: #0a0a0f; border: none;
-  font-family: inherit; font-size: 12px; font-weight: 600;
+  font-family: inherit; font-size: 13px; font-weight: 600;
   letter-spacing: 0.15em; text-transform: uppercase;
-  padding: 10px 20px; cursor: pointer;
+  padding: 11px 22px; cursor: pointer;
 }
 .btn:hover { background: #ffc533; }
 .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
 
 .btn-sm {
   background: #1a1a2e; color: #888; border: 1px solid #2a2a3e;
-  font-family: inherit; font-size: 10px; padding: 5px 10px;
+  font-family: inherit; font-size: 11px; padding: 6px 12px;
   cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase;
 }
 .btn-sm:hover:not(:disabled) { color: #ffaa00; border-color: #ffaa00; }
@@ -40,42 +43,57 @@ body { margin: 0; }
 .btn-danger { color: #ff4444 !important; border-color: #ff444433 !important; }
 .btn-danger:hover:not(:disabled) { background: #ff444411 !important; border-color: #ff4444 !important; }
 
-.card { background: #0f0f18; border: 1px solid #1e1e2e; padding: 16px; }
+/* ── Card ── */
+.card {
+  background: #0f0f18; border: 1px solid #1e1e2e;
+  padding: 16px; font-size: 13px;
+}
 
+/* ── Input ── */
 .input {
   background: #0f0f18; border: 1px solid #2a2a3a;
-  color: #fff; font-family: inherit; font-size: 12px;
-  padding: 8px 12px; outline: none; width: 100%;
+  color: #fff; font-family: inherit; font-size: 14px;
+  padding: 10px 14px; outline: none; width: 100%;
 }
 .input:focus { border-color: #ffaa00; }
 
-.kv { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #1a1a26; font-size: 11px; }
+/* ── KV rows ── */
+.kv {
+  display: flex; justify-content: space-between;
+  padding: 7px 0; border-bottom: 1px solid #1a1a26;
+  font-size: 13px;
+}
 .kv:last-child { border-bottom: none; }
-.kv-key { color: #556; text-transform: uppercase; letter-spacing: 0.08em; }
+.kv-key { color: #556; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
 
+/* ── Bars ── */
 .bar-bg { background: #1a1a26; height: 4px; border-radius: 2px; width: 100%; margin-top: 6px; }
 .bar-fill { height: 4px; border-radius: 2px; transition: width 1s ease; }
 
+/* ── Tabs ── */
 .tab-btn {
   background: none; border: none; color: #555;
-  font-family: inherit; font-size: 11px; letter-spacing: 0.15em;
-  text-transform: uppercase; padding: 10px 20px; cursor: pointer;
+  font-family: inherit; font-size: 12px; letter-spacing: 0.15em;
+  text-transform: uppercase; padding: 12px 20px; cursor: pointer;
   border-bottom: 2px solid transparent; white-space: nowrap;
 }
 .tab-btn.active { color: #ffaa00; border-bottom-color: #ffaa00; }
 .tab-btn:hover { color: #aaa; }
 
+/* ── Tag ── */
 .tag {
-  display: inline-block; padding: 2px 8px; border-radius: 2px;
-  font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+  display: inline-block; padding: 3px 10px; border-radius: 2px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
 }
 
+/* ── Drop zone ── */
 .drop-zone {
   border: 2px dashed #2a2a3a; padding: 40px;
   text-align: center; cursor: pointer; transition: all 0.2s;
 }
 .drop-zone:hover, .drop-zone.dragging { border-color: #ffaa00; background: #ffaa0008; }
 
+/* ── Animations ── */
 @keyframes pulse  { 0%,100%{ opacity:1 } 50%{ opacity:0.4 } }
 @keyframes fadeIn { from{ opacity:0; transform:translateY(4px) } to{ opacity:1; transform:translateY(0) } }
 @keyframes spin   { to{ transform: rotate(360deg); } }
@@ -85,7 +103,7 @@ body { margin: 0; }
 /* ── App Layout ── */
 .app-header {
   border-bottom: 1px solid #1a1a2e;
-  padding: 12px 24px;
+  padding: calc(12px + env(safe-area-inset-top)) 24px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -151,12 +169,19 @@ body { margin: 0; }
 
 /* ── 768px ── */
 @media (max-width: 768px) {
-  .app-header            { padding: 10px 12px; flex-wrap: wrap; }
+  body                   { font-size: 15px; }
+  .app-header            { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; flex-wrap: wrap; }
   .app-tabs              { padding: 0 8px; }
-  .app-content           { padding: 12px; }
-  .tab-btn               { padding: 10px 10px; font-size: 10px; letter-spacing: 0.05em; }
+  .app-content           { padding: 14px; }
+  .tab-btn               { font-size: 12px; padding: 12px 10px; letter-spacing: 0.05em; }
   .app-header-subtitle   { display: none; }
-  .card                  { padding: 12px; }
+  .card                  { padding: 14px; font-size: 14px; }
+  .kv                    { font-size: 14px; padding: 8px 0; }
+  .kv-key                { font-size: 13px; }
+  .btn                   { font-size: 13px; padding: 12px 18px; }
+  .btn-sm                { font-size: 12px; padding: 7px 12px; }
+  .input                 { font-size: 15px; padding: 11px 14px; }
+  .tag                   { font-size: 12px; padding: 3px 10px; }
 
   .scanner-grid          { grid-template-columns: 1fr; }
   .options-layout        { grid-template-columns: 1fr; }
@@ -183,9 +208,13 @@ body { margin: 0; }
 
 /* ── 375px ── */
 @media (max-width: 375px) {
-  .app-content           { padding: 8px; }
-  .tab-btn               { padding: 8px 8px; font-size: 9px; }
-  .card                  { padding: 10px; }
+  body                   { font-size: 15px; }
+  .app-content           { padding: 10px; }
+  .tab-btn               { font-size: 11px; padding: 10px 8px; }
+  .card                  { padding: 12px; font-size: 14px; }
+  .kv                    { font-size: 13px; }
+  .btn                   { font-size: 12px; padding: 11px 14px; }
+  .btn-sm                { font-size: 11px; padding: 6px 10px; }
   .markets-summary       { grid-template-columns: 1fr 1fr; gap: 6px; }
   .journal-stats         { grid-template-columns: 1fr 1fr; }
   .journal-form-grid     { grid-template-columns: 1fr; }
