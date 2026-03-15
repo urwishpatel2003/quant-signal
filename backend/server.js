@@ -250,6 +250,15 @@ app.get('/debug-yahoo', async (req, res) => {
   }
 });
 
+// ─── Disable all caching ──────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 // ─── Yahoo Debug ──────────────────────────────────────────────────────────────
 app.get('/debug-yahoo', async (req, res) => {
   const req2 = https.request(
