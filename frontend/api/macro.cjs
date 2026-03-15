@@ -40,10 +40,10 @@ function yahooFetch(path) {
 
 async function yahooChart(sym) {
   try {
-    const body   = await yahooFetch(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
-    const json   = JSON.parse(body);
-    const result = json?.chart?.result?.[0];
-    const closes = (result?.indicators?.quote?.[0]?.close || []).filter(Boolean);
+    const body    = await yahooFetch(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
+    const json    = JSON.parse(body);
+    const result  = json?.chart?.result?.[0];
+    const closes  = (result?.indicators?.quote?.[0]?.close || []).filter(Boolean);
     const current = closes[closes.length - 1];
     const prev    = closes[closes.length - 2];
     const meta    = result?.meta || {};
@@ -63,14 +63,15 @@ module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
 
   const type = req.query.type || 'bonds';
+  let symbols = [];
+
+  if (type === 'bonds') {
+    symbols = ['^TNX', '^IRX', '^TYX', 'TLT', 'IEF'];
+  } else if (type === 'international') {
+    symbols = ['^N225', '^HSI', '000001.SS', '^BSESN', '^GDAXI', '^FTSE', '^FCHI', '^STOXX50E', '^VIX', 'DX-Y.NYB', 'GC=F', 'CL=F'];
+  }
 
   try {
-    let symbols = [];
-    if (type === 'bonds') {
-      symbols = ['^TNX', '^IRX', '^TYX', 'TLT', 'IEF'];
-    } else if (type === 'international') {
-      symbols = ['^N225', '^HSI', '000001.SS', '^BSESN', '^GDAXI', '^FTSE', '^FCHI', '^STOXX50E', '^VIX', 'DX-Y.NYB', 'GC=F', 'CL=F'];
-    }
     const results = await Promise.all(symbols.map(yahooChart));
     res.json(results);
   } catch (e) {
