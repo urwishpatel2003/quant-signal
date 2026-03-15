@@ -15,6 +15,18 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get('/test-polygon', async (req, res) => {
+  try {
+    const data = await httpsGet(
+      'api.polygon.io',
+      `/v2/aggs/ticker/AAPL/range/1/day/2025-01-01/2025-03-01?apiKey=${process.env.POLYGON_API_KEY}`
+    );
+    res.json({ success: true, count: data.resultsCount, sample: data.results?.[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.use(express.json({ limit: '10mb' }));
 
 // ─── YAHOO HEADERS ────────────────────────────────────────────────────────────
