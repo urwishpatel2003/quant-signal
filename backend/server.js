@@ -1,13 +1,13 @@
 require('dotenv').config();
-const zlib = require('zlib');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const express = require('express');
 const https   = require('https');
-
-const app = express();
+const app     = express();
 
 app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Surrogate-Control', 'no-store');
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -15,29 +15,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/test-polygon', async (req, res) => {
-  try {
-    const data = await httpsGet(
-      'api.polygon.io',
-      `/v2/aggs/ticker/AAPL/range/1/day/2025-01-01/2025-03-01?apiKey=${process.env.POLYGON_API_KEY}`
-    );
-    res.json({ success: true, count: data.resultsCount, sample: data.results?.[0] });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.use(express.json({ limit: '10mb' }));
 
-// ─── YAHOO HEADERS ────────────────────────────────────────────────────────────
-
-const YAHOO_HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept':          'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Referer':         'https://finance.yahoo.com',
-  'Origin':          'https://finance.yahoo.com',
-};
+const POLYGON_KEY  = process.env.POLYGON_API_KEY;
+const TRADIER_TOKEN = process.env.TRADIER_TOKEN;
 
 // ─── httpsGet helper ──────────────────────────────────────────────────────────
 
@@ -50,7 +31,7 @@ function httpsGet(hostname, path, headers = {}) {
         res.on('data', c => (data += c));
         res.on('end', () => {
           try { resolve(JSON.parse(data)); }
-          catch { resolve({ error: 'Parse error', raw: data }); }
+          catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); }
         });
       }
     );
@@ -59,195 +40,295 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-// ─── yahooFetch helper (with gzip + full headers) ─────────────────────────────
+// ─── Polygon helpers ──────────────────────────────────────────────────────────
 
-function yahooFetch(path) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      { hostname: 'query2.finance.yahoo.com', path, method: 'GET', headers: YAHOO_HEADERS },
-      response => {
-        const encoding = response.headers['content-encoding'];
-        const chunks = [];
+const polygonGet = path => httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
 
-        response.on('data', chunk => chunks.push(chunk));
-        response.on('end', () => {
-          const raw = Buffer.concat(chunks);
-          console.log(`[Yahoo] ${path.slice(0, 60)} status=${response.statusCode} enc=${encoding || 'none'} bytes=${raw.length}`);
-
-          if (raw.length === 0) {
-            return resolve({ statusCode: response.statusCode, body: '{"error":"empty"}' });
-          }
-
-          // Try decompression if needed, fall back to raw
-          if (encoding === 'gzip') {
-            zlib.gunzip(raw, (err, decoded) => {
-              if (err) {
-                console.log(`[Yahoo] gunzip failed, using raw: ${err.message}`);
-                resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
-              } else {
-                resolve({ statusCode: response.statusCode, body: decoded.toString('utf8') });
-              }
-            });
-          } else if (encoding === 'br') {
-            zlib.brotliDecompress(raw, (err, decoded) => {
-              if (err) {
-                console.log(`[Yahoo] brotli failed, using raw: ${err.message}`);
-                resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
-              } else {
-                resolve({ statusCode: response.statusCode, body: decoded.toString('utf8') });
-              }
-            });
-          } else if (encoding === 'deflate') {
-            zlib.inflate(raw, (err, decoded) => {
-              if (err) {
-                console.log(`[Yahoo] inflate failed, using raw: ${err.message}`);
-                resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
-              } else {
-                resolve({ statusCode: response.statusCode, body: decoded.toString('utf8') });
-              }
-            });
-          } else {
-            resolve({ statusCode: response.statusCode, body: raw.toString('utf8') });
-          }
-        });
-
-        response.on('error', e => {
-          console.log(`[Yahoo] Response error: ${e.message}`);
-          reject(e);
-        });
-      }
-    );
-    req.on('error', e => {
-      console.log(`[Yahoo] Request error: ${e.message}`);
-      reject(e);
-    });
-    req.end();
-  });
-}
-// ─── yahooChart helper ────────────────────────────────────────────────────────
-
-async function yahooChart(sym) {
+async function polygonChart(sym) {
   try {
-    const { body } = await yahooFetch(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1mo`);
-    const json      = JSON.parse(body);
-    const result    = json?.chart?.result?.[0];
-    const allCloses = result?.indicators?.quote?.[0]?.close || [];
-    const closes    = allCloses.filter(c => c !== null && c !== undefined);
-    const current   = closes[closes.length - 1];
-    const prev      = closes[closes.length - 2];
-    const meta      = result?.meta || {};
+    const end   = new Date().toISOString().split('T')[0];
+    const start = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const clean = sym.replace('^', '').replace('=F', '');
+
+    // Map Yahoo-style symbols to Polygon tickers
+    const symbolMap = {
+      'TNX': 'I:TNX', 'IRX': 'I:IRX', 'TYX': 'I:TYX',
+      'VIX': 'I:VIX', 'DX-Y.NYB': 'C:DXY',
+      'GCF': 'C:XAUUSD', 'CLF': 'C:WTICOUSD',
+      'N225': 'I:NKY', 'HSI': 'I:HSI',
+      '000001.SS': 'I:SHCOMP', 'BSESN': 'I:SENSEX',
+      'GDAXI': 'I:DAX', 'FTSE': 'I:UKX',
+      'FCHI': 'I:CAC', 'STOXX50E': 'I:SX5E',
+    };
+
+    const ticker = symbolMap[clean] || sym;
+    const data   = await polygonGet(`/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=35`);
+    const bars   = data.results || [];
+    if (!bars.length) return { symbol: sym, current: null };
+
+    const current   = bars[bars.length - 1]?.c;
+    const prev      = bars[bars.length - 2]?.c;
+    const changePct = current && prev ? ((current - prev) / prev) * 100 : null;
+
     return {
-      symbol: sym, name: meta.shortName || sym,
+      symbol: sym,
       current, prev,
       change:    current && prev ? current - prev : null,
-      changePct: current && prev ? ((current - prev) / prev) * 100 : null,
-      currency:  meta.currency || 'USD'
+      changePct,
+      close:     bars.map(b => b.c),
+      open:      bars.map(b => b.o),
+      high:      bars.map(b => b.h),
+      low:       bars.map(b => b.l),
+      volume:    bars.map(b => b.v),
+      timestamps: bars.map(b => b.t),
     };
-  } catch { return { symbol: sym, current: null }; }
+  } catch (e) {
+    console.log(`[Polygon] chart error for ${sym}: ${e.message}`);
+    return { symbol: sym, current: null };
+  }
 }
 
-// ─── Yahoo Finance proxy ──────────────────────────────────────────────────────
+// ─── Tradier helpers ──────────────────────────────────────────────────────────
 
-app.get('/yahoo/*', async (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const path = req.url.replace('/yahoo', '');
+const tradierGet = (path) => httpsGet('api.tradier.com', path, { Authorization: `Bearer ${TRADIER_TOKEN}` });
+
+async function tradierHistory(sym, range = '3mo') {
   try {
-    const { statusCode, body } = await yahooFetch(path);
-    if (!body || body.length < 10) {
-      console.log(`[Yahoo Proxy] Empty response for ${path}`);
-      return res.status(500).json({ error: 'Empty response from Yahoo' });
-    }
-    res.setHeader('Content-Type', 'application/json');
-    res.status(statusCode).send(body);
+    const end   = new Date().toISOString().split('T')[0];
+    const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
+    const days  = daysMap[range] || 90;
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const data  = await tradierGet(`/v1/markets/history?symbol=${sym}&interval=daily&start=${start}&end=${end}`);
+    const bars  = data?.history?.day || [];
+    if (!bars.length) return null;
+
+    const closes  = bars.map(b => b.close).filter(Boolean);
+    const volumes = bars.map(b => b.volume).filter(Boolean);
+    return {
+      close:      bars.map(b => b.close),
+      open:       bars.map(b => b.open),
+      high:       bars.map(b => b.high),
+      low:        bars.map(b => b.low),
+      volume:     bars.map(b => b.volume),
+      timestamps: bars.map(b => new Date(b.date).getTime()),
+      current:    closes[closes.length - 1],
+      prev:       closes[closes.length - 2],
+    };
   } catch (e) {
-    console.log(`[Yahoo Proxy] Error: ${e.message}`);
-    res.status(500).json({ error: e.message });
+    console.log(`[Tradier] history error for ${sym}: ${e.message}`);
+    return null;
   }
+}
+
+// ─── Yahoo proxy (kept for fallback, now via Vercel) ─────────────────────────
+// Removed — using Tradier + Polygon only
+
+// ─── Stock history (Tradier) ──────────────────────────────────────────────────
+
+app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
+  const { ticker } = req.params;
+  const range    = req.query.range || '3mo';
+  const interval = req.query.interval || '1d';
+  try {
+    const data = await tradierHistory(ticker, range);
+    if (!data) return res.status(404).json({ error: 'No data found' });
+    // Return in Yahoo-compatible format so frontend doesn't need changes
+    res.json({
+      chart: {
+        result: [{
+          meta: { symbol: ticker, currency: 'USD' },
+          timestamp: data.timestamps,
+          indicators: {
+            quote: [{
+              close:  data.close,
+              open:   data.open,
+              high:   data.high,
+              low:    data.low,
+              volume: data.volume,
+            }]
+          }
+        }]
+      }
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Fundamentals (Polygon) ───────────────────────────────────────────────────
+
+app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
+  const { ticker } = req.params;
+  try {
+    const [details, financials] = await Promise.all([
+      polygonGet(`/v3/reference/tickers/${ticker}`),
+      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=1&timeframe=annual`),
+    ]);
+
+    const d = details?.results || {};
+    const f = financials?.results?.[0]?.financials || {};
+    const income = f.income_statement || {};
+    const balance = f.balance_sheet || {};
+
+    // Return in Yahoo-compatible quoteSummary format
+    res.json({
+      quoteSummary: {
+        result: [{
+          summaryDetail: {
+            trailingPE:  { raw: d.market_cap && d.weighted_shares_outstanding ? null : null },
+            beta:        { raw: null },
+          },
+          defaultKeyStatistics: {
+            trailingEps: { raw: null },
+          },
+          financialData: {
+            targetMeanPrice:         { raw: null },
+            recommendationKey:       d.description ? 'hold' : null,
+            numberOfAnalystOpinions: { raw: null },
+            returnOnEquity:          { raw: null },
+            debtToEquity:            { raw: null },
+            revenueGrowth:           { raw: null },
+            grossMargins:            { raw: null },
+          }
+        }]
+      }
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Stock News (Polygon) ─────────────────────────────────────────────────────
+
+app.get('/yahoo/v1/finance/search', async (req, res) => {
+  const q = req.query.q || '';
+  try {
+    const data = await polygonGet(`/v2/reference/news?ticker=${q}&limit=8&order=desc&sort=published_utc`);
+    const news = (data.results || []).map(n => ({
+      title:               n.title,
+      publisher:           n.publisher?.name || '',
+      providerPublishTime: Math.floor(new Date(n.published_utc).getTime() / 1000),
+      link:                n.article_url,
+    }));
+    res.json({ news });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── Tradier ──────────────────────────────────────────────────────────────────
 
 app.get('/tradier/expirations/:ticker', async (req, res) => {
   try {
-    const data = await httpsGet(
-      'api.tradier.com',
-      `/v1/markets/options/expirations?symbol=${req.params.ticker}&includeAllRoots=true&strikes=false`,
-      { Authorization: `Bearer ${process.env.TRADIER_TOKEN}` }
-    );
+    const data = await tradierGet(`/v1/markets/options/expirations?symbol=${req.params.ticker}&includeAllRoots=true&strikes=false`);
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/tradier/chain/:ticker', async (req, res) => {
   try {
-    const data = await httpsGet(
-      'api.tradier.com',
-      `/v1/markets/options/chains?symbol=${req.params.ticker}&expiration=${req.query.expiration}&greeks=true`,
-      { Authorization: `Bearer ${process.env.TRADIER_TOKEN}` }
-    );
+    const data = await tradierGet(`/v1/markets/options/chains?symbol=${req.params.ticker}&expiration=${req.query.expiration}&greeks=true`);
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/tradier/quote/:ticker', async (req, res) => {
   try {
-    const data = await httpsGet(
-      'api.tradier.com',
-      `/v1/markets/quotes?symbols=${req.params.ticker}&greeks=false`,
-      { Authorization: `Bearer ${process.env.TRADIER_TOKEN}` }
-    );
+    const data = await tradierGet(`/v1/markets/quotes?symbols=${req.params.ticker}&greeks=false`);
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Bonds ────────────────────────────────────────────────────────────────────
+// ─── Bonds (Polygon) ─────────────────────────────────────────────────────────
 
 app.get('/bonds', async (req, res) => {
   try {
-    const results = await Promise.all(['^TNX', '^IRX', '^TYX', 'TLT', 'IEF'].map(yahooChart));
+    const symbols = [
+      { poly: 'I:TNX',      yahoo: '^TNX' },
+      { poly: 'I:IRX',      yahoo: '^IRX' },
+      { poly: 'I:TYX',      yahoo: '^TYX' },
+      { poly: 'TLT',        yahoo: 'TLT'  },
+      { poly: 'IEF',        yahoo: 'IEF'  },
+    ];
+    const results = await Promise.all(symbols.map(async ({ poly, yahoo }) => {
+      const end   = new Date().toISOString().split('T')[0];
+      const start = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      try {
+        const data  = await polygonGet(`/v2/aggs/ticker/${poly}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=5`);
+        const bars  = data.results || [];
+        const current = bars[bars.length - 1]?.c;
+        const prev    = bars[bars.length - 2]?.c;
+        return {
+          symbol:    yahoo,
+          current,
+          prev,
+          change:    current && prev ? current - prev : null,
+          changePct: current && prev ? ((current - prev) / prev) * 100 : null,
+        };
+      } catch { return { symbol: yahoo, current: null }; }
+    }));
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── International Markets ────────────────────────────────────────────────────
+// ─── International Markets (Polygon) ─────────────────────────────────────────
 
 app.get('/international', async (req, res) => {
   try {
-    const results = await Promise.all([
-      '^N225', '^HSI', '000001.SS', '^BSESN',
-      '^GDAXI', '^FTSE', '^FCHI', '^STOXX50E',
-      '^VIX', 'DX-Y.NYB', 'GC=F', 'CL=F'
-    ].map(yahooChart));
+    const symbols = [
+      { poly: 'I:NKY',      yahoo: '^N225'      },
+      { poly: 'I:HSI',      yahoo: '^HSI'        },
+      { poly: 'I:SHCOMP',   yahoo: '000001.SS'   },
+      { poly: 'I:SENSEX',   yahoo: '^BSESN'      },
+      { poly: 'I:DAX',      yahoo: '^GDAXI'      },
+      { poly: 'I:UKX',      yahoo: '^FTSE'       },
+      { poly: 'I:CAC',      yahoo: '^FCHI'       },
+      { poly: 'I:SX5E',     yahoo: '^STOXX50E'   },
+      { poly: 'I:VIX',      yahoo: '^VIX'        },
+      { poly: 'C:DXY',      yahoo: 'DX-Y.NYB'   },
+      { poly: 'C:XAUUSD',   yahoo: 'GC=F'        },
+      { poly: 'C:WTICOUSD', yahoo: 'CL=F'        },
+    ];
+    const end   = new Date().toISOString().split('T')[0];
+    const start = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const results = await Promise.all(symbols.map(async ({ poly, yahoo }) => {
+      try {
+        const data  = await polygonGet(`/v2/aggs/ticker/${encodeURIComponent(poly)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=5`);
+        const bars  = data.results || [];
+        const current = bars[bars.length - 1]?.c;
+        const prev    = bars[bars.length - 2]?.c;
+        return {
+          symbol:    yahoo,
+          current,
+          prev,
+          change:    current && prev ? current - prev : null,
+          changePct: current && prev ? ((current - prev) / prev) * 100 : null,
+        };
+      } catch { return { symbol: yahoo, current: null }; }
+    }));
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Economic Calendar ────────────────────────────────────────────────────────
+// ─── Economic Calendar (Polygon news) ────────────────────────────────────────
 
 app.get('/calendar', async (req, res) => {
-  const queries = [
-    { q: 'Federal Reserve interest rates Fed',  category: 'FEDERAL RESERVE' },
-    { q: 'CPI inflation consumer prices',        category: 'INFLATION'       },
-    { q: 'jobs report nonfarm payroll labor',    category: 'JOBS REPORT'     },
-    { q: 'GDP economic growth recession',        category: 'GDP GROWTH'      },
-    { q: 'earnings season stocks results',       category: 'EARNINGS'        },
-    { q: 'ECB European Central Bank rates',      category: 'ECB POLICY'      },
-    { q: 'Bank of Japan yen monetary',           category: 'JAPAN BOJ'       },
-    { q: 'China economy trade tariffs',          category: 'CHINA ECONOMY'   },
+  const topics = [
+    { ticker: 'SPY',  category: 'FEDERAL RESERVE'  },
+    { ticker: 'TLT',  category: 'BONDS/RATES'       },
+    { ticker: 'GLD',  category: 'COMMODITIES'       },
+    { ticker: 'QQQ',  category: 'TECH/EARNINGS'     },
+    { ticker: 'DIA',  category: 'MACRO/ECONOMY'     },
+    { ticker: 'USO',  category: 'OIL/ENERGY'        },
+    { ticker: 'EEM',  category: 'EMERGING MARKETS'  },
+    { ticker: 'FXI',  category: 'CHINA ECONOMY'     },
   ];
   try {
     const results = await Promise.all(
-      queries.map(({ q, category }) =>
-        yahooFetch(`/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=5&lang=en&region=US`)
-          .then(({ body }) => {
-            try {
-              const news = JSON.parse(body)?.news || [];
-              return news.map(n => ({
-                title: n.title, publisher: n.publisher,
-                time: n.providerPublishTime, category, url: n.link
-              }));
-            } catch { return []; }
-          })
+      topics.map(({ ticker, category }) =>
+        polygonGet(`/v2/reference/news?ticker=${ticker}&limit=3&order=desc&sort=published_utc`)
+          .then(data => (data.results || []).map(n => ({
+            title:     n.title,
+            publisher: n.publisher?.name || '',
+            time:      Math.floor(new Date(n.published_utc).getTime() / 1000),
+            category,
+            url:       n.article_url,
+          })))
           .catch(() => [])
       )
     );
@@ -275,7 +356,7 @@ app.post('/api/analyze', (req, res) => {
         'x-api-key':         process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
         'content-type':      'application/json',
-        'content-length':    Buffer.byteLength(body)
+        'content-length':    Buffer.byteLength(body),
       }
     },
     response => {
@@ -290,52 +371,9 @@ app.post('/api/analyze', (req, res) => {
   request.on('error', e => res.status(500).json({ error: e.message }));
   request.write(body);
   request.end();
-});// ─── Yahoo Debug ──────────────────────────────────────────────────────────────
-app.get('/debug-yahoo', async (req, res) => {
-  try {
-    const { statusCode, body } = await yahooFetch('/v8/finance/chart/AAPL?interval=1d&range=1mo');
-    res.json({ statusCode, length: body.length, preview: body.slice(0, 500) });
-  } catch (e) {
-    res.json({ error: e.message });
-  }
-});
-
-// ─── Disable all caching ──────────────────────────────────────────────────────
-app.use((req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  next();
-});
-
-// ─── Yahoo Debug ──────────────────────────────────────────────────────────────
-app.get('/debug-yahoo', async (req, res) => {
-  const req2 = https.request(
-    {
-      hostname: 'query2.finance.yahoo.com',
-      path: '/v8/finance/chart/AAPL?interval=1d&range=1mo',
-      method: 'GET',
-      headers: YAHOO_HEADERS
-    },
-    response => {
-      let raw = Buffer.alloc(0);
-      response.on('data', chunk => { raw = Buffer.concat([raw, chunk]); });
-      response.on('end', () => {
-        res.json({
-          statusCode: response.statusCode,
-          headers: response.headers,
-          bodyLength: raw.length,
-          bodyPreview: raw.slice(0, 200).toString('utf8'),
-        });
-      });
-    }
-  );
-  req2.on('error', e => res.json({ error: e.message, stack: e.stack }));
-  req2.end();
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
-  console.log(`✅  Quant Signal backend running on port ${process.env.PORT || 3001}`));
+  console.log(`✅  QuAInt Signal backend running on port ${process.env.PORT || 3001}`));
