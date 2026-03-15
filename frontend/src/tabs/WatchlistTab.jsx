@@ -5,22 +5,16 @@ import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain } from '.
 import { runPriceAnalysis } from '../api/claude';
 
 export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, externalAdd }) {
-  const [watchlist,    setWatchlist]    = useState(() => { try { return JSON.parse(localStorage.getItem('qs-watchlist') || '[]'); } catch { return []; } });
-  const [watchInput,   setWatchInput]   = useState('');
-  const [watchEntry,   setWatchEntry]   = useState('');
-  const [watchExit,    setWatchExit]    = useState('');
-  const [watchAlert,   setWatchAlert]   = useState('');
-  const [watchNote,    setWatchNote]    = useState('');
-  const [scanningAll,  setScanningAll]  = useState(false);
+  const [watchlist,   setWatchlist]   = useState(() => { try { return JSON.parse(localStorage.getItem('qs-watchlist') || '[]'); } catch { return []; } });
+  const [watchInput,  setWatchInput]  = useState('');
+  const [watchEntry,  setWatchEntry]  = useState('');
+  const [watchExit,   setWatchExit]   = useState('');
+  const [watchAlert,  setWatchAlert]  = useState('');
+  const [watchNote,   setWatchNote]   = useState('');
+  const [scanningAll, setScanningAll] = useState(false);
 
   useEffect(() => { localStorage.setItem('qs-watchlist', JSON.stringify(watchlist)); }, [watchlist]);
-
-  // Allow external add (from Scanner tab)
-  useEffect(() => {
-    if (externalAdd?.ticker) {
-      addItem(externalAdd.ticker, externalAdd.analysis, externalAdd.price);
-    }
-  }, [externalAdd]);
+  useEffect(() => { if (externalAdd?.ticker) addItem(externalAdd.ticker, externalAdd.analysis, externalAdd.price); }, [externalAdd]);
 
   const addItem = (ticker, analysis, price) => {
     if (!ticker) return;
@@ -65,30 +59,32 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
 
   return (
     <div>
+      {/* ── Add form ── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>ADD TO WATCHLIST</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 1fr 2fr auto', gap: 8, alignItems: 'end' }}>
+        <div className="watchlist-form">
           {[
             { label: 'TICKER *', val: watchInput, set: e => setWatchInput(e.target.value.toUpperCase()), ph: 'AAPL' },
-            { label: 'ENTRY',    val: watchEntry, set: e => setWatchEntry(e.target.value),               ph: '$150.00' },
-            { label: 'EXIT',     val: watchExit,  set: e => setWatchExit(e.target.value),                ph: '$180.00' },
-            { label: 'ALERT',    val: watchAlert, set: e => setWatchAlert(e.target.value),               ph: '$160.00' },
+            { label: 'ENTRY',    val: watchEntry, set: e => setWatchEntry(e.target.value),               ph: '$150' },
+            { label: 'EXIT',     val: watchExit,  set: e => setWatchExit(e.target.value),                ph: '$180' },
+            { label: 'ALERT',    val: watchAlert, set: e => setWatchAlert(e.target.value),               ph: '$160' },
             { label: 'NOTES',    val: watchNote,  set: e => setWatchNote(e.target.value),                ph: 'Why watching...' },
           ].map(({ label, val, set, ph }) => (
             <div key={label}>
               <div style={{ fontSize: 9, color: '#556', marginBottom: 4 }}>{label}</div>
-              <input className="input" value={val} onChange={set} placeholder={ph} onKeyDown={e => e.key === 'Enter' && addFromForm()} />
+              <input className="input" value={val} onChange={set} placeholder={ph}
+                onKeyDown={e => e.key === 'Enter' && addFromForm()} />
             </div>
           ))}
-          <button className="btn" onClick={addFromForm}>+ ADD</button>
+          <button className="btn" onClick={addFromForm} style={{ alignSelf: 'flex-end' }}>+ ADD</button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <button className="btn" disabled={scanningAll || watchlist.length === 0} onClick={scanAll}>
           {scanningAll ? 'SCANNING ALL...' : `SCAN ALL (${watchlist.length})`}
         </button>
-        {scanningAll && <div className="pulse" style={{ fontSize: 10, color: '#ffaa00', alignSelf: 'center' }}>RUNNING GLOBAL MACRO ANALYSIS...</div>}
+        {scanningAll && <div className="pulse" style={{ fontSize: 10, color: '#ffaa00' }}>RUNNING AI ANALYSIS...</div>}
       </div>
 
       {watchlist.length === 0 ? (
@@ -100,36 +96,61 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {watchlist.map(item => (
             <div key={item.ticker} className="card" style={{ borderColor: item.signal ? SC[item.signal] + '33' : '#1e1e2e' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '80px 120px 90px 1fr 1fr 1fr 2fr auto', gap: 12, alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22 }}>{item.ticker}</div>
-                  {item.price && <div style={{ fontSize: 10, color: '#556' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
+              {/* Desktop layout */}
+              <div className="hide-mobile">
+                <div className="watchlist-item">
+                  <div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22 }}>{item.ticker}</div>
+                    {item.price && <div style={{ fontSize: 10, color: '#556' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
+                  </div>
+                  <div>
+                    {item.signal
+                      ? <span className="tag" style={{ background: SC[item.signal] + '22', color: SC[item.signal], border: `1px solid ${SC[item.signal]}44` }}>{item.signal} {item.confidence}%</span>
+                      : <span style={{ fontSize: 10, color: '#333' }}>NOT SCANNED</span>}
+                  </div>
+                  <div>
+                    {item.macroImpact && <>
+                      <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>MACRO</div>
+                      <span style={{ fontSize: 10, color: { BULLISH: '#00ff88', BEARISH: '#ff4444', NEUTRAL: '#ffaa00' }[item.macroImpact] }}>{item.macroImpact}</span>
+                    </>}
+                  </div>
+                  <div><div style={{ fontSize: 9, color: '#445' }}>ENTRY</div><div style={{ fontSize: 12, color: '#00ff88' }}>{item.entry || '—'}</div></div>
+                  <div><div style={{ fontSize: 9, color: '#445' }}>EXIT</div><div style={{ fontSize: 12, color: '#ffaa00' }}>{item.exit || '—'}</div></div>
+                  <div>
+                    <div style={{ fontSize: 9, color: '#445' }}>TARGETS</div>
+                    {item.priceTarget && <div style={{ fontSize: 10, color: '#556' }}>T: <span style={{ color: '#00ff88' }}>${typeof item.priceTarget === 'number' ? item.priceTarget.toFixed(2) : item.priceTarget}</span></div>}
+                    {item.stopLoss    && <div style={{ fontSize: 10, color: '#556' }}>S: <span style={{ color: '#ff4444' }}>${typeof item.stopLoss === 'number' ? item.stopLoss.toFixed(2) : item.stopLoss}</span></div>}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#667', fontStyle: 'italic' }}>{item.note || ''}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn-sm" onClick={() => onOpenScanner(item.ticker)}>SCAN</button>
+                    <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(item.ticker)}>OPTS</button>
+                    <button className="btn-sm btn-danger" onClick={() => remove(item.ticker)}>✕</button>
+                  </div>
                 </div>
-                <div>
+              </div>
+
+              {/* Mobile layout */}
+              <div className="show-mobile">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22 }}>{item.ticker}</div>
+                    {item.price && <div style={{ fontSize: 10, color: '#556' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn-sm" onClick={() => onOpenScanner(item.ticker)}>SCAN</button>
+                    <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(item.ticker)}>OPTS</button>
+                    <button className="btn-sm btn-danger" onClick={() => remove(item.ticker)}>✕</button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
                   {item.signal
                     ? <span className="tag" style={{ background: SC[item.signal] + '22', color: SC[item.signal], border: `1px solid ${SC[item.signal]}44` }}>{item.signal} {item.confidence}%</span>
                     : <span style={{ fontSize: 10, color: '#333' }}>NOT SCANNED</span>}
+                  {item.priceTarget && <span style={{ fontSize: 10, color: '#00ff88' }}>T: ${typeof item.priceTarget === 'number' ? item.priceTarget.toFixed(2) : item.priceTarget}</span>}
+                  {item.stopLoss    && <span style={{ fontSize: 10, color: '#ff4444' }}>S: ${typeof item.stopLoss === 'number' ? item.stopLoss.toFixed(2) : item.stopLoss}</span>}
                 </div>
-                <div>
-                  {item.macroImpact && <>
-                    <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>MACRO</div>
-                    <span style={{ fontSize: 10, color: { BULLISH: '#00ff88', BEARISH: '#ff4444', NEUTRAL: '#ffaa00' }[item.macroImpact] }}>{item.macroImpact}</span>
-                  </>}
-                </div>
-                <div><div style={{ fontSize: 9, color: '#445' }}>ENTRY</div><div style={{ fontSize: 12, color: '#00ff88' }}>{item.entry || '—'}</div></div>
-                <div><div style={{ fontSize: 9, color: '#445' }}>EXIT</div><div style={{ fontSize: 12, color: '#ffaa00' }}>{item.exit || '—'}</div></div>
-                <div>
-                  <div style={{ fontSize: 9, color: '#445' }}>TARGETS</div>
-                  {item.priceTarget && <div style={{ fontSize: 10, color: '#556' }}>T: <span style={{ color: '#00ff88' }}>${typeof item.priceTarget === 'number' ? item.priceTarget.toFixed(2) : item.priceTarget}</span></div>}
-                  {item.stopLoss    && <div style={{ fontSize: 10, color: '#556' }}>S: <span style={{ color: '#ff4444' }}>${typeof item.stopLoss    === 'number' ? item.stopLoss.toFixed(2)    : item.stopLoss}</span></div>}
-                  {item.scanned     && <div style={{ fontSize: 9,  color: '#334' }}>@ {item.scanned}</div>}
-                </div>
-                <div style={{ fontSize: 11, color: '#667', fontStyle: 'italic' }}>{item.note || ''}</div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-sm" onClick={() => onOpenScanner(item.ticker)}>SCAN</button>
-                  <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(item.ticker)}>OPTS</button>
-                  <button className="btn-sm btn-danger" onClick={() => remove(item.ticker)}>✕</button>
-                </div>
+                {item.note && <div style={{ fontSize: 11, color: '#667', fontStyle: 'italic' }}>{item.note}</div>}
               </div>
             </div>
           ))}
