@@ -1,9 +1,10 @@
 require('dotenv').config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const express = require('express');
-const https   = require('https');
-const app     = express();
+const express   = require('express');
+const https     = require('https');
+const rateLimit = require('express-rate-limit');
+const app       = express();
 
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -19,6 +20,24 @@ app.use(express.json({ limit: '10mb' }));
 
 const POLYGON_KEY   = process.env.POLYGON_API_KEY;
 const TRADIER_TOKEN = process.env.TRADIER_TOKEN;
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+
+const claudeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 10,
+  message: { error: 'Too many AI requests. Please wait before scanning again.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+
+const dataLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, max: 60,
+  message: { error: 'Too many data requests. Please slow down.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+
+app.use('/api/analyze', claudeLimiter);
+app.use('/yahoo',       dataLimiter);
+app.use('/tradier',     dataLimiter);
 
 // ─── httpsGet helper ──────────────────────────────────────────────────────────
 
@@ -40,17 +59,17 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-// ─── Polygon helper ───────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const polygonGet = path =>
   httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
 
-// ─── Tradier helper ───────────────────────────────────────────────────────────
-
 const tradierGet = path =>
   httpsGet('api.tradier.com', path, { Authorization: `Bearer ${TRADIER_TOKEN}` });
 
-// ─── Tradier history helper ───────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ─── Tradier history ──────────────────────────────────────────────────────────
 
 async function tradierHistory(sym, range = '3mo') {
   try {
@@ -78,20 +97,22 @@ async function tradierHistory(sym, range = '3mo') {
   }
 }
 
-// ─── Polygon aggs helper ──────────────────────────────────────────────────────
+// ─── Polygon aggs ─────────────────────────────────────────────────────────────
 
 async function polygonAggs(ticker, days = 7) {
   try {
     const end   = new Date().toISOString().split('T')[0];
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const data  = await polygonGet(`/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=10`);
-    const bars  = data.results || [];
+    const data  = await polygonGet(
+      `/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=10`
+    );
+    const bars    = data.results || [];
     if (!bars.length) return null;
     const current = bars[bars.length - 1]?.c;
     const prev    = bars[bars.length - 2]?.c;
+    console.log(`[Polygon] ${ticker} → $${current?.toFixed(2)}`);
     return {
-      current,
-      prev,
+      current, prev,
       change:    current && prev ? current - prev : null,
       changePct: current && prev ? ((current - prev) / prev) * 100 : null,
       bars,
@@ -102,12 +123,29 @@ async function polygonAggs(ticker, days = 7) {
   }
 }
 
+// ─── Sequential Polygon fetch (avoids rate limit) ────────────────────────────
+
+async function polygonBatch(symbols, days = 7) {
+  const results = [];
+  for (const { poly, yahoo } of symbols) {
+    const d = await polygonAggs(poly, days);
+    results.push({
+      symbol: yahoo,
+      current:   d?.current   ?? null,
+      prev:      d?.prev      ?? null,
+      change:    d?.change    ?? null,
+      changePct: d?.changePct ?? null,
+    });
+    await sleep(50); // 120ms between calls — stays under 5 req/sec free limit
+  }
+  return results;
+}
+
 // ─── Stock history — Tradier ──────────────────────────────────────────────────
 
 app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   const { ticker } = req.params;
-  const range    = req.query.range    || '3mo';
-  const interval = req.query.interval || '1d';
+  const range = req.query.range || '3mo';
   try {
     const data = await tradierHistory(ticker, range);
     if (!data) return res.status(404).json({ error: 'No data found' });
@@ -116,15 +154,7 @@ app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
         result: [{
           meta: { symbol: ticker, currency: 'USD' },
           timestamp: data.timestamps,
-          indicators: {
-            quote: [{
-              close:  data.close,
-              open:   data.open,
-              high:   data.high,
-              low:    data.low,
-              volume: data.volume,
-            }]
-          }
+          indicators: { quote: [{ close: data.close, open: data.open, high: data.high, low: data.low, volume: data.volume }] }
         }]
       }
     });
@@ -140,31 +170,21 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
       polygonGet(`/v3/reference/tickers/${ticker}`),
       polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=1&timeframe=annual`),
     ]);
-    const d = details?.results || {};
-    const f = financials?.results?.[0]?.financials || {};
+    const d       = details?.results    || {};
+    const f       = financials?.results?.[0]?.financials || {};
     const income  = f.income_statement  || {};
     const balance = f.balance_sheet     || {};
-    const cash    = f.cash_flow_statement || {};
-
     const revenue     = income.revenues?.value;
-    const prevRevenue = income.revenues?.value;
     const netIncome   = income.net_income_loss?.value;
-    const totalAssets = balance.assets?.value;
     const totalEquity = balance.equity?.value;
     const totalDebt   = balance.liabilities?.value;
     const eps         = income.basic_earnings_per_share?.value;
     const grossProfit = income.gross_profit?.value;
-
     res.json({
       quoteSummary: {
         result: [{
-          summaryDetail: {
-            trailingPE: { raw: null },
-            beta:       { raw: d.beta || null },
-          },
-          defaultKeyStatistics: {
-            trailingEps: { raw: eps || null },
-          },
+          summaryDetail:        { trailingPE: { raw: null }, beta: { raw: null } },
+          defaultKeyStatistics: { trailingEps: { raw: eps || null } },
           financialData: {
             targetMeanPrice:         { raw: null },
             recommendationKey:       'hold',
@@ -224,16 +244,13 @@ app.get('/tradier/quote/:ticker', async (req, res) => {
 app.get('/bonds', async (req, res) => {
   try {
     const symbols = [
-      { poly: 'TLT',  yahoo: '^TNX' },
+      { poly: 'IEF',  yahoo: '^TNX' },
       { poly: 'SHY',  yahoo: '^IRX' },
       { poly: 'TLT',  yahoo: '^TYX' },
       { poly: 'TLT',  yahoo: 'TLT'  },
       { poly: 'IEF',  yahoo: 'IEF'  },
     ];
-    const results = await Promise.all(symbols.map(async ({ poly, yahoo }) => {
-      const d = await polygonAggs(poly, 7);
-      return { symbol: yahoo, ...( d || { current: null, prev: null, change: null, changePct: null }) };
-    }));
+    const results = await polygonBatch(symbols, 10);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -256,10 +273,7 @@ app.get('/international', async (req, res) => {
       { poly: 'GLD',  yahoo: 'GC=F'      },
       { poly: 'USO',  yahoo: 'CL=F'      },
     ];
-    const results = await Promise.all(symbols.map(async ({ poly, yahoo }) => {
-      const d = await polygonAggs(poly, 7);
-      return { symbol: yahoo, ...( d || { current: null, prev: null, change: null, changePct: null }) };
-    }));
+    const results = await polygonBatch(symbols, 10);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -268,14 +282,14 @@ app.get('/international', async (req, res) => {
 
 app.get('/calendar', async (req, res) => {
   const topics = [
-    { ticker: 'SPY',  category: 'FEDERAL RESERVE' },
-    { ticker: 'TLT',  category: 'BONDS/RATES'      },
-    { ticker: 'GLD',  category: 'COMMODITIES'      },
-    { ticker: 'QQQ',  category: 'TECH/EARNINGS'    },
-    { ticker: 'DIA',  category: 'MACRO/ECONOMY'    },
-    { ticker: 'USO',  category: 'OIL/ENERGY'       },
-    { ticker: 'EEM',  category: 'EMERGING MARKETS' },
-    { ticker: 'FXI',  category: 'CHINA ECONOMY'    },
+    { ticker: 'SPY', category: 'FEDERAL RESERVE' },
+    { ticker: 'TLT', category: 'BONDS/RATES'      },
+    { ticker: 'GLD', category: 'COMMODITIES'      },
+    { ticker: 'QQQ', category: 'TECH/EARNINGS'    },
+    { ticker: 'DIA', category: 'MACRO/ECONOMY'    },
+    { ticker: 'USO', category: 'OIL/ENERGY'       },
+    { ticker: 'EEM', category: 'EMERGING MARKETS' },
+    { ticker: 'FXI', category: 'CHINA ECONOMY'    },
   ];
   try {
     const results = await Promise.all(
@@ -331,30 +345,6 @@ app.post('/api/analyze', (req, res) => {
   request.write(body);
   request.end();
 });
-
-// ─── Rate limiting ────────────────────────────────────────────────────────────
-
-const rateLimit = require('express-rate-limit');
-
-const claudeLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 10,
-  message: { error: 'Too many AI requests. Please wait before scanning again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const dataLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 60,
-  message: { error: 'Too many data requests. Please slow down.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use('/api/analyze', claudeLimiter);
-app.use('/yahoo',       dataLimiter);
-app.use('/tradier',     dataLimiter);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

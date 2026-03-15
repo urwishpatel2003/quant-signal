@@ -136,7 +136,7 @@ async function polygonBatch(symbols, days = 7) {
       change:    d?.change    ?? null,
       changePct: d?.changePct ?? null,
     });
-    await sleep(120); // 120ms between calls — stays under 5 req/sec free limit
+   await sleep(50); // 120ms between calls — stays under 5 req/sec free limit
   }
   return results;
 }
