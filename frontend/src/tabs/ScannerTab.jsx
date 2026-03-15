@@ -37,7 +37,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
         {scan.ticker && !scan.loading && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-sm" onClick={() => onAddToWatchlist(scan.ticker, scan.analysis, livePrice)}>+ WATCHLIST</button>
+            {/* <button className="btn-sm" onClick={() => onAddToWatchlist(scan.ticker, scan.analysis, livePrice)}>+ WATCHLIST</button> */}
             <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
           </div>
         )}
