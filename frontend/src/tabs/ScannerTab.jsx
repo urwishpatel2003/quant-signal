@@ -42,14 +42,15 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => clearTimeout(timer);
   }, [inputVal]);
 
-  // Close on outside click
+  // Close on outside mousedown
   useEffect(() => {
     const handler = e => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setShowDropdown(false);
+      }
     };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const selectTicker = (ticker) => {
@@ -75,7 +76,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       if (activeIdx >= 0) selectTicker(suggestions[activeIdx].ticker);
       else { setShowDropdown(false); scan.runScan(inputVal); }
     }
-    if (e.key === 'Escape') { setShowDropdown(false); }
+    if (e.key === 'Escape') setShowDropdown(false);
   };
 
   return (
@@ -111,7 +112,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 {suggestions.map((s, i) => (
                   <div
                     key={s.ticker}
-                    onMouseDown={e => { e.preventDefault(); selectTicker(s.ticker); }}
+                    onClick={() => selectTicker(s.ticker)}
                     onMouseEnter={() => setActiveIdx(i)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
