@@ -252,12 +252,28 @@ app.get('/debug-yahoo', async (req, res) => {
 
 // ─── Yahoo Debug ──────────────────────────────────────────────────────────────
 app.get('/debug-yahoo', async (req, res) => {
-  try {
-    const { statusCode, body } = await yahooFetch('/v8/finance/chart/AAPL?interval=1d&range=1mo');
-    res.json({ statusCode, length: body.length, preview: body.slice(0, 500) });
-  } catch (e) {
-    res.json({ error: e.message });
-  }
+  const req2 = https.request(
+    {
+      hostname: 'query2.finance.yahoo.com',
+      path: '/v8/finance/chart/AAPL?interval=1d&range=1mo',
+      method: 'GET',
+      headers: YAHOO_HEADERS
+    },
+    response => {
+      let raw = Buffer.alloc(0);
+      response.on('data', chunk => { raw = Buffer.concat([raw, chunk]); });
+      response.on('end', () => {
+        res.json({
+          statusCode: response.statusCode,
+          headers: response.headers,
+          bodyLength: raw.length,
+          bodyPreview: raw.slice(0, 200).toString('utf8'),
+        });
+      });
+    }
+  );
+  req2.on('error', e => res.json({ error: e.message, stack: e.stack }));
+  req2.end();
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
