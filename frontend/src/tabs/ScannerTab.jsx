@@ -25,8 +25,11 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
   // Fetch suggestions as user types
   useEffect(() => {
-    if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
-    if (inputVal === scan.ticker) { setShowDropdown(false); return; }
+    if (inputVal.length < 1) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
     const timer = setTimeout(async () => {
       try {
         const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(inputVal)}`);
@@ -35,40 +38,32 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         setShowDropdown(data.length > 0);
         setActiveIdx(-1);
       } catch { setSuggestions([]); }
-    }, 200);
+    }, 250);
     return () => clearTimeout(timer);
   }, [inputVal]);
 
-  // Reset dropdown after scan completes
-  useEffect(() => {
-    if (scan.stage === 'done' || scan.error) {
-      setSuggestions([]);
-      setShowDropdown(false);
-    }
-  }, [scan.stage, scan.error]);
-
-  // Close dropdown on outside click
+  // Close on outside click
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
         setShowDropdown(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
   }, []);
 
   const selectTicker = (ticker) => {
-    setInputVal(ticker);
     setShowDropdown(false);
     setSuggestions([]);
     setActiveIdx(-1);
+    setInputVal(ticker);
     scan.runScan(ticker);
   };
 
   const handleKeyDown = e => {
     if (!showDropdown) {
       if (e.key === 'Enter' && !scan.loading) {
-        setSuggestions([]); setShowDropdown(false);
+        setShowDropdown(false);
         scan.runScan(inputVal);
       }
       return;
@@ -80,7 +75,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       if (activeIdx >= 0) selectTicker(suggestions[activeIdx].ticker);
       else { setShowDropdown(false); scan.runScan(inputVal); }
     }
-    if (e.key === 'Escape') setShowDropdown(false);
+    if (e.key === 'Escape') { setShowDropdown(false); }
   };
 
   return (
@@ -96,24 +91,27 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               value={inputVal}
               onChange={e => setInputVal(e.target.value.toUpperCase())}
               onKeyDown={handleKeyDown}
-              onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
               placeholder="SEARCH TICKER..."
               className="input"
               style={{ padding: '10px 12px 10px 26px', fontSize: 13, fontWeight: 600 }}
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="characters"
+              spellCheck="false"
             />
 
             {/* Dropdown */}
-            {showDropdown && (
+            {showDropdown && suggestions.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
                 background: '#0f0f18', border: '1px solid #ffaa0044',
                 borderTop: 'none', maxHeight: 280, overflowY: 'auto',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
               }}>
                 {suggestions.map((s, i) => (
                   <div
                     key={s.ticker}
-                    onMouseDown={() => selectTicker(s.ticker)}
+                    onMouseDown={e => { e.preventDefault(); selectTicker(s.ticker); }}
                     onMouseEnter={() => setActiveIdx(i)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
@@ -123,16 +121,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                       transition: 'background 0.1s',
                     }}
                   >
-                    <span style={{
-                      fontFamily: "'Bebas Neue', sans-serif", fontSize: 16,
-                      color: '#ffaa00', minWidth: 60,
-                    }}>
+                    <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>
                       {s.ticker}
                     </span>
-                    <span style={{ fontSize: 11, color: '#8899aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 11, color: '#8899aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                       {s.name}
                     </span>
-                    <span style={{ fontSize: 9, color: '#334', marginLeft: 'auto', flexShrink: 0 }}>
+                    <span style={{ fontSize: 9, color: '#334', flexShrink: 0 }}>
                       {s.type}
                     </span>
                   </div>
