@@ -2,11 +2,38 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffaa00" />
+    <meta name="description" content="AI-powered options trading intelligence with global macro context" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="QuAInt Signal" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="QuAInt Signal" />
+    <meta property="og:description" content="AI-powered options trading intelligence" />
+    <meta property="og:type" content="website" />
+
+    <!-- Apple touch icons -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
     <title>QuAInt Signal</title>
   </head>
-  <body>
+  <body style="margin:0; background:#07070e;">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(r => console.log('SW registered:', r.scope))
+            .catch(e => console.log('SW failed:', e));
+        });
+      }
+    </script>
   </body>
 </html>

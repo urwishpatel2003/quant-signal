@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Icons</title></head>
+<body>
+<canvas id="c192" width="192" height="192"></canvas>
+<canvas id="c512" width="512" height="512"></canvas>
+<br>
+<button onclick="download(192)">Download 192x192</button>
+<button onclick="download(512)">Download 512x512</button>
+
+<script>
+function drawIcon(canvas) {
+  const s = canvas.width;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#07070e';
+  ctx.fillRect(0, 0, s, s);
+
+  // Rounded rect border
+  ctx.strokeStyle = '#ffaa00';
+  ctx.lineWidth = s * 0.04;
+  const r = s * 0.18;
+  ctx.beginPath();
+  ctx.roundRect(s*0.05, s*0.05, s*0.90, s*0.90, r);
+  ctx.stroke();
+
+  // Fit text inside — use smaller font
+  const fontSize = s * 0.28;
+  ctx.font = `900 ${fontSize}px Arial Black, sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  // Measure widths
+  const qWidth  = ctx.measureText('Q').width;
+  const aiWidth = ctx.measureText('AI').width;
+  const sWidth  = ctx.measureText('S').width;
+  const total   = qWidth + aiWidth + sWidth;
+  const startX  = (s - total) / 2;
+  const midY    = s / 2;
+
+  // Q - gold
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillText('Q', startX, midY);
+
+  // AI - green
+  ctx.fillStyle = '#00ff88';
+  ctx.fillText('AI', startX + qWidth, midY);
+
+  // S - gold
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillText('S', startX + qWidth + aiWidth, midY);
+}
+
+function download(size) {
+  const canvas = document.getElementById(`c${size}`);
+  drawIcon(canvas);
+  const a = document.createElement('a');
+  a.download = `icon-${size}.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+drawIcon(document.getElementById('c192'));
+drawIcon(document.getElementById('c512'));
+</script>
+</body>
+</html>
