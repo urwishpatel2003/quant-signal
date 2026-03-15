@@ -9,6 +9,7 @@ import TechnicalPanel from '../components/TechnicalPanel';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
 const BASE = import.meta.env.VITE_API_BASE;
+const VERCEL_BASE = '';
 
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [inputVal,     setInputVal]     = useState('');
@@ -32,7 +33,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     }
     const timer = setTimeout(async () => {
       try {
-        const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(inputVal)}`);
+        const res  = await fetch(`/api/search?q=${encodeURIComponent(inputVal)}`);
         const data = await res.json();
         setSuggestions(data);
         setShowDropdown(data.length > 0);
