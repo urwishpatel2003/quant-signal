@@ -17,6 +17,16 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '10mb' }));
 
+// ─── YAHOO HEADERS ────────────────────────────────────────────────────────────
+
+const YAHOO_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept':          'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Referer':         'https://finance.yahoo.com',
+  'Origin':          'https://finance.yahoo.com',
+};
+
 // ─── httpsGet helper ──────────────────────────────────────────────────────────
 
 function httpsGet(hostname, path, headers = {}) {
@@ -37,82 +47,72 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-// ─── yahooChart helper ────────────────────────────────────────────────────────
+// ─── yahooFetch helper (with gzip + full headers) ─────────────────────────────
 
-function yahooChart(sym) {
-  return new Promise(resolve => {
+function yahooFetch(path) {
+  return new Promise((resolve, reject) => {
     const req = https.request(
-      {
-        hostname: 'query1.finance.yahoo.com',
-        path: `/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1mo`,
-        method: 'GET',
-        headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-      },
-      res => {
+      { hostname: 'query2.finance.yahoo.com', path, method: 'GET', headers: YAHOO_HEADERS },
+      response => {
+        const encoding = response.headers['content-encoding'];
+        let stream = response;
+        if      (encoding === 'gzip')    stream = response.pipe(zlib.createGunzip());
+        else if (encoding === 'br')      stream = response.pipe(zlib.createBrotliDecompress());
+        else if (encoding === 'deflate') stream = response.pipe(zlib.createInflate());
+
         let data = '';
-        res.on('data', c => (data += c));
-        res.on('end', () => {
-          try {
-            const json      = JSON.parse(data);
-            const result    = json?.chart?.result?.[0];
-            const allCloses = result?.indicators?.quote?.[0]?.close || [];
-            const closes    = allCloses.filter(c => c !== null && c !== undefined);
-            const current   = closes[closes.length - 1];
-            const prev      = closes[closes.length - 2];
-            const meta      = result?.meta || {};
-            resolve({
-              symbol: sym, name: meta.shortName || sym,
-              current, prev,
-              change:    current && prev ? current - prev : null,
-              changePct: current && prev ? ((current - prev) / prev) * 100 : null,
-              currency:  meta.currency || 'USD'
-            });
-          } catch { resolve({ symbol: sym, current: null }); }
+        stream.on('data', c => (data += c));
+        stream.on('end', () => {
+          console.log(`[Yahoo] ${path.slice(0, 60)} → ${response.statusCode} enc=${encoding || 'none'} len=${data.length}`);
+          resolve({ statusCode: response.statusCode, body: data });
         });
+        stream.on('error', reject);
       }
     );
-    req.on('error', () => resolve({ symbol: sym, current: null }));
+    req.on('error', reject);
     req.end();
   });
 }
 
+// ─── yahooChart helper ────────────────────────────────────────────────────────
+
+async function yahooChart(sym) {
+  try {
+    const { body } = await yahooFetch(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1mo`);
+    const json      = JSON.parse(body);
+    const result    = json?.chart?.result?.[0];
+    const allCloses = result?.indicators?.quote?.[0]?.close || [];
+    const closes    = allCloses.filter(c => c !== null && c !== undefined);
+    const current   = closes[closes.length - 1];
+    const prev      = closes[closes.length - 2];
+    const meta      = result?.meta || {};
+    return {
+      symbol: sym, name: meta.shortName || sym,
+      current, prev,
+      change:    current && prev ? current - prev : null,
+      changePct: current && prev ? ((current - prev) / prev) * 100 : null,
+      currency:  meta.currency || 'USD'
+    };
+  } catch { return { symbol: sym, current: null }; }
+}
+
 // ─── Yahoo Finance proxy ──────────────────────────────────────────────────────
 
-app.get('/yahoo/*', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); 
+app.get('/yahoo/*', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const path = req.url.replace('/yahoo', '');
-  const request = https.request(
-    {
-      hostname: 'query1.finance.yahoo.com',
-      path,
-      method: 'GET',
-      headers: {
-        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept':          'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer':         'https://finance.yahoo.com',
-        'Origin':          'https://finance.yahoo.com',
-      }
-    },
-    response => {
-      const encoding = response.headers['content-encoding'];
-      let stream = response;
-
-      if (encoding === 'gzip')    stream = response.pipe(zlib.createGunzip());
-      else if (encoding === 'br') stream = response.pipe(zlib.createBrotliDecompress());
-      else if (encoding === 'deflate') stream = response.pipe(zlib.createInflate());
-
-      let data = '';
-      stream.on('data', c => (data += c));
-      stream.on('end', () => {
-        res.setHeader('Content-Type', 'application/json');
-        res.send(data);
-      });
-      stream.on('error', e => res.status(500).json({ error: e.message }));
+  try {
+    const { statusCode, body } = await yahooFetch(path);
+    if (!body || body.length < 10) {
+      console.log(`[Yahoo Proxy] Empty response for ${path}`);
+      return res.status(500).json({ error: 'Empty response from Yahoo' });
     }
-  );
-  request.on('error', e => res.status(500).json({ error: e.message }));
-  request.end();
+    res.setHeader('Content-Type', 'application/json');
+    res.status(statusCode).send(body);
+  } catch (e) {
+    console.log(`[Yahoo Proxy] Error: ${e.message}`);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Tradier ──────────────────────────────────────────────────────────────────
@@ -176,45 +176,30 @@ app.get('/international', async (req, res) => {
 
 app.get('/calendar', async (req, res) => {
   const queries = [
-    { q: 'Federal Reserve interest rates Fed',    category: 'FEDERAL RESERVE'  },
-    { q: 'CPI inflation consumer prices',          category: 'INFLATION'        },
-    { q: 'jobs report nonfarm payroll labor',      category: 'JOBS REPORT'      },
-    { q: 'GDP economic growth recession',          category: 'GDP GROWTH'       },
-    { q: 'earnings season stocks results',         category: 'EARNINGS'         },
-    { q: 'ECB European Central Bank rates',        category: 'ECB POLICY'       },
-    { q: 'Bank of Japan yen monetary',             category: 'JAPAN BOJ'        },
-    { q: 'China economy trade tariffs',            category: 'CHINA ECONOMY'    },
+    { q: 'Federal Reserve interest rates Fed',  category: 'FEDERAL RESERVE' },
+    { q: 'CPI inflation consumer prices',        category: 'INFLATION'       },
+    { q: 'jobs report nonfarm payroll labor',    category: 'JOBS REPORT'     },
+    { q: 'GDP economic growth recession',        category: 'GDP GROWTH'      },
+    { q: 'earnings season stocks results',       category: 'EARNINGS'        },
+    { q: 'ECB European Central Bank rates',      category: 'ECB POLICY'      },
+    { q: 'Bank of Japan yen monetary',           category: 'JAPAN BOJ'       },
+    { q: 'China economy trade tariffs',          category: 'CHINA ECONOMY'   },
   ];
   try {
     const results = await Promise.all(
-      queries.map(({ q, category }) => new Promise(resolve => {
-        const request = https.request(
-          {
-            hostname: 'query1.finance.yahoo.com',
-            path: `/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=5&lang=en&region=US`,
-            method: 'GET',
-            headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-          },
-          response => {
-            let data = '';
-            response.on('data', c => (data += c));
-            response.on('end', () => {
-              try {
-                const news = JSON.parse(data)?.news || [];
-                resolve(news.map(n => ({
-                  title:     n.title,
-                  publisher: n.publisher,
-                  time:      n.providerPublishTime,
-                  category,
-                  url:       n.link
-                })));
-              } catch { resolve([]); }
-            });
-          }
-        );
-        request.on('error', () => resolve([]));
-        request.end();
-      }))
+      queries.map(({ q, category }) =>
+        yahooFetch(`/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=5&lang=en&region=US`)
+          .then(({ body }) => {
+            try {
+              const news = JSON.parse(body)?.news || [];
+              return news.map(n => ({
+                title: n.title, publisher: n.publisher,
+                time: n.providerPublishTime, category, url: n.link
+              }));
+            } catch { return []; }
+          })
+          .catch(() => [])
+      )
     );
     const flat   = results.flat().sort((a, b) => b.time - a.time);
     const seen   = new Set();
@@ -260,5 +245,4 @@ app.post('/api/analyze', (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
-  console.log(`✅  Quant Signal backend running on port ${process.env.PORT || 3001}`)
-);
+  console.log(`✅  Quant Signal backend running on port ${process.env.PORT || 3001}`));
