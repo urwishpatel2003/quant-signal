@@ -26,6 +26,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   // Fetch suggestions as user types
   useEffect(() => {
     if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
+    if (inputVal === scan.ticker) { setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
       try {
         const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(inputVal)}`);
@@ -38,9 +39,20 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => clearTimeout(timer);
   }, [inputVal]);
 
+  // Reset dropdown after scan completes
+  useEffect(() => {
+    if (scan.stage === 'done' || scan.error) {
+      setSuggestions([]);
+      setShowDropdown(false);
+    }
+  }, [scan.stage, scan.error]);
+
   // Close dropdown on outside click
   useEffect(() => {
-    const handler = e => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShowDropdown(false); };
+    const handler = e => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
+        setShowDropdown(false);
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
@@ -49,12 +61,16 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     setInputVal(ticker);
     setShowDropdown(false);
     setSuggestions([]);
+    setActiveIdx(-1);
     scan.runScan(ticker);
   };
 
   const handleKeyDown = e => {
     if (!showDropdown) {
-      if (e.key === 'Enter' && !scan.loading) scan.runScan(inputVal);
+      if (e.key === 'Enter' && !scan.loading) {
+        setSuggestions([]); setShowDropdown(false);
+        scan.runScan(inputVal);
+      }
       return;
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); }
@@ -125,14 +141,16 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             )}
           </div>
 
-          <button className="btn" disabled={scan.loading} onClick={() => { setShowDropdown(false); scan.runScan(inputVal); }}
+          <button className="btn" disabled={scan.loading}
+            onClick={() => { setShowDropdown(false); setSuggestions([]); scan.runScan(inputVal); }}
             style={{ whiteSpace: 'nowrap' }}>
             {scan.loading ? 'SCANNING...' : 'RUN SCAN'}
           </button>
         </div>
 
         {scan.ticker && !scan.loading && (
-          <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
+          <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
+            onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
         )}
         {scan.loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
