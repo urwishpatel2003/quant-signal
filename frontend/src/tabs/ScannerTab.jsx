@@ -38,18 +38,15 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
           </>
         )}
-       {scan.loading && (
+        {scan.loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-               width: 16, height: 16, borderRadius: '50%',
-               border: '2px solid #ffaa0033',
-                borderTop: '2px solid #ffaa00',
-                animation: 'spin 0.8s linear infinite',
-             }} />
-             <span style={{ fontSize: 10, color: '#ffaa0066' }}>ANALYZING...</span>
-        </div>
-)}
-        {scan.error   && <div style={{ fontSize: 11, color: '#ff4444' }}>{scan.error}</div>}
+            <div style={{ width: 16, height: 16, borderRadius: '50%',
+              border: '2px solid #ffaa0033', borderTop: '2px solid #ffaa00',
+              animation: 'spin 0.8s linear infinite' }} />
+            <span style={{ fontSize: 10, color: '#ffaa0066' }}>ANALYZING...</span>
+          </div>
+        )}
+        {scan.error && <div style={{ fontSize: 11, color: '#ff4444' }}>{scan.error}</div>}
       </div>
 
       {/* ── Timeframe selector ── */}
@@ -85,7 +82,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           <div style={{ fontSize: 13, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
             {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
           </div>
-          {/* Timeframe badge */}
           <span style={{ fontSize: 9, background: '#ffaa0011', border: '1px solid #ffaa0033',
             color: '#ffaa00', padding: '2px 8px', borderRadius: 2 }}>
             {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
@@ -117,50 +113,62 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       )}
 
-      {/* ── Main grid ── */}
-      <div className="scanner-grid">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {scan.fundamentals && (
-            <div className="card fade-in">
-              <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
-              {[
-                ['P/E',          scan.fundamentals.pe?.toFixed(1)],
-                ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
-                ['Beta',         scan.fundamentals.beta?.toFixed(2)],
-                ['ROE',          scan.fundamentals.roe ? `${(scan.fundamentals.roe * 100).toFixed(1)}%` : null],
-                ['Gross Margin', scan.fundamentals.grossMargins ? `${(scan.fundamentals.grossMargins * 100).toFixed(1)}%` : null],
-                ['Rev Growth',   scan.fundamentals.revenueGrowth ? `${(scan.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
-                ['D/E',          scan.fundamentals.debtToEquity?.toFixed(2)],
-                ['Target',       scan.fundamentals.targetMeanPrice ? `$${scan.fundamentals.targetMeanPrice.toFixed(2)}` : null],
-              ].filter(([, v]) => v != null).map(([k, v]) => (
-                <div className="kv" key={k}>
-                  <span className="kv-key">{k}</span>
-                  <span style={{ color: '#c8c8d0', fontWeight: 500, fontSize: 11 }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {scan.ta && <TechnicalPanel ta={scan.ta} />}
-          {macro?.bonds && <BondPanel bonds={macro.bonds} />}
-
-          {scan.options && (
-            <div className="card fade-in">
-              <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>OPTIONS FLOW <span style={{ color: '#00ff8844', fontSize: 9 }}>⚡ LIVE</span></div>
-              <div className="kv"><span className="kv-key">Put/Call</span><span style={{ color: scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88', fontWeight: 500, fontSize: 11 }}>{scan.options.putCallRatio?.toFixed(2)}</span></div>
-              <div className="kv"><span className="kv-key">Call IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgCallIV}%</span></div>
-              <div className="kv"><span className="kv-key">Put IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgPutIV}%</span></div>
-              <div style={{ marginTop: 10 }}>
-                <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044', width: '100%' }}
-                  onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS PLAYS →</button>
-              </div>
-            </div>
-          )}
+      {/* ── AI Recommendation — shown at top after scan ── */}
+      {scan.analysis && (
+        <div className="fade-in" style={{ marginBottom: 20 }}>
+          <SignalCard analysis={scan.analysis} news={scan.news} />
         </div>
+      )}
 
-        {scan.analysis && <SignalCard analysis={scan.analysis} news={scan.news} />}
-      </div>
+      {/* ── Details grid — only shown after scan ── */}
+      {scan.analysis && (
+        <div className="scanner-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {scan.fundamentals && (
+              <div className="card fade-in">
+                <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
+                {[
+                  ['P/E',          scan.fundamentals.pe?.toFixed(1)],
+                  ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
+                  ['Beta',         scan.fundamentals.beta?.toFixed(2)],
+                  ['ROE',          scan.fundamentals.roe ? `${(scan.fundamentals.roe * 100).toFixed(1)}%` : null],
+                  ['Gross Margin', scan.fundamentals.grossMargins ? `${(scan.fundamentals.grossMargins * 100).toFixed(1)}%` : null],
+                  ['Rev Growth',   scan.fundamentals.revenueGrowth ? `${(scan.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
+                  ['D/E',          scan.fundamentals.debtToEquity?.toFixed(2)],
+                  ['Target',       scan.fundamentals.targetMeanPrice ? `$${scan.fundamentals.targetMeanPrice.toFixed(2)}` : null],
+                ].filter(([, v]) => v != null).map(([k, v]) => (
+                  <div className="kv" key={k}>
+                    <span className="kv-key">{k}</span>
+                    <span style={{ color: '#c8c8d0', fontWeight: 500, fontSize: 11 }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {scan.ta && <TechnicalPanel ta={scan.ta} />}
+
+            {/* Bond panel — only after scan ── */}
+            <BondPanel bonds={macro?.bonds} />
+
+            {scan.options && (
+              <div className="card fade-in">
+                <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>OPTIONS FLOW <span style={{ color: '#00ff8844', fontSize: 9 }}>⚡ LIVE</span></div>
+                <div className="kv"><span className="kv-key">Put/Call</span><span style={{ color: scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88', fontWeight: 500, fontSize: 11 }}>{scan.options.putCallRatio?.toFixed(2)}</span></div>
+                <div className="kv"><span className="kv-key">Call IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgCallIV}%</span></div>
+                <div className="kv"><span className="kv-key">Put IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgPutIV}%</span></div>
+                <div style={{ marginTop: 10 }}>
+                  <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044', width: '100%' }}
+                    onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS PLAYS →</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Empty right column placeholder to maintain grid */}
+          <div />
+        </div>
+      )}
     </div>
   );
 }

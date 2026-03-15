@@ -4,6 +4,8 @@ export default function SignalCard({ analysis, news }) {
   if (!analysis) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* ── Main signal card ── */}
       <div className="card fade-in" style={{ borderColor: SC[analysis.signal] + '44' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
@@ -42,6 +44,7 @@ export default function SignalCard({ analysis, news }) {
         {analysis.calendarRisk && <div style={{ fontSize: 10, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {analysis.calendarRisk}</div>}
       </div>
 
+      {/* ── Bull / Bear factors ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div className="card">
           <div style={{ fontSize: 10, color: '#00ff8866', marginBottom: 10 }}>BULL FACTORS</div>
@@ -61,23 +64,16 @@ export default function SignalCard({ analysis, news }) {
         </div>
       </div>
 
+      {/* ── News ── */}
       {news?.length > 0 && (
         <div className="card">
           <div style={{ fontSize: 10, color: '#444', marginBottom: 12 }}>RECENT NEWS</div>
           {news.slice(0, 5).map((n, i) => (
             <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 11 }}>
-             <a 
-                href={n.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: '#aab', lineHeight: 1.4, marginBottom: 2,
-                  display: 'block', textDecoration: 'none',
-                  cursor: n.url ? 'pointer' : 'default',
-                }}
+              <a href={n.url} target="_blank" rel="noopener noreferrer"
+                style={{ color: '#aab', lineHeight: 1.4, marginBottom: 2, display: 'block', textDecoration: 'none', cursor: n.url ? 'pointer' : 'default' }}
                 onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}
-              >
+                onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}>
                 {n.title}
               </a>
               <div style={{ color: '#445', fontSize: 10 }}>
