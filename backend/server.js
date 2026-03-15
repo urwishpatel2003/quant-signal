@@ -351,12 +351,23 @@ app.get('/search', async (req, res) => {
   const q = req.query.q || '';
   if (q.length < 1) return res.json([]);
   try {
-    const data = await polygonGet(`/v3/reference/tickers?search=${encodeURIComponent(q)}&active=true&market=stocks&order=asc&limit=8&sort=ticker`);
-    const results = (data.results || []).map(t => ({
-      ticker: t.ticker,
-      name:   t.name,
-      type:   t.type,
-    }));
+    const data = await polygonGet(
+      `/v3/reference/tickers?search=${encodeURIComponent(q)}&active=true&market=stocks&order=asc&limit=20&sort=ticker`
+    );
+    const results = (data.results || [])
+      .map(t => ({ ticker: t.ticker, name: t.name, type: t.type }))
+      // Sort: exact match first, then CS (common stock), then others
+      .sort((a, b) => {
+        const aExact = a.ticker === q ? 0 : 1;
+        const bExact = b.ticker === q ? 0 : 1;
+        if (aExact !== bExact) return aExact - bExact;
+        const aCS = a.type === 'CS' ? 0 : 1;
+        const bCS = b.type === 'CS' ? 0 : 1;
+        if (aCS !== bCS) return aCS - bCS;
+        // Prefer shorter tickers (closer match)
+        return a.ticker.length - b.ticker.length;
+      })
+      .slice(0, 8);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
