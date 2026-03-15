@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SC, MC, GC } from '../utils/constants';
 import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
@@ -8,9 +8,14 @@ import BondPanel      from '../components/BondPanel';
 import TechnicalPanel from '../components/TechnicalPanel';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
+const BASE = import.meta.env.VITE_API_BASE;
 
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
-  const [inputVal, setInputVal] = useState('AAPL');
+  const [inputVal,     setInputVal]     = useState('');
+  const [suggestions,  setSuggestions]  = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [activeIdx,    setActiveIdx]    = useState(-1);
+  const dropdownRef = useRef(null);
   const scan = useScan(macro);
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
@@ -18,28 +23,116 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
     : null;
 
+  // Fetch suggestions as user types
+  useEffect(() => {
+    if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(inputVal)}`);
+        const data = await res.json();
+        setSuggestions(data);
+        setShowDropdown(data.length > 0);
+        setActiveIdx(-1);
+      } catch { setSuggestions([]); }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [inputVal]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = e => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShowDropdown(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectTicker = (ticker) => {
+    setInputVal(ticker);
+    setShowDropdown(false);
+    setSuggestions([]);
+    scan.runScan(ticker);
+  };
+
+  const handleKeyDown = e => {
+    if (!showDropdown) {
+      if (e.key === 'Enter' && !scan.loading) scan.runScan(inputVal);
+      return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, -1)); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIdx >= 0) selectTicker(suggestions[activeIdx].ticker);
+      else { setShowDropdown(false); scan.runScan(inputVal); }
+    }
+    if (e.key === 'Escape') setShowDropdown(false);
+  };
+
   return (
     <div>
       {/* ── Controls ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
-            <input value={inputVal} onChange={e => setInputVal(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && !scan.loading && scan.runScan(inputVal)}
-              placeholder="TICKER" className="input"
-              style={{ padding: '10px 12px 10px 26px', fontSize: 14, fontWeight: 600 }} />
+
+          {/* Ticker input with autocomplete */}
+          <div ref={dropdownRef} style={{ position: 'relative', flex: 1 }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12, zIndex: 1 }}>$</span>
+            <input
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value.toUpperCase())}
+              onKeyDown={handleKeyDown}
+              onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+              placeholder="SEARCH TICKER..."
+              className="input"
+              style={{ padding: '10px 12px 10px 26px', fontSize: 13, fontWeight: 600 }}
+              autoComplete="off"
+            />
+
+            {/* Dropdown */}
+            {showDropdown && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                background: '#0f0f18', border: '1px solid #ffaa0044',
+                borderTop: 'none', maxHeight: 280, overflowY: 'auto',
+              }}>
+                {suggestions.map((s, i) => (
+                  <div
+                    key={s.ticker}
+                    onMouseDown={() => selectTicker(s.ticker)}
+                    onMouseEnter={() => setActiveIdx(i)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 14px', cursor: 'pointer',
+                      background: i === activeIdx ? '#ffaa0011' : 'transparent',
+                      borderBottom: '1px solid #1a1a26',
+                      transition: 'background 0.1s',
+                    }}
+                  >
+                    <span style={{
+                      fontFamily: "'Bebas Neue', sans-serif", fontSize: 16,
+                      color: '#ffaa00', minWidth: 60,
+                    }}>
+                      {s.ticker}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#8899aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.name}
+                    </span>
+                    <span style={{ fontSize: 9, color: '#334', marginLeft: 'auto', flexShrink: 0 }}>
+                      {s.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <button className="btn" disabled={scan.loading} onClick={() => scan.runScan(inputVal)}
+
+          <button className="btn" disabled={scan.loading} onClick={() => { setShowDropdown(false); scan.runScan(inputVal); }}
             style={{ whiteSpace: 'nowrap' }}>
             {scan.loading ? 'SCANNING...' : 'RUN SCAN'}
           </button>
         </div>
+
         {scan.ticker && !scan.loading && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            {/* <button className="btn-sm" onClick={() => onAddToWatchlist(scan.ticker, scan.analysis, livePrice)}>+ WATCHLIST</button> */}
-            <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
-          </div>
+          <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
         )}
         {scan.loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

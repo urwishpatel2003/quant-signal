@@ -346,6 +346,21 @@ app.post('/api/analyze', (req, res) => {
   request.end();
 });
 
+// ─── Ticker Search — Polygon ──────────────────────────────────────────────────
+app.get('/search', async (req, res) => {
+  const q = req.query.q || '';
+  if (q.length < 1) return res.json([]);
+  try {
+    const data = await polygonGet(`/v3/reference/tickers?search=${encodeURIComponent(q)}&active=true&market=stocks&order=asc&limit=8&sort=ticker`);
+    const results = (data.results || []).map(t => ({
+      ticker: t.ticker,
+      name:   t.name,
+      type:   t.type,
+    }));
+    res.json(results);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
