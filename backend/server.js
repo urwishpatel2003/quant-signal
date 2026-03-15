@@ -240,6 +240,24 @@ app.post('/api/analyze', (req, res) => {
   request.on('error', e => res.status(500).json({ error: e.message }));
   request.write(body);
   request.end();
+});// ─── Yahoo Debug ──────────────────────────────────────────────────────────────
+app.get('/debug-yahoo', async (req, res) => {
+  try {
+    const { statusCode, body } = await yahooFetch('/v8/finance/chart/AAPL?interval=1d&range=1mo');
+    res.json({ statusCode, length: body.length, preview: body.slice(0, 500) });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+// ─── Yahoo Debug ──────────────────────────────────────────────────────────────
+app.get('/debug-yahoo', async (req, res) => {
+  try {
+    const { statusCode, body } = await yahooFetch('/v8/finance/chart/AAPL?interval=1d&range=1mo');
+    res.json({ statusCode, length: body.length, preview: body.slice(0, 500) });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
