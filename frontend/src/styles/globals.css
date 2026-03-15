@@ -1,5 +1,19 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
 
+
+/* ── iOS Safe Area ── */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  background: #07070e;
+}
+
+.app-header {
+  padding-top: calc(12px + env(safe-area-inset-top));
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; }
 

@@ -1,11 +1,11 @@
 {
   "name": "QuAInt Signal",
   "short_name": "QuAInt",
-  "description": "AI-powered options trading intelligence",
+  "description": "AI-powered options trading intelligence with global macro context",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07070e",
-  "theme_color": "#ffaa00",
+  "theme_color": "#07070e",
   "orientation": "portrait-primary",
   "icons": [
     {
