@@ -64,7 +64,7 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
         {[
           ['GLOBAL SENTIMENT', globalSentiment,              sentimentColor,                                                         `${upCount}/7 markets ↑`],
           ['VIX · FEAR INDEX', vix?.current?.toFixed(2),     vix?.current > 25 ? '#ff4444' : vix?.current > 20 ? '#ffaa00' : '#00ff88', vix?.current > 30 ? 'EXTREME FEAR' : vix?.current > 25 ? 'HIGH FEAR' : vix?.current > 20 ? 'ELEVATED' : 'CALM'],
-          ['YIELD CURVE',      `${bonds?.yieldCurve}%`,      bonds?.inverted ? '#ff4444' : '#00ff88',                                bonds?.inverted ? '⚠ INVERTED' : 'NORMAL'],
+         ['YIELD CURVE', bonds?.inverted ? 'INVERTED' : 'NORMAL', bonds?.inverted ? '#ff4444' : '#00ff88', bonds?.inverted ? '⚠ TLT < SHY' : 'TLT > SHY'],
           ['GOLD',             `$${gold?.current?.toFixed(0)}`, gold?.changePct > 0 ? '#00ff88' : '#ff4444',                       `${gold?.changePct > 0 ? '▲' : '▼'} ${Math.abs(gold?.changePct)?.toFixed(2)}%`],
         ].map(([l, v, c, sub]) => (
           <div key={l} className="card" style={{ textAlign: 'center', borderColor: c + '33' }}>
