@@ -136,7 +136,7 @@ async function polygonBatch(symbols, days = 7) {
       change:    d?.change    ?? null,
       changePct: d?.changePct ?? null,
     });
-    await sleep(50); // 120ms between calls — stays under 5 req/sec free limit
+    await sleep(30); // 120ms between calls — stays under 5 req/sec free limit
   }
   return results;
 }
@@ -250,7 +250,7 @@ app.get('/bonds', async (req, res) => {
       { poly: 'TLT',  yahoo: 'TLT'  },
       { poly: 'IEF',  yahoo: 'IEF'  },
     ];
-    const results = await polygonBatch(symbols, 10);
+    const results = await polygonBatch(symbols, 14);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -273,7 +273,7 @@ app.get('/international', async (req, res) => {
       { poly: 'GLD',  yahoo: 'GC=F'      },
       { poly: 'USO',  yahoo: 'CL=F'      },
     ];
-    const results = await polygonBatch(symbols, 10);
+    const results = await polygonBatch(symbols, 14);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

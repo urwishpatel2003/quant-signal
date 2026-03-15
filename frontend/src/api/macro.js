@@ -1,39 +1,61 @@
-const BASE = import.meta.env.VITE_API_BASE;
+const RAILWAY = import.meta.env.VITE_API_BASE;
+
+async function fetchWithFallback(railwayUrl, vercelFallbackUrl) {
+  try {
+    const res  = await fetch(railwayUrl);
+    const data = await res.json();
+    if (Array.isArray(data) && data.some(d => d.current !== null)) {
+      return data;
+    }
+    throw new Error('No data from Railway');
+  } catch {
+    try {
+      const res  = await fetch(vercelFallbackUrl);
+      const data = await res.json();
+      return data;
+    } catch { return []; }
+  }
+}
 
 export async function fetchBondData() {
   try {
-    const data = await (await fetch(`${BASE}/bonds`)).json();
+    const data = await fetchWithFallback(
+      `${RAILWAY}/bonds`,
+      `/api/macro?type=bonds`
+    );
     const find = sym => data.find(d => d.symbol === sym);
+    const tnx = find('^TNX');
+    const irx = find('^IRX');
+    const tyx = find('^TYX');
     const tlt = find('TLT');
     const ief = find('IEF');
-    const shy = find('^IRX'); // SHY mapped to ^IRX
-    const tnx = find('^TNX'); // IEF mapped to ^TNX
-    const tyx = find('^TYX'); // TLT mapped to ^TYX
-
-    // Yield curve: use changePct direction of TLT vs SHY as proxy
-    const yieldCurve = tlt?.current && shy?.current
-      ? (tlt.current - shy.current).toFixed(2) : null;
-
-    return {
-      tnx, irx: shy, tyx, tlt, ief,
-      yieldCurve,
-      inverted: yieldCurve !== null && parseFloat(yieldCurve) < 0,
-      isEtfMode: true, // flag so components know to show $ not %
-    };
+    const isYahoo = tnx?.source === 'yahoo';
+    let yieldCurve = null;
+    if (isYahoo && tnx?.current && irx?.current) {
+      yieldCurve = (tnx.current - irx.current).toFixed(2);
+    } else if (tlt?.current && find('^IRX')?.current) {
+      yieldCurve = (tlt.current - find('^IRX').current).toFixed(2);
+    }
+    return { tnx, irx, tyx, tlt, ief, yieldCurve, inverted: yieldCurve !== null && parseFloat(yieldCurve) < 0, isYahoo };
   } catch { return null; }
 }
 
 export async function fetchInternationalMarkets() {
-  try { return await (await fetch(`${BASE}/international`)).json(); }
-  catch { return []; }
+  try {
+    return await fetchWithFallback(
+      `${RAILWAY}/international`,
+      `/api/macro?type=international`
+    );
+  } catch { return []; }
 }
 
 export async function fetchEconomicCalendar() {
-  try { return await (await fetch(`${BASE}/calendar`)).json(); }
-  catch { return []; }
+  try {
+    const res = await fetch(`${RAILWAY}/calendar`);
+    return await res.json();
+  } catch { return []; }
 }
 
 export async function fetchMacroNews() {
-  // Yahoo Finance search API blocked — returning empty until Finnhub is integrated
   return [];
 }
