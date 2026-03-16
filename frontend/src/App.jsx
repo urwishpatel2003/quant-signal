@@ -24,7 +24,7 @@ export default function App() {
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
 
-  // Wait for Clerk
+  // Wait for Clerk to initialise
   if (!isLoaded) {
     return (
       <div style={{ minHeight: '100vh', background: '#07070e',
@@ -37,7 +37,7 @@ export default function App() {
     );
   }
 
-  // Show welcome if: not signed in AND hasn't clicked Enter App
+  // Show welcome if not signed in and hasn't clicked Enter App
   const showWelcome = !isSignedIn && !enteredApp;
 
   if (showWelcome) {
@@ -121,29 +121,34 @@ export default function App() {
 
       {/* ── Content ── */}
       <div className="app-content">
+
+        {/* Help is always public — no login required */}
+        {activeTab === 'help' && <HelpTab />}
+
         <SignedIn>
           {activeTab === 'scanner' && <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />}
           {activeTab === 'options' && <OptionsTab macro={macro} initialTicker={optionsTicker} />}
           {activeTab === 'markets' && <MarketsTab intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
-          {activeTab === 'help'    && <HelpTab />}
         </SignedIn>
 
-        <SignedOut>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', minHeight: '60vh', gap: 20 }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
-              SIGN IN TO ACCESS
+        {activeTab !== 'help' && (
+          <SignedOut>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', minHeight: '60vh', gap: 20 }}>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
+                SIGN IN TO ACCESS
+              </div>
+              <div style={{ fontSize: 13, color: '#556', marginBottom: 8 }}>
+                Create a free account to use QuAInt Signal
+              </div>
+              <SignInButton mode="modal">
+                <button className="btn" style={{ fontSize: 14, padding: '14px 40px' }}>
+                  SIGN IN / CREATE ACCOUNT
+                </button>
+              </SignInButton>
             </div>
-            <div style={{ fontSize: 13, color: '#556', marginBottom: 8 }}>
-              Create a free account to use QuAInt Signal
-            </div>
-            <SignInButton mode="modal">
-              <button className="btn" style={{ fontSize: 14, padding: '14px 40px' }}>
-                SIGN IN / CREATE ACCOUNT
-              </button>
-            </SignInButton>
-          </div>
-        </SignedOut>
+          </SignedOut>
+        )}
       </div>
     </div>
   );
