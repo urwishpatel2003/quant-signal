@@ -1,29 +1,49 @@
 import { useState } from 'react';
 import {
   SignedIn, SignedOut, SignInButton,
-  UserButton, useUser,
+  UserButton, useUser, useAuth,
 } from '@clerk/clerk-react';
 import { TABS } from './utils/constants';
 import { useMacroData } from './hooks/useMacroData';
-import MacroBar     from './components/MacroBar';
-import ScannerTab   from './tabs/ScannerTab';
-import OptionsTab   from './tabs/OptionsTab';
-import MarketsTab   from './tabs/MarketsTab';
-import ModelsTab    from './tabs/ModelsTab';
-import HelpTab      from './tabs/HelpTab';
-import WelcomePage  from './components/WelcomePage';
+import MacroBar    from './components/MacroBar';
+import ScannerTab  from './tabs/ScannerTab';
+import OptionsTab  from './tabs/OptionsTab';
+import MarketsTab  from './tabs/MarketsTab';
+import ModelsTab   from './tabs/ModelsTab';
+import HelpTab     from './tabs/HelpTab';
+import WelcomePage from './components/WelcomePage';
 
 export default function App() {
-  const [showWelcome, setShowWelcome] = useState(true);
-  const [activeTab,      setActiveTab]      = useState('scanner');
-  const [optionsTicker,  setOptionsTicker]  = useState('');
-  const macro   = useMacroData();
-  const { user } = useUser();
+  const [showWelcome,   setShowWelcome]   = useState(true);
+  const [activeTab,     setActiveTab]     = useState('scanner');
+  const [optionsTicker, setOptionsTicker] = useState('');
+
+  const macro              = useMacroData();
+  const { user }           = useUser();
+  const { isLoaded, isSignedIn } = useAuth();
 
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
 
-  // Welcome page — always public
+  // Wait for Clerk to initialise
+  if (!isLoaded) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#07070e',
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 40, height: 40, borderRadius: '50%',
+          border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00',
+          animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // Already signed in — skip welcome
+  if (isSignedIn && showWelcome) {
+    setShowWelcome(false);
+  }
+
+  // Welcome page — public, no auth required
   if (showWelcome) {
     return (
       <WelcomePage
@@ -56,7 +76,7 @@ export default function App() {
           loading={macro.loading}
         />
 
-        {/* ── Auth ── */}
+        {/* ── Auth controls ── */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <SignedOut>
             <SignInButton mode="modal">
@@ -74,9 +94,7 @@ export default function App() {
               )}
               <UserButton
                 appearance={{
-                  elements: {
-                    avatarBox: { width: 28, height: 28 },
-                  }
+                  elements: { avatarBox: { width: 28, height: 28 } }
                 }}
               />
             </div>
@@ -111,13 +129,13 @@ export default function App() {
           {activeTab === 'scanner' && <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />}
           {activeTab === 'options' && <OptionsTab macro={macro} initialTicker={optionsTicker} />}
           {activeTab === 'markets' && <MarketsTab intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
-          {/* {activeTab === 'models'  && <ModelsTab  macro={macro} />} */}
+          {activeTab === 'models'  && <ModelsTab  macro={macro} />}
           {activeTab === 'help'    && <HelpTab />}
         </SignedIn>
 
         <SignedOut>
-          {/* Prompt sign in if user somehow lands on app without auth */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', minHeight: '60vh', gap: 20 }}>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
               SIGN IN TO ACCESS
             </div>
