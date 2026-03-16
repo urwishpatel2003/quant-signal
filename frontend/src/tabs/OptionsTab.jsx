@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { SC, RC, MC, GC } from '../utils/constants';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain, isMarketClosed } from '../api/tradier';
-import { runPriceAnalysis, runOptionsAnalysis } from '../api/claude';
+import { runCombinedAnalysis, runOptionsAnalysis } from '../api/claude';
 import { calcIndicators } from '../utils/indicators';
+import { useUsage } from '../hooks/useUsage';
 import MiniChart      from '../components/MiniChart';
 import ContractCard   from '../components/ContractCard';
 import BondPanel      from '../components/BondPanel';
@@ -13,6 +14,8 @@ import RiskRewardBar   from '../components/RiskRewardBar';
 import PLSimulator     from '../components/PLSimulator';
 import TradeChecklist  from '../components/TradeChecklist';
 import EarningsWarning from '../components/EarningsWarning';
+import UsageBadge      from '../components/UsageBadge';
+import UpgradeModal    from '../components/UpgradeModal';
 
 export default function OptionsTab({ macro, initialTicker }) {
   const [inputVal,       setInputVal]       = useState(initialTicker || 'AAPL');
@@ -31,6 +34,9 @@ export default function OptionsTab({ macro, initialTicker }) {
   const [priceSignal,    setPriceSignal]    = useState(null);
   const [optionsSignal,  setOptionsSignal]  = useState(null);
   const [selectedSide,   setSelectedSide]   = useState(null);
+  const [showUpgrade,    setShowUpgrade]    = useState(false);
+
+  const { usage, limits, canOptions, trackOptions } = useUsage();
 
   useEffect(() => { if (initialTicker) { setInputVal(initialTicker); run(initialTicker); } }, [initialTicker]);
 
@@ -47,6 +53,8 @@ export default function OptionsTab({ macro, initialTicker }) {
   };
 
   const run = async t => {
+    if (!canOptions()) { setShowUpgrade(true); return; }
+    trackOptions();
     setLoading(true); setError(''); setOptionsSignal(null); setPriceSignal(null);
     setTa(null); setSelectedSide(null);
     const sym = t.toUpperCase(); setTicker(sym);
@@ -55,30 +63,33 @@ export default function OptionsTab({ macro, initialTicker }) {
       const [q, p] = await Promise.all([fetchTradierQuote(sym), fetchPrice(sym)]);
       if (!q && !p) throw new Error('Ticker not found');
       setQuote(q); setOhlcv(p);
-      const livePrice = q?.last || p?.current;
+      const livePrice  = q?.last || p?.current;
       const indicators = calcIndicators(p);
       setTa(indicators);
 
       setStage('expirations');
-      const exps = await fetchTradierExpirations(sym);
+      const [exps, f, n] = await Promise.all([
+        fetchTradierExpirations(sym),
+        fetchFundamentals(sym),
+        fetchStockNews(sym),
+      ]);
       if (exps.length === 0) throw new Error('No valid expirations found');
       setExpirations(exps);
+      setFundamentals(f);
+      setNews(n);
       const nextExpiry = exps[0];
 
       setStage('chain');
       const c = await fetchTradierChain(sym, nextExpiry, livePrice);
       setSelectedExpiry(nextExpiry);
 
-      setStage('data');
-      const [f, n] = await Promise.all([fetchFundamentals(sym), fetchStockNews(sym)]);
-      setFundamentals(f); setNews(n);
-
-      setStage('price-signal');
-      const ps = await runPriceAnalysis(sym, livePrice, p, f, c, n, macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar, indicators);
-      setPriceSignal(ps);
-
       setStage('options-signal');
-      const os = await runOptionsAnalysis(sym, livePrice, nextExpiry, c, f, n, ps, macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar, indicators);
+      const { priceSignal: ps, optionsSignal: os } = await runCombinedAnalysis(
+        sym, livePrice, p, f, c, n,
+        macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar,
+        indicators, nextExpiry, 'swing'
+      );
+      setPriceSignal(ps);
       setOptionsSignal(os);
       setStage('done');
     } catch (e) { setError(e.message); }
@@ -92,45 +103,32 @@ export default function OptionsTab({ macro, initialTicker }) {
   const activeSide   = selectedSide || optionsSignal?.recommendation || 'CALL';
   const activeSignal = { ...optionsSignal, recommendation: activeSide };
 
-  const STAGES = ['quote', 'expirations', 'chain', 'data', 'price-signal', 'options-signal'];
+  const STAGES = ['quote', 'expirations', 'chain', 'options-signal'];
   const stageLabels = {
     'quote':          'FETCHING PRICE DATA...',
     'expirations':    'LOADING OPTIONS CHAIN...',
     'chain':          'SCANNING OPTIONS FLOW...',
-    'data':           'FETCHING FUNDAMENTALS...',
-    'price-signal':   'RUNNING PRICE ANALYSIS...',
     'options-signal': 'GENERATING OPTIONS PLAYS...',
   };
 
   return (
     <div style={{ position: 'relative' }}>
+      {showUpgrade && <UpgradeModal type="options" onClose={() => setShowUpgrade(false)} />}
 
       {/* ── Full screen loading overlay ── */}
       {(loading || reanalyzing) && (
         <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(7, 7, 14, 0.88)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 20,
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 7, 14, 0.88)', backdropFilter: 'blur(4px)',
+          zIndex: 999, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 20,
         }}>
-          <div style={{
-            width: 60, height: 60, borderRadius: '50%',
-            border: '3px solid #ffaa0022',
-            borderTop: '3px solid #ffaa00',
-            animation: 'spin 0.8s linear infinite',
-          }} />
+          <div style={{ width: 60, height: 60, borderRadius: '50%',
+            border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00',
+            animation: 'spin 0.8s linear infinite' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 24, color: '#ffaa00',
-              letterSpacing: '0.15em', marginBottom: 8,
-            }}>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
+              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>
               {reanalyzing ? 'RE-ANALYZING' : 'ANALYZING'}
             </div>
             <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
@@ -144,12 +142,11 @@ export default function OptionsTab({ macro, initialTicker }) {
               const active = i === currentIdx;
               return (
                 <div key={s} style={{
-                  width:        active ? 12 : 8,
-                  height:       active ? 12 : 8,
+                  width: active ? 12 : 8, height: active ? 12 : 8,
                   borderRadius: '50%',
-                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
-                  transition:   'all 0.3s',
-                  boxShadow:    active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
+                  background: done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition: 'all 0.3s',
+                  boxShadow: active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
                 }} />
               );
             })}
@@ -161,7 +158,7 @@ export default function OptionsTab({ macro, initialTicker }) {
       )}
 
       {/* ── Top bar ── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, width: '100%' }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
@@ -175,16 +172,19 @@ export default function OptionsTab({ macro, initialTicker }) {
             {loading ? 'ANALYZING...' : 'FIND OPTIONS PLAYS'}
           </button>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 10, color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
-            {isMarketClosed() ? '🔴 MKT CLOSED' : '🟢 MKT OPEN'}
-          </div>
-          {macro?.bonds?.isYahoo && macro.bonds.tnx?.current && (
-            <div style={{ fontSize: 10, color: '#ffaa0066' }}>
-              10Y: {macro.bonds.tnx.current.toFixed(2)}%{macro.bonds.inverted ? ' ⚠' : ''}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ fontSize: 10, color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
+              {isMarketClosed() ? '🔴 MKT CLOSED' : '🟢 MKT OPEN'}
             </div>
-          )}
-          {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
+            {macro?.bonds?.isYahoo && macro.bonds.tnx?.current && (
+              <div style={{ fontSize: 10, color: '#ffaa0066' }}>
+                10Y: {macro.bonds.tnx.current.toFixed(2)}%{macro.bonds.inverted ? ' ⚠' : ''}
+              </div>
+            )}
+            {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
+          </div>
+          <UsageBadge used={usage.options} limit={limits.options} label="ANALYSES" />
         </div>
       </div>
 
@@ -199,7 +199,7 @@ export default function OptionsTab({ macro, initialTicker }) {
               {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(2)}%
             </div>
           )}
-          {ta?.rsi14 && <span style={{ fontSize: 10, color: ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>RSI: {ta.rsi14} [{ta.rsiSignal}]</span>}
+          {ta?.rsi14      && <span style={{ fontSize: 10, color: ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>RSI: {ta.rsi14} [{ta.rsiSignal}]</span>}
           {ta?.trendSignal && <span style={{ fontSize: 10, color: ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444' }}>{ta.trendSignal === 'BULLISH' ? '▲' : '▼'} {ta.trendSignal}</span>}
           {priceSignal?.macroImpact       && <span style={{ fontSize: 10, color: MC[priceSignal.macroImpact]       }}>MACRO: {priceSignal.macroImpact}</span>}
           {priceSignal?.globalMarketTrend && <span style={{ fontSize: 10, color: GC[priceSignal.globalMarketTrend] }}>GLOBAL: {priceSignal.globalMarketTrend}</span>}
@@ -230,7 +230,6 @@ export default function OptionsTab({ macro, initialTicker }) {
 
       {/* ── Single column layout ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
         {!optionsSignal && !loading && !reanalyzing && (
           <div className="card" style={{ textAlign: 'center', padding: 40, color: '#333' }}>
             <div style={{ fontSize: 14, marginBottom: 8 }}>Enter a ticker and click FIND OPTIONS PLAYS</div>
@@ -240,10 +239,8 @@ export default function OptionsTab({ macro, initialTicker }) {
 
         {optionsSignal && !reanalyzing && (
           <>
-            {/* 1. Earnings Warning */}
             <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
 
-            {/* 2. AI Recommendation */}
             <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
@@ -273,25 +270,16 @@ export default function OptionsTab({ macro, initialTicker }) {
               )}
             </div>
 
-            {/* 3. Contract cards */}
             <div className="options-contracts">
               <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
               <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
             </div>
 
-            {/* 4. Trade Checklist */}
             <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={activeSignal} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
-
-            {/* 5. P&L Simulator */}
             <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
-
-            {/* 6. Trade Setup */}
             <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
-
-            {/* 7. Risk/Reward */}
             <RiskRewardBar optionsSignal={activeSignal} />
 
-            {/* 8. Technical + Underlying Signal */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               {ta && <TechnicalPanel ta={ta} />}
               {priceSignal && (
@@ -315,10 +303,10 @@ export default function OptionsTab({ macro, initialTicker }) {
                   {ta && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
                       {[
-                        ['RSI 14',  ta.rsi14,            ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
-                        ['TREND',   ta.trendSignal,       ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
-                        ['VOLUME',  `${ta.volumeRatio}x`, ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0'],
-                        ['GLOBAL',  priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
+                        ['RSI 14', ta.rsi14,            ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
+                        ['TREND',  ta.trendSignal,       ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
+                        ['VOLUME', `${ta.volumeRatio}x`, ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0'],
+                        ['GLOBAL', priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
                       ].map(([l, v, c]) => (
                         <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
                           <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
@@ -337,10 +325,8 @@ export default function OptionsTab({ macro, initialTicker }) {
               )}
             </div>
 
-            {/* 9. Bond Panel */}
             <BondPanel bonds={macro?.bonds} />
 
-            {/* 10. Catalysts / Risks / Macro */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div className="card">
                 <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8 }}>⚡ CATALYSTS</div>

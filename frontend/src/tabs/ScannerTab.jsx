@@ -2,22 +2,25 @@ import { useState, useEffect, useRef } from 'react';
 import { SC, MC, GC } from '../utils/constants';
 import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
+import { useUsage } from '../hooks/useUsage';
 import MiniChart      from '../components/MiniChart';
 import SignalCard     from '../components/SignalCard';
 import BondPanel      from '../components/BondPanel';
 import TechnicalPanel from '../components/TechnicalPanel';
+import UsageBadge     from '../components/UsageBadge';
+import UpgradeModal   from '../components/UpgradeModal';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
-const BASE = import.meta.env.VITE_API_BASE;
-const VERCEL_BASE = '';
 
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [inputVal,     setInputVal]     = useState('');
   const [suggestions,  setSuggestions]  = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIdx,    setActiveIdx]    = useState(-1);
+  const [showUpgrade,  setShowUpgrade]  = useState(false);
   const dropdownRef = useRef(null);
   const scan = useScan(macro);
+  const { usage, limits, canScan, trackScan } = useUsage();
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
   const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
@@ -26,11 +29,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
   // Fetch suggestions as user types
   useEffect(() => {
-    if (inputVal.length < 1) {
-      setSuggestions([]);
-      setShowDropdown(false);
-      return;
-    }
+    if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
       try {
         const res  = await fetch(`/api/search?q=${encodeURIComponent(inputVal)}`);
@@ -46,28 +45,32 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   // Close on outside mousedown
   useEffect(() => {
     const handler = e => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
         setShowDropdown(false);
-      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const selectTicker = (ticker) => {
+  const handleScan = ticker => {
+    if (!canScan()) { setShowUpgrade(true); return; }
+    trackScan();
+    setShowDropdown(false);
+    setSuggestions([]);
+    scan.runScan(ticker);
+  };
+
+  const selectTicker = ticker => {
     setShowDropdown(false);
     setSuggestions([]);
     setActiveIdx(-1);
     setInputVal(ticker);
-    scan.runScan(ticker);
+    handleScan(ticker);
   };
 
   const handleKeyDown = e => {
     if (!showDropdown) {
-      if (e.key === 'Enter' && !scan.loading) {
-        setShowDropdown(false);
-        scan.runScan(inputVal);
-      }
+      if (e.key === 'Enter' && !scan.loading) handleScan(inputVal);
       return;
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); }
@@ -75,18 +78,18 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (activeIdx >= 0) selectTicker(suggestions[activeIdx].ticker);
-      else { setShowDropdown(false); scan.runScan(inputVal); }
+      else { setShowDropdown(false); handleScan(inputVal); }
     }
     if (e.key === 'Escape') setShowDropdown(false);
   };
 
   return (
     <div>
-      {/* ── Controls ── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+      {showUpgrade && <UpgradeModal type="scan" onClose={() => setShowUpgrade(false)} />}
 
-          {/* Ticker input with autocomplete */}
+      {/* ── Controls ── */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
           <div ref={dropdownRef} style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12, zIndex: 1 }}>$</span>
             <input
@@ -96,13 +99,8 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               placeholder="SEARCH TICKER..."
               className="input"
               style={{ padding: '10px 12px 10px 26px', fontSize: 13, fontWeight: 600 }}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="characters"
-              spellCheck="false"
+              autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck="false"
             />
-
-            {/* Dropdown */}
             {showDropdown && suggestions.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
@@ -111,53 +109,47 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
               }}>
                 {suggestions.map((s, i) => (
-                  <div
-                    key={s.ticker}
-                    onClick={() => selectTicker(s.ticker)}
+                  <div key={s.ticker} onClick={() => selectTicker(s.ticker)}
                     onMouseEnter={() => setActiveIdx(i)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '10px 14px', cursor: 'pointer',
                       background: i === activeIdx ? '#ffaa0011' : 'transparent',
-                      borderBottom: '1px solid #1a1a26',
-                      transition: 'background 0.1s',
-                    }}
-                  >
-                    <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>
-                      {s.ticker}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#8899aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                      {s.name}
-                    </span>
-                    <span style={{ fontSize: 9, color: '#334', flexShrink: 0 }}>
-                      {s.type}
-                    </span>
+                      borderBottom: '1px solid #1a1a26', transition: 'background 0.1s',
+                    }}>
+                    <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{s.ticker}</span>
+                    <span style={{ fontSize: 11, color: '#8899aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{s.name}</span>
+                    <span style={{ fontSize: 9, color: '#334', flexShrink: 0 }}>{s.type}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
-
           <button className="btn" disabled={scan.loading}
-            onClick={() => { setShowDropdown(false); setSuggestions([]); scan.runScan(inputVal); }}
+            onClick={() => handleScan(inputVal)}
             style={{ whiteSpace: 'nowrap' }}>
             {scan.loading ? 'SCANNING...' : 'RUN SCAN'}
           </button>
         </div>
 
-        {scan.ticker && !scan.loading && (
-          <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
-            onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
-        )}
-        {scan.loading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 16, height: 16, borderRadius: '50%',
-              border: '2px solid #ffaa0033', borderTop: '2px solid #ffaa00',
-              animation: 'spin 0.8s linear infinite' }} />
-            <span style={{ fontSize: 10, color: '#ffaa0066' }}>ANALYZING...</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {scan.ticker && !scan.loading && (
+              <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
+                onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
+            )}
+            {scan.loading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%',
+                  border: '2px solid #ffaa0033', borderTop: '2px solid #ffaa00',
+                  animation: 'spin 0.8s linear infinite' }} />
+                <span style={{ fontSize: 10, color: '#ffaa0066' }}>ANALYZING...</span>
+              </div>
+            )}
+            {scan.error && <div style={{ fontSize: 11, color: '#ff4444' }}>{scan.error}</div>}
           </div>
-        )}
-        {scan.error && <div style={{ fontSize: 11, color: '#ff4444', width: '100%' }}>{scan.error}</div>}
+          <UsageBadge used={usage.scans} limit={limits.scans} label="SCANS" />
+        </div>
       </div>
 
       {/* ── Timeframe selector ── */}
@@ -165,7 +157,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         <div style={{ fontSize: 10, color: '#444', marginBottom: 8 }}>TIMEFRAME:</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {TF_KEYS.map(key => {
-            const tf = TIMEFRAMES[key];
+            const tf     = TIMEFRAMES[key];
             const active = scan.timeframe === key;
             return (
               <button key={key} className="btn-sm"
