@@ -92,26 +92,106 @@ export default function OptionsTab({ macro, initialTicker }) {
   const activeSide   = selectedSide || optionsSignal?.recommendation || 'CALL';
   const activeSignal = { ...optionsSignal, recommendation: activeSide };
 
+  const STAGES = ['quote', 'expirations', 'chain', 'data', 'price-signal', 'options-signal'];
+  const stageLabels = {
+    'quote':          'FETCHING PRICE DATA...',
+    'expirations':    'LOADING OPTIONS CHAIN...',
+    'chain':          'SCANNING OPTIONS FLOW...',
+    'data':           'FETCHING FUNDAMENTALS...',
+    'price-signal':   'RUNNING PRICE ANALYSIS...',
+    'options-signal': 'GENERATING OPTIONS PLAYS...',
+  };
+
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+
+      {/* ── Full screen loading overlay ── */}
+      {(loading || reanalyzing) && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 7, 14, 0.88)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 20,
+        }}>
+          {/* Spinner */}
+          <div style={{
+            width: 60, height: 60, borderRadius: '50%',
+            border: '3px solid #ffaa0022',
+            borderTop: '3px solid #ffaa00',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+
+          {/* Label */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 24, color: '#ffaa00',
+              letterSpacing: '0.15em', marginBottom: 8,
+            }}>
+              {reanalyzing ? 'RE-ANALYZING' : 'ANALYZING'}
+            </div>
+            <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
+              {reanalyzing ? `EXPIRY: ${selectedExpiry}` : (stageLabels[stage] || 'LOADING...')}
+            </div>
+          </div>
+
+          {/* Progress dots */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            {STAGES.map((s, i) => {
+              const currentIdx = STAGES.indexOf(stage);
+              const done   = i < currentIdx;
+              const active = i === currentIdx;
+              return (
+                <div key={s} style={{
+                  width:        active ? 12 : 8,
+                  height:       active ? 12 : 8,
+                  borderRadius: '50%',
+                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition:   'all 0.3s',
+                  boxShadow:    active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
+                }} />
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: 11, color: '#334' }}>
+            {ticker && `${ticker} · `}This may take 10–20 seconds
+          </div>
+        </div>
+      )}
+
       {/* ── Top bar ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
-          <input value={inputVal} onChange={e => setInputVal(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === 'Enter' && !loading && run(inputVal)}
-            placeholder="TICKER" className="input"
-            style={{ padding: '10px 12px 10px 26px', width: 110, fontSize: 14, fontWeight: 600 }} />
+        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
+            <input value={inputVal} onChange={e => setInputVal(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === 'Enter' && !loading && run(inputVal)}
+              placeholder="TICKER" className="input"
+              style={{ padding: '10px 12px 10px 26px', fontSize: 14, fontWeight: 600 }} />
+          </div>
+          <button className="btn" disabled={loading} onClick={() => run(inputVal)}
+            style={{ whiteSpace: 'nowrap' }}>
+            {loading ? 'ANALYZING...' : 'FIND OPTIONS PLAYS'}
+          </button>
         </div>
-        <button className="btn" disabled={loading} onClick={() => run(inputVal)}>
-          {loading ? 'ANALYZING...' : 'FIND OPTIONS PLAYS'}
-        </button>
-        <div style={{ fontSize: 10, color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
-          {isMarketClosed() ? '🔴 MKT CLOSED' : '🟢 MKT OPEN'}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 10, color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
+            {isMarketClosed() ? '🔴 MKT CLOSED' : '🟢 MKT OPEN'}
+          </div>
+          {macro?.bonds?.isYahoo && macro.bonds.tnx?.current && (
+            <div style={{ fontSize: 10, color: '#ffaa0066' }}>
+              10Y: {macro.bonds.tnx.current.toFixed(2)}%{macro.bonds.inverted ? ' ⚠' : ''}
+            </div>
+          )}
+          {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
         </div>
-        {macro?.bonds && <div style={{ fontSize: 10, color: '#ffaa0066' }}>10Y: {macro.bonds.tnx?.current?.toFixed(2)}%{macro.bonds.inverted ? ' ⚠' : ''}</div>}
-        {(loading || reanalyzing) && <div className="pulse" style={{ fontSize: 10, color: '#ffaa00' }}>{reanalyzing ? `RE-ANALYZING ${selectedExpiry}...` : stage?.toUpperCase() || 'LOADING'}...</div>}
-        {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
       </div>
 
       {/* ── Price bar ── */}
@@ -151,7 +231,6 @@ export default function OptionsTab({ macro, initialTicker }) {
               {exp}
             </button>
           ))}
-          {reanalyzing && <div className="pulse" style={{ fontSize: 10, color: '#ffaa00' }}>Re-analyzing...</div>}
         </div>
       )}
 
@@ -217,22 +296,19 @@ export default function OptionsTab({ macro, initialTicker }) {
             </div>
           )}
 
-          {reanalyzing && (
-            <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-              <div className="pulse" style={{ fontSize: 12, color: '#ffaa00' }}>RE-ANALYZING FOR {selectedExpiry}...</div>
-            </div>
-          )}
-
           {optionsSignal && !reanalyzing && (
             <>
+              {/* 1. Earnings Warning */}
               <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
 
-              {/* AI recommendation header */}
+              {/* 2. AI Recommendation */}
               <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>AI OPTIONS RECOMMENDATION · {selectedExpiry}</div>
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>LONG {optionsSignal.recommendation}S</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>
+                      LONG {optionsSignal.recommendation}S
+                    </div>
                     <div style={{ fontSize: 12, color: '#8899aa', marginTop: 8, lineHeight: 1.6 }}>{optionsSignal.reasoning}</div>
                     {optionsSignal.macroSetup      && <div style={{ fontSize: 11, color: '#ffaa0088', marginTop: 6, fontStyle: 'italic', borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>📊 {optionsSignal.macroSetup}</div>}
                     {optionsSignal.calendarWarning && <div style={{ fontSize: 11, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {optionsSignal.calendarWarning}</div>}
@@ -255,22 +331,25 @@ export default function OptionsTab({ macro, initialTicker }) {
                 )}
               </div>
 
-              {/* Contract cards */}
+              {/* 3. Contract cards */}
               <div className="options-contracts">
                 <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
                 <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
               </div>
 
-              <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-                <RiskRewardBar optionsSignal={activeSignal} />
-                <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
-              </div>
-
+              {/* 4. Trade Checklist */}
               <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={activeSignal} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
 
-              {/* Catalysts / Risks / Macro */}
+              {/* 5. P&L Simulator */}
+              <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
+
+              {/* 6. Trade Setup */}
+              <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
+
+              {/* 7. Risk/Reward */}
+              <RiskRewardBar optionsSignal={activeSignal} />
+
+              {/* 8. Catalysts / Risks / Macro */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                 <div className="card">
                   <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8 }}>⚡ CATALYSTS</div>
@@ -303,7 +382,9 @@ export default function OptionsTab({ macro, initialTicker }) {
                 </div>
               </div>
 
-              <div style={{ fontSize: 11, color: '#333', textAlign: 'center' }}>⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.</div>
+              <div style={{ fontSize: 11, color: '#333', textAlign: 'center' }}>
+                ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.
+              </div>
             </>
           )}
         </div>
