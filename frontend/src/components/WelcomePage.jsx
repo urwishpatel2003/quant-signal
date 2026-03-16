@@ -15,8 +15,6 @@ export default function WelcomePage({ onEnter, onNavigate }) {
 
   useEffect(() => {
     setVisible(true);
-    const interval = setInterval(() => setTickIdx(i => (i + 1) % TICKERS.length), 1800);
-    return () => clearInterval(interval);
   }, []);
 
   const handleNavigate = (tab) => { onNavigate(tab); onEnter(); };
@@ -58,19 +56,6 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             style={{ fontSize: 14, padding: '14px 40px' }}>
             HOW IT WORKS
           </button>
-        </div>
-
-        {/* Live ticker spotlight */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12,
-          background: '#0f0f18', border: '1px solid #1e1e2e', padding: '10px 20px', borderRadius: 4 }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00ff88',
-            boxShadow: '0 0 8px #00ff88', animation: 'pulse 1.5s infinite' }} />
-          <span style={{ fontSize: 11, color: '#445' }}>LIVE</span>
-          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00',
-            transition: 'all 0.3s', minWidth: 60 }}>{TICKERS[tickIdx].sym}</span>
-          <span style={{ fontSize: 13, color: TICKERS[tickIdx].up ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
-            ${TICKERS[tickIdx].price} {TICKERS[tickIdx].up ? '▲' : '▼'}
-          </span>
         </div>
       </div>
 
