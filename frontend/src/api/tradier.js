@@ -1,4 +1,4 @@
-const BASE = '';
+const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 
 export function isMarketClosed() {
   const now = new Date();
