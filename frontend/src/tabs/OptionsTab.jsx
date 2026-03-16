@@ -119,15 +119,12 @@ export default function OptionsTab({ macro, initialTicker }) {
           justifyContent: 'center',
           gap: 20,
         }}>
-          {/* Spinner */}
           <div style={{
             width: 60, height: 60, borderRadius: '50%',
             border: '3px solid #ffaa0022',
             borderTop: '3px solid #ffaa00',
             animation: 'spin 0.8s linear infinite',
           }} />
-
-          {/* Label */}
           <div style={{ textAlign: 'center' }}>
             <div style={{
               fontFamily: "'Bebas Neue', sans-serif",
@@ -140,8 +137,6 @@ export default function OptionsTab({ macro, initialTicker }) {
               {reanalyzing ? `EXPIRY: ${selectedExpiry}` : (stageLabels[stage] || 'LOADING...')}
             </div>
           </div>
-
-          {/* Progress dots */}
           <div style={{ display: 'flex', gap: 10 }}>
             {STAGES.map((s, i) => {
               const currentIdx = STAGES.indexOf(stage);
@@ -159,7 +154,6 @@ export default function OptionsTab({ macro, initialTicker }) {
               );
             })}
           </div>
-
           <div style={{ fontSize: 11, color: '#334' }}>
             {ticker && `${ticker} · `}This may take 10–20 seconds
           </div>
@@ -234,160 +228,156 @@ export default function OptionsTab({ macro, initialTicker }) {
         </div>
       )}
 
-      {/* ── Main layout ── */}
-      <div className="options-layout">
+      {/* ── Single column layout ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* ── Left sidebar ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {ta && <TechnicalPanel ta={ta} />}
+        {!optionsSignal && !loading && !reanalyzing && (
+          <div className="card" style={{ textAlign: 'center', padding: 40, color: '#333' }}>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>Enter a ticker and click FIND OPTIONS PLAYS</div>
+            <div style={{ fontSize: 11 }}>Includes RSI · SMA · Volume · Bond market · Global macro analysis</div>
+          </div>
+        )}
 
-          {priceSignal && (
-            <div className="card" style={{ borderColor: SC[priceSignal.signal] + '33' }}>
-              <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {[
-                  ['SIGNAL',   priceSignal.signal,                        SC[priceSignal.signal]],
-                  ['CONF',     `${priceSignal.confidence}%`,              '#fff'],
-                  ['TARGET',   `$${priceSignal.priceTarget?.toFixed(2)}`, '#00ff88'],
-                  ['STOP',     `$${priceSignal.stopLoss?.toFixed(2)}`,    '#ff4444'],
-                  ['MACRO',    priceSignal.macroImpact,                   MC[priceSignal.macroImpact]],
-                  ['GEO RISK', priceSignal.geopoliticalRisk,              RC[priceSignal.geopoliticalRisk]],
-                ].map(([l, v, c]) => (
-                  <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
+        {optionsSignal && !reanalyzing && (
+          <>
+            {/* 1. Earnings Warning */}
+            <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
+
+            {/* 2. AI Recommendation */}
+            <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>AI OPTIONS RECOMMENDATION · {selectedExpiry}</div>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>
+                    LONG {optionsSignal.recommendation}S
                   </div>
-                ))}
-              </div>
-              {ta && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
-                  {[
-                    ['RSI 14',  ta.rsi14,            ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
-                    ['TREND',   ta.trendSignal,       ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
-                    ['VOLUME',  `${ta.volumeRatio}x`, ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0'],
-                    ['GLOBAL',  priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
-                  ].map(([l, v, c]) => (
-                    <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
-                    </div>
-                  ))}
+                  <div style={{ fontSize: 12, color: '#8899aa', marginTop: 8, lineHeight: 1.6 }}>{optionsSignal.reasoning}</div>
+                  {optionsSignal.macroSetup      && <div style={{ fontSize: 11, color: '#ffaa0088', marginTop: 6, fontStyle: 'italic', borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>📊 {optionsSignal.macroSetup}</div>}
+                  {optionsSignal.calendarWarning && <div style={{ fontSize: 11, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {optionsSignal.calendarWarning}</div>}
                 </div>
-              )}
-              <div style={{ fontSize: 10, color: '#667', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>{priceSignal.thesis}</div>
-              {priceSignal.bondSignal && (
-                <div style={{ fontSize: 10, color: '#ffaa0077', marginTop: 6, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>
-                  📊 {priceSignal.bondSignal}
+                <div style={{ textAlign: 'right', minWidth: 120 }}>
+                  <div style={{ fontSize: 11, color: '#556' }}>CONFIDENCE</div>
+                  <div style={{ fontSize: 28, fontWeight: 600 }}>{optionsSignal.confidence}%</div>
+                  <div className="bar-bg"><div className="bar-fill" style={{ width: `${optionsSignal.confidence}%`, background: recColor }} /></div>
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 9, color: '#445' }}>IV ENVIRONMENT</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: ivColor }}>{optionsSignal.ivRank} IV</div>
+                    <div style={{ fontSize: 11, color: '#667' }}>{optionsSignal.ivComment}</div>
+                  </div>
+                </div>
+              </div>
+              {optionsSignal.positionSizing && (
+                <div style={{ background: '#070710', padding: 10, fontSize: 12, color: '#8899aa', borderLeft: '2px solid #ffaa0044' }}>
+                  💰 {optionsSignal.positionSizing}
                 </div>
               )}
             </div>
-          )}
 
-          <BondPanel bonds={macro?.bonds} />
-        </div>
-
-        {/* ── Right main ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {!optionsSignal && !loading && !reanalyzing && (
-            <div className="card" style={{ textAlign: 'center', padding: 40, color: '#333' }}>
-              <div style={{ fontSize: 14, marginBottom: 8 }}>Enter a ticker and click FIND OPTIONS PLAYS</div>
-              <div style={{ fontSize: 11 }}>Includes RSI · SMA · Volume · Bond market · Global macro analysis</div>
+            {/* 3. Contract cards */}
+            <div className="options-contracts">
+              <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
+              <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
             </div>
-          )}
 
-          {optionsSignal && !reanalyzing && (
-            <>
-              {/* 1. Earnings Warning */}
-              <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
+            {/* 4. Trade Checklist */}
+            <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={activeSignal} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
 
-              {/* 2. AI Recommendation */}
-              <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>AI OPTIONS RECOMMENDATION · {selectedExpiry}</div>
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>
-                      LONG {optionsSignal.recommendation}S
-                    </div>
-                    <div style={{ fontSize: 12, color: '#8899aa', marginTop: 8, lineHeight: 1.6 }}>{optionsSignal.reasoning}</div>
-                    {optionsSignal.macroSetup      && <div style={{ fontSize: 11, color: '#ffaa0088', marginTop: 6, fontStyle: 'italic', borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>📊 {optionsSignal.macroSetup}</div>}
-                    {optionsSignal.calendarWarning && <div style={{ fontSize: 11, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {optionsSignal.calendarWarning}</div>}
+            {/* 5. P&L Simulator */}
+            <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
+
+            {/* 6. Trade Setup */}
+            <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
+
+            {/* 7. Risk/Reward */}
+            <RiskRewardBar optionsSignal={activeSignal} />
+
+            {/* 8. Technical + Underlying Signal */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              {ta && <TechnicalPanel ta={ta} />}
+              {priceSignal && (
+                <div className="card" style={{ borderColor: SC[priceSignal.signal] + '33' }}>
+                  <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {[
+                      ['SIGNAL',   priceSignal.signal,                        SC[priceSignal.signal]],
+                      ['CONF',     `${priceSignal.confidence}%`,              '#fff'],
+                      ['TARGET',   `$${priceSignal.priceTarget?.toFixed(2)}`, '#00ff88'],
+                      ['STOP',     `$${priceSignal.stopLoss?.toFixed(2)}`,    '#ff4444'],
+                      ['MACRO',    priceSignal.macroImpact,                   MC[priceSignal.macroImpact]],
+                      ['GEO RISK', priceSignal.geopoliticalRisk,              RC[priceSignal.geopoliticalRisk]],
+                    ].map(([l, v, c]) => (
+                      <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ textAlign: 'right', minWidth: 120 }}>
-                    <div style={{ fontSize: 11, color: '#556' }}>CONFIDENCE</div>
-                    <div style={{ fontSize: 28, fontWeight: 600 }}>{optionsSignal.confidence}%</div>
-                    <div className="bar-bg"><div className="bar-fill" style={{ width: `${optionsSignal.confidence}%`, background: recColor }} /></div>
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ fontSize: 9, color: '#445' }}>IV ENVIRONMENT</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: ivColor }}>{optionsSignal.ivRank} IV</div>
-                      <div style={{ fontSize: 11, color: '#667' }}>{optionsSignal.ivComment}</div>
+                  {ta && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
+                      {[
+                        ['RSI 14',  ta.rsi14,            ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
+                        ['TREND',   ta.trendSignal,       ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
+                        ['VOLUME',  `${ta.volumeRatio}x`, ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0'],
+                        ['GLOBAL',  priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
+                      ].map(([l, v, c]) => (
+                        <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                </div>
-                {optionsSignal.positionSizing && (
-                  <div style={{ background: '#070710', padding: 10, fontSize: 12, color: '#8899aa', borderLeft: '2px solid #ffaa0044' }}>
-                    💰 {optionsSignal.positionSizing}
-                  </div>
-                )}
-              </div>
-
-              {/* 3. Contract cards */}
-              <div className="options-contracts">
-                <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
-                <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
-              </div>
-
-              {/* 4. Trade Checklist */}
-              <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={activeSignal} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
-
-              {/* 5. P&L Simulator */}
-              <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
-
-              {/* 6. Trade Setup */}
-              <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
-
-              {/* 7. Risk/Reward */}
-              <RiskRewardBar optionsSignal={activeSignal} />
-
-              {/* 8. Catalysts / Risks / Macro */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                <div className="card">
-                  <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8 }}>⚡ CATALYSTS</div>
-                  {optionsSignal.catalysts?.map((c, i) => (
-                    <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a1a26', display: 'flex', gap: 6 }}>
-                      <span style={{ color: '#ffaa00' }}>→</span>{c}
-                    </div>
-                  ))}
-                </div>
-                <div className="card">
-                  <div style={{ fontSize: 10, color: '#ff444466', marginBottom: 8 }}>⚠ KEY RISKS</div>
-                  {optionsSignal.keyRisks?.map((r, i) => (
-                    <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
-                      <span style={{ color: '#ff4444' }}>!</span>{r}
-                    </div>
-                  ))}
-                </div>
-                <div className="card">
-                  <div style={{ fontSize: 10, color: '#ff884466', marginBottom: 8 }}>🌍 MACRO RISKS</div>
-                  {optionsSignal.macroRisks?.map((r, i) => (
-                    <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a1008', display: 'flex', gap: 6 }}>
-                      <span style={{ color: '#ff8844' }}>⊕</span>{r}
-                    </div>
-                  ))}
-                  {optionsSignal.globalMarketRisk && (
-                    <div style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', display: 'flex', gap: 6 }}>
-                      <span style={{ color: '#ff8844' }}>🌍</span>{optionsSignal.globalMarketRisk}
+                  )}
+                  <div style={{ fontSize: 10, color: '#667', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>{priceSignal.thesis}</div>
+                  {priceSignal.bondSignal && (
+                    <div style={{ fontSize: 10, color: '#ffaa0077', marginTop: 6, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>
+                      📊 {priceSignal.bondSignal}
                     </div>
                   )}
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div style={{ fontSize: 11, color: '#333', textAlign: 'center' }}>
-                ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.
+            {/* 9. Bond Panel */}
+            <BondPanel bonds={macro?.bonds} />
+
+            {/* 10. Catalysts / Risks / Macro */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <div className="card">
+                <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8 }}>⚡ CATALYSTS</div>
+                {optionsSignal.catalysts?.map((c, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a1a26', display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#ffaa00' }}>→</span>{c}
+                  </div>
+                ))}
               </div>
-            </>
-          )}
-        </div>
+              <div className="card">
+                <div style={{ fontSize: 10, color: '#ff444466', marginBottom: 8 }}>⚠ KEY RISKS</div>
+                {optionsSignal.keyRisks?.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#ff4444' }}>!</span>{r}
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div style={{ fontSize: 10, color: '#ff884466', marginBottom: 8 }}>🌍 MACRO RISKS</div>
+                {optionsSignal.macroRisks?.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a1008', display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#ff8844' }}>⊕</span>{r}
+                  </div>
+                ))}
+                {optionsSignal.globalMarketRisk && (
+                  <div style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#ff8844' }}>🌍</span>{optionsSignal.globalMarketRisk}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11, color: '#333', textAlign: 'center' }}>
+              ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
