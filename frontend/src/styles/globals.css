@@ -223,3 +223,16 @@ body {
   .watchlist-item        { grid-template-columns: 1fr; }
   .portfolio-item        { grid-template-columns: 1fr; }
 }
+
+/* ── Scanner results — 2 col desktop, 1 col mobile ── */
+.scanner-results-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .scanner-results-grid {
+    grid-template-columns: 1fr;
+  }
+}

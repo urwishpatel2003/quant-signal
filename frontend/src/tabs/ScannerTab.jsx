@@ -27,7 +27,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
     : null;
 
-  // Fetch suggestions as user types
   useEffect(() => {
     if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
@@ -42,7 +41,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => clearTimeout(timer);
   }, [inputVal]);
 
-  // Close on outside mousedown
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -218,16 +216,16 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       )}
 
-      {/* ── AI Recommendation ── */}
+      {/* ── Results: SignalCard left, Details right on desktop ── */}
       {scan.analysis && (
-        <div className="fade-in" style={{ marginBottom: 20 }}>
-          <SignalCard analysis={scan.analysis} news={scan.news} />
-        </div>
-      )}
+        <div className="scanner-results-grid">
 
-      {/* ── Details grid ── */}
-      {scan.analysis && (
-        <div className="scanner-grid">
+          {/* Left — AI Recommendation */}
+          <div className="fade-in">
+            <SignalCard analysis={scan.analysis} news={scan.news} />
+          </div>
+
+          {/* Right — Details */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {scan.fundamentals && (
               <div className="card fade-in">
@@ -264,7 +262,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               </div>
             )}
           </div>
-          <div />
         </div>
       )}
     </div>
