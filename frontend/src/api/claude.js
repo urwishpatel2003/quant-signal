@@ -13,169 +13,234 @@ async function callClaude(payload) {
 function categorizeNews(headlines) {
   return (headlines || []).map(n => {
     const t = n.title?.toLowerCase() || '';
-    if (t.includes('upgrade') || t.includes('outperform') || t.includes('buy rating') || t.includes('overweight') || t.includes('initiated') || t.includes('initiates coverage'))
+    if (t.includes('upgrade') || t.includes('outperform') || t.includes('buy rating') || t.includes('overweight') || t.includes('initiated'))
       return `[UPGRADE] ${n.title}`;
     if (t.includes('downgrade') || t.includes('underperform') || t.includes('sell rating') || t.includes('underweight') || t.includes('cuts to'))
       return `[DOWNGRADE] ${n.title}`;
-    if (t.includes('price target') || t.includes('raises target') || t.includes('lowers target') || t.includes('pt raised') || t.includes('pt cut') || t.includes('target to $'))
+    if (t.includes('price target') || t.includes('raises target') || t.includes('lowers target') || t.includes('pt raised') || t.includes('pt cut'))
       return `[ANALYST TARGET] ${n.title}`;
-    if (t.includes('13f') || t.includes('insider') || t.includes('stake') || t.includes('position') || t.includes('holding') || t.includes('buffett') || t.includes('soros') || t.includes('ackman') || t.includes('bought shares') || t.includes('sold shares'))
+    if (t.includes('13f') || t.includes('insider') || t.includes('stake') || t.includes('buffett') || t.includes('bought shares') || t.includes('sold shares'))
       return `[INSIDER/FUND] ${n.title}`;
-    if (t.includes('earnings') || t.includes('eps') || t.includes('revenue') || t.includes('beat') || t.includes('miss') || t.includes('guidance') || t.includes('outlook'))
+    if (t.includes('earnings') || t.includes('eps') || t.includes('revenue') || t.includes('beat') || t.includes('miss') || t.includes('guidance'))
       return `[EARNINGS] ${n.title}`;
-    if (t.includes('fda') || t.includes('approval') || t.includes('approved') || t.includes('rejected') || t.includes('trial') || t.includes('lawsuit') || t.includes('sec') || t.includes('investigation') || t.includes('merger') || t.includes('acquisition'))
+    if (t.includes('fda') || t.includes('approval') || t.includes('lawsuit') || t.includes('sec') || t.includes('merger') || t.includes('acquisition'))
       return `[REGULATORY/EVENT] ${n.title}`;
-    if (t.includes('short') || t.includes('short seller') || t.includes('hindenburg') || t.includes('citron'))
+    if (t.includes('short seller') || t.includes('hindenburg') || t.includes('citron'))
       return `[SHORT ATTACK] ${n.title}`;
     return `[NEWS] ${n.title}`;
   });
 }
 
 export function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
-  let ctx = '\n=== GLOBAL MACRO CONTEXT ===\n';
+  let ctx = '\n=== MACRO ===\n';
   if (bonds) {
-    ctx += `US BONDS:\n  10Y: ${bonds.tnx?.current?.toFixed(2)}% (${bonds.tnx?.changePct > 0 ? '+' : ''}${bonds.tnx?.changePct?.toFixed(2)}%)\n  2Y: ${bonds.irx?.current?.toFixed(2)}% | 30Y: ${bonds.tyx?.current?.toFixed(2)}%\n  Yield Curve (10Y-2Y): ${bonds.yieldCurve}% ${bonds.inverted ? '⚠ INVERTED' : ''}\n  TLT: $${bonds.tlt?.current?.toFixed(2)} (${bonds.tlt?.changePct?.toFixed(2)}%)\n`;
+    ctx += `BONDS: 10Y=${bonds.tnx?.current?.toFixed(2)}% | 2Y=${bonds.irx?.current?.toFixed(2)}% | Curve=${bonds.yieldCurve}% ${bonds.inverted ? '⚠ INVERTED' : ''} | TLT=$${bonds.tlt?.current?.toFixed(2)}\n`;
   }
   if (intlMarkets?.length) {
     const find = sym => intlMarkets.find(m => m.symbol === sym);
-    const fmt  = (m, d = 0) => m?.current ? m.current.toLocaleString('en-US', { maximumFractionDigits: d }) : 'N/A';
-    const pct  = m => m?.changePct != null ? `(${m.changePct > 0 ? '+' : ''}${m.changePct.toFixed(2)}%)` : '';
-    ctx += `\nASIA MARKETS:\n  Nikkei 225: ${fmt(find('^N225'))} ${pct(find('^N225'))}\n  Hang Seng: ${fmt(find('^HSI'))} ${pct(find('^HSI'))}\n  Shanghai: ${fmt(find('000001.SS'), 2)} ${pct(find('000001.SS'))}\n  Sensex: ${fmt(find('^BSESN'))} ${pct(find('^BSESN'))}\n`;
-    ctx += `\nEUROPE MARKETS:\n  DAX: ${fmt(find('^GDAXI'))} ${pct(find('^GDAXI'))}\n  FTSE 100: ${fmt(find('^FTSE'))} ${pct(find('^FTSE'))}\n  CAC 40: ${fmt(find('^FCHI'))} ${pct(find('^FCHI'))}\n`;
-    const vix = find('^VIX'), dxy = find('DX-Y.NYB'), gold = find('GC=F'), oil = find('CL=F');
-    ctx += `\nMARKET SIGNALS:\n  VIX: ${vix?.current?.toFixed(2)} ${vix?.current > 25 ? '⚠ HIGH FEAR' : vix?.current > 20 ? 'ELEVATED' : 'CALM'}\n  DXY: ${dxy?.current?.toFixed(2)} ${pct(dxy)}\n  Gold: $${gold?.current?.toFixed(2)} ${pct(gold)}\n  Oil: $${oil?.current?.toFixed(2)} ${pct(oil)}\n`;
+    const pct  = m => m?.changePct != null ? `${m.changePct > 0 ? '+' : ''}${m.changePct.toFixed(2)}%` : 'N/A';
+    const vix  = find('^VIX'), dxy = find('DX-Y.NYB'), gold = find('GC=F'), oil = find('CL=F');
+    ctx += `ASIA: N225=${pct(find('^N225'))} | HSI=${pct(find('^HSI'))} | Sensex=${pct(find('^BSESN'))}\n`;
+    ctx += `EUROPE: DAX=${pct(find('^GDAXI'))} | FTSE=${pct(find('^FTSE'))} | CAC=${pct(find('^FCHI'))}\n`;
+    ctx += `SIGNALS: VIX=${vix?.current?.toFixed(2)} ${vix?.current > 25 ? '⚠HIGH' : vix?.current > 20 ? 'ELEV' : 'CALM'} | DXY=${dxy?.current?.toFixed(2)} | Gold=$${gold?.current?.toFixed(2)} | Oil=$${oil?.current?.toFixed(2)}\n`;
   }
   if (calendar?.length) {
-    ctx += `\nECONOMIC CALENDAR:\n`;
-    calendar.slice(0, 6).forEach(e => { ctx += `  [${e.category?.split(' ').slice(0, 3).join(' ')}] ${e.title}\n`; });
+    ctx += `CALENDAR: ${calendar.slice(0, 4).map(e => e.title).join(' | ')}\n`;
   }
   if (macroNews?.length) {
-    ctx += `\nGEOPOLITICAL & MACRO NEWS:\n`;
-    macroNews.slice(0, 8).forEach(n => { ctx += `  [${n.topic?.split(' ').slice(0, 3).join(' ')}] ${n.title}\n`; });
+    ctx += `GEO NEWS: ${macroNews.slice(0, 4).map(n => n.title).join(' | ')}\n`;
   }
   return ctx;
 }
 
-export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing') {
-  const macroCtx     = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
-  const categorized  = categorizeNews(news).slice(0, 10);
-  const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
-  const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
-  const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
+// ─── COMBINED single Claude call for both price + options analysis ────────────
 
-  const tfMeta = {
-    short:    { label: 'Short Term (1-5 days)',     focus: 'momentum, intraday price action, RSI, volume spikes, and news catalysts. Weight recent price action and momentum heavily. SMA20 is the key trend level.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg) | Trend vs SMA20=${ta?.trendSignal}` },
-    swing:    { label: 'Swing Trade (1-4 weeks)',    focus: 'trend direction, SMA20/50 crossovers, RSI momentum, and macro tailwinds/headwinds. Weight technical trend and macro conditions equally.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} (${ta?.priceVsSma20}% from price) | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)` },
-    position: { label: 'Position Trade (1-3 months)', focus: 'SMA50/200 trend, fundamentals, macro environment, and sector rotation. Weight fundamentals and macro conditions more heavily than short-term price action.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA50=$${ta?.sma50} (${ta?.priceVsSma50}% from price) | SMA200=$${ta?.sma200} (${ta?.priceVsSma200}% from price) | Trend=${ta?.trendSignal} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)` },
-    longterm: { label: 'Long Term (6-12 months)',    focus: 'fundamentals, business quality, macro cycle, SMA200 trend, and analyst consensus. Weight P/E, revenue growth, ROE, and analyst targets most heavily. Short-term noise is irrelevant.', indicators: `RSI(14)=${ta?.rsi14} [${ta?.rsiSignal}] | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} (${ta?.priceVsSma200}% from price) | Trend=${ta?.trendSignal} | Analyst Target=$${fundamentals?.targetMeanPrice}` },
-  };
+export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, chain, news, bonds, macroNews, intlMarkets, calendar, ta, expiry, timeframeKey = 'swing') {
+  const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
+  const categorized = categorizeNews(news).slice(0, 8);
+  const calls       = chain?.topCalls?.slice(0, 5) || [];
+  const puts        = chain?.topPuts?.slice(0,  5) || [];
 
-  const tf = tfMeta[timeframeKey] || tfMeta.swing;
-
-  return callClaude({
-    model: 'claude-sonnet-4-20250514', max_tokens: 1400,
-    system: `You are a quantitative trading analyst with expertise in global macro, geopolitics, cross-market analysis, and institutional flow.
-Timeframe: ${tf.label}. Focus on: ${tf.focus}
-Consider how global markets (Asia, Europe), bond markets, VIX, USD, commodities, and economic calendar affect the stock.
-Weight analyst upgrades/downgrades and institutional fund activity heavily — these often precede large moves.
-[UPGRADE] and [INSIDER/FUND] tags are bullish signals. [DOWNGRADE] and [SHORT ATTACK] tags are bearish signals.
-The timeframe field in your response MUST reflect: "${tf.label}".
-Return ONLY a JSON object:
-{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":string,"bullFactors":[str,str,str],"bearFactors":[str,str,str],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":-100,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
-    messages: [{
-      role: 'user',
-      content: `Analyze ${ticker} at $${price?.toFixed(2)} for a ${tf.label} trade.
-TIMEFRAME CONTEXT: ${tf.focus}
-PRICE (last 5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
-FUNDAMENTALS: P/E=${fundamentals?.pe}, Beta=${fundamentals?.beta}, Target=$${fundamentals?.targetMeanPrice}, Rec=${fundamentals?.recommendationKey}, Analysts=${fundamentals?.numberOfAnalystOpinions}, ROE=${fundamentals?.roe}, RevGrowth=${fundamentals?.revenueGrowth}, GrossMargin=${fundamentals?.grossMargins}, D/E=${fundamentals?.debtToEquity}
-OPTIONS FLOW: P/C=${options?.putCallRatio?.toFixed(2)}, CallIV=${options?.avgCallIV}%, PutIV=${options?.avgPutIV}%
-TECHNICAL ANALYSIS: ${tf.indicators}
-${hasUpgrade   ? '⚠ RECENT UPGRADE DETECTED — bullish analyst sentiment shift' : ''}
-${hasDowngrade ? '⚠ RECENT DOWNGRADE DETECTED — bearish analyst sentiment shift' : ''}
-${hasFund      ? '⚠ INSTITUTIONAL/FUND ACTIVITY DETECTED — smart money movement' : ''}
-
-ANALYST & NEWS FLOW (weighted by type):
-${categorized.join('\n')}
-${macroCtx}
-For this ${tf.label} trade: how do Asian/European market moves, yield curve shape, VIX, DXY, analyst actions, fundamentals, and upcoming calendar events specifically affect ${ticker}?
-Set priceTarget and stopLoss appropriate for a ${tf.label} hold period.
-Return JSON only.`
-    }]
-  });
-}
-export async function runOptionsAnalysis(ticker, price, expiry, chain, fundamentals, news, priceSignal, bonds, macroNews, intlMarkets, calendar, ta) {
-  const calls = chain?.topCalls?.slice(0, 6) || [];
-  const puts  = chain?.topPuts?.slice(0,  6) || [];
-  const hasValidCalls = calls.some(c => c.mid > 0.10 && Math.abs(c.strike - price) <= 20);
-  const hasValidPuts  = puts.some( p => p.mid > 0.10 && Math.abs(p.strike - price) <= 20);
-  const macroCtx = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
-
-  const categorized  = categorizeNews(news).slice(0, 10);
   const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
   const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
   const hasTarget    = categorized.some(n => n.startsWith('[ANALYST TARGET]'));
   const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
   const hasShort     = categorized.some(n => n.startsWith('[SHORT ATTACK]'));
 
-  // Pre-calculate helper values for the prompt
-  const callMid       = calls[0]?.mid || 0;
-  const putMid        = puts[0]?.mid  || 0;
+  const callMid      = calls[0]?.mid || 0;
+  const putMid       = puts[0]?.mid  || 0;
   const callContracts = Math.max(1, Math.floor(1500 / (callMid * 100)));
   const putContracts  = Math.max(1, Math.floor(1500 / (putMid  * 100)));
-  const callStop      = (callMid * 0.50).toFixed(2);
-  const callTarget    = (callMid * 2.00).toFixed(2);
-  const putStop       = (putMid  * 0.50).toFixed(2);
-  const putTarget     = (putMid  * 2.00).toFixed(2);
+  const callStop     = (callMid * 0.50).toFixed(2);
+  const callTarget   = (callMid * 2.00).toFixed(2);
+  const putStop      = (putMid  * 0.50).toFixed(2);
+  const putTarget    = (putMid  * 2.00).toFixed(2);
 
-  return callClaude({
-    model: 'claude-sonnet-4-20250514', max_tokens: 1600,
-    system: `You are an expert options trader with deep knowledge of global macro, geopolitics, cross-market dynamics, and institutional flow.
-Factor in Asian/European market trends, bond yields, VIX, USD, and economic calendar when recommending options plays.
-Weight analyst actions heavily: [UPGRADE] boosts CALL conviction, [DOWNGRADE] boosts PUT conviction.
-[ANALYST TARGET] raises/cuts shift price expectations — factor into priceTarget and entryTiming.
-[INSIDER/FUND] buying = bullish, selling = bearish. [SHORT ATTACK] = strong bearish signal.
-Use EXACT bid/ask/mid prices from the contracts provided. Never invent prices.
-entryTiming and exitRule MUST contain SPECIFIC DOLLAR PRICES, not vague descriptions.
-Return ONLY this JSON:
-{"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","bestCall":{"strike":0,"expiry":"YYYY-MM-DD","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"YYYY-MM-DD","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"},"keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","positionSizing":"string"}`,
+  const tfMeta = {
+    short:    { label: 'Short Term (1-5 days)',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+    swing:    { label: 'Swing Trade (1-4 weeks)',     indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | Trend=${ta?.trendSignal} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+    position: { label: 'Position Trade (1-3 months)', indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal}` },
+    longterm: { label: 'Long Term (6-12 months)',     indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
+  };
+  const tf = tfMeta[timeframeKey] || tfMeta.swing;
+
+  const result = await callClaude({
+    model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+    system: `You are a quantitative trading analyst and expert options trader.
+Return ONLY a single JSON object with two keys: "price" and "options".
+No markdown, no explanation, just the JSON.`,
     messages: [{
       role: 'user',
-      content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry}
-Today: ${new Date().toLocaleDateString()} | Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'}
-Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact} | Global: ${priceSignal?.globalMarketTrend}
-TECHNICALS: RSI=${ta?.rsi14} [${ta?.rsiSignal}] | Trend=${ta?.trendSignal} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | Volume=${ta?.volumeSignal} (${ta?.volumeRatio}x)
-ANALYST CONSENSUS: ${fundamentals?.recommendationKey?.toUpperCase()} | Mean Target: $${fundamentals?.targetMeanPrice} | # Analysts: ${fundamentals?.numberOfAnalystOpinions}
-${hasUpgrade   ? '🟢 RECENT UPGRADE — analyst sentiment turning bullish, factor into CALL conviction' : ''}
-${hasDowngrade ? '🔴 RECENT DOWNGRADE — analyst sentiment turning bearish, factor into PUT conviction' : ''}
-${hasTarget    ? '📊 ANALYST TARGET CHANGE — adjust expected price range accordingly' : ''}
-${hasFund      ? '🏦 INSTITUTIONAL ACTIVITY — smart money movement detected' : ''}
-${hasShort     ? '⚠ SHORT ATTACK DETECTED — elevated downside risk' : ''}
+      content: `Analyze ${ticker} @ $${price?.toFixed(2)} | Timeframe: ${tf.label} | Expiry: ${expiry}
+Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'} | Today: ${new Date().toLocaleDateString()}
 
-ANALYST & NEWS FLOW (weighted by type):
-${categorized.join('\n')}
-
-=== ATM CALLS (spot $${price?.toFixed(2)}) ===
-${calls.map(c => `Strike=$${c.strike} | Bid=$${c.bid.toFixed(2)} | Ask=$${c.ask.toFixed(2)} | MID=$${c.mid.toFixed(2)} | IV=${c.iv}% | Delta=${c.delta} | OI=${c.oi}`).join('\n')}
-${!hasValidCalls ? 'WARNING: No liquid ATM calls' : ''}
-
-=== ATM PUTS (spot $${price?.toFixed(2)}) ===
-${puts.map(p => `Strike=$${p.strike} | Bid=$${p.bid.toFixed(2)} | Ask=$${p.ask.toFixed(2)} | MID=$${p.mid.toFixed(2)} | IV=${p.iv}% | Delta=${p.delta} | OI=${p.oi}`).join('\n')}
-${!hasValidPuts ? 'WARNING: No liquid ATM puts' : ''}
+TECHNICALS: ${tf.indicators}
+FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe} | RevGrowth=${fundamentals?.revenueGrowth}
+OPTIONS FLOW: P/C=${chain?.putCallRatio?.toFixed(2)} | CallIV=${chain?.avgCallIV}% | PutIV=${chain?.avgPutIV}%
+PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
+${hasUpgrade   ? '🟢 UPGRADE detected' : ''}${hasDowngrade ? '🔴 DOWNGRADE detected' : ''}${hasTarget ? '📊 TARGET CHANGE' : ''}${hasFund ? '🏦 INSTITUTIONAL activity' : ''}${hasShort ? '⚠ SHORT ATTACK' : ''}
+NEWS: ${categorized.slice(0, 6).join(' | ')}
 ${macroCtx}
+ATM CALLS: ${calls.map(c => `$${c.strike}|bid$${c.bid.toFixed(2)}|ask$${c.ask.toFixed(2)}|mid$${c.mid.toFixed(2)}|IV${c.iv}%|d${c.delta}|OI${c.oi}`).join(' ')}
+ATM PUTS:  ${puts.map(p => `$${p.strike}|bid$${p.bid.toFixed(2)}|ask$${p.ask.toFixed(2)}|mid$${p.mid.toFixed(2)}|IV${p.iv}%|d${p.delta}|OI${p.oi}`).join(' ')}
 
-MANDATORY RULES:
-1. Strike MUST be from contracts above, closest to $${price?.toFixed(2)}, OI > 50
-2. bid/ask/mid MUST exactly match selected contract row
-3. estimatedPremium = mid exactly
-4. maxContracts = floor(1500/(mid*100)), min 1
-5. totalCost = maxContracts * mid * 100
-6. maxLoss = totalCost
-7. expiry = exactly: ${expiry}
-8. entryTiming MUST be a specific stock price trigger, e.g: "Buy if ${ticker} holds above $${price?.toFixed(2)} at market open" or "Enter when ${ticker} breaks above $${(price * 1.005).toFixed(2)}"
-9. exitRule MUST contain exact premium prices: "Sell contract at $${callTarget} (100% gain). Stop loss: sell at $${callStop} (50% loss = -$${(parseFloat(callStop) * 100 * callContracts).toFixed(0)} total)"
-10. targetReturn MUST be: "Sell at $${callTarget} per contract — total profit $${((parseFloat(callTarget) - callMid) * 100 * callContracts).toFixed(0)}"
-11. Use the same exact price format for puts using their own mid prices
+Return this exact JSON structure:
+{
+  "price": {
+    "signal":"BUY"|"SELL"|"HOLD",
+    "confidence":0-100,
+    "priceTarget":number,
+    "stopLoss":number,
+    "timeframe":"${tf.label}",
+    "thesis":"string",
+    "bullFactors":["","",""],
+    "bearFactors":["","",""],
+    "riskLevel":"LOW"|"MEDIUM"|"HIGH",
+    "sentimentScore":0,
+    "macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL",
+    "bondSignal":"string",
+    "geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH",
+    "globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED",
+    "calendarRisk":"string"
+  },
+  "options": {
+    "recommendation":"CALL"|"PUT"|"NEUTRAL",
+    "confidence":0-100,
+    "reasoning":"string",
+    "ivRank":"LOW"|"MEDIUM"|"HIGH",
+    "ivComment":"string",
+    "macroSetup":"string",
+    "calendarWarning":"string",
+    "positionSizing":"string",
+    "keyRisks":["","",""],
+    "catalysts":["","",""],
+    "macroRisks":["",""],
+    "globalMarketRisk":"string",
+    "bestCall":{
+      "strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,
+      "estimatedPremium":0,"maxContracts":0,"totalCost":0,
+      "targetReturn":"Sell at $${callTarget} per contract — profit $${((parseFloat(callTarget) - callMid) * 100 * callContracts).toFixed(0)}",
+      "maxLoss":0,
+      "entryTiming":"Buy if ${ticker} holds above $${price?.toFixed(2)} at open",
+      "exitRule":"Sell at $${callTarget} (100% gain). Stop: $${callStop} (50% loss)",
+      "thesis":"string","delta":"string","iv":"string"
+    },
+    "bestPut":{
+      "strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,
+      "estimatedPremium":0,"maxContracts":0,"totalCost":0,
+      "targetReturn":"Sell at $${putTarget} per contract — profit $${((parseFloat(putTarget) - putMid) * 100 * putContracts).toFixed(0)}",
+      "maxLoss":0,
+      "entryTiming":"Buy if ${ticker} breaks below $${price?.toFixed(2)}",
+      "exitRule":"Sell at $${putTarget} (100% gain). Stop: $${putStop} (50% loss)",
+      "thesis":"string","delta":"string","iv":"string"
+    }
+  }
+}
+RULES: Use EXACT bid/ask/mid from contracts. Strike closest to $${price?.toFixed(2)}, OI>50. expiry="${expiry}". Return JSON only.`
+    }]
+  });
+
+  return {
+    priceSignal:   result.price,
+    optionsSignal: result.options,
+  };
+}
+
+// ─── Keep individual functions for scanner (price only) ───────────────────────
+
+export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing') {
+  const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
+  const categorized = categorizeNews(news).slice(0, 8);
+  const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
+  const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
+  const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
+
+  const tfMeta = {
+    short:    { label: 'Short Term (1-5 days)',      focus: 'momentum, RSI, volume spikes, news catalysts.',        indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x) | Trend=${ta?.trendSignal}` },
+    swing:    { label: 'Swing Trade (1-4 weeks)',     focus: 'trend direction, SMA20/50 crossovers, macro context.', indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | Trend=${ta?.trendSignal} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+    position: { label: 'Position Trade (1-3 months)', focus: 'SMA50/200 trend, fundamentals, macro environment.',    indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal}` },
+    longterm: { label: 'Long Term (6-12 months)',     focus: 'fundamentals, macro cycle, analyst consensus.',         indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
+  };
+  const tf = tfMeta[timeframeKey] || tfMeta.swing;
+
+  return callClaude({
+    model: 'claude-sonnet-4-20250514', max_tokens: 800,
+    system: `You are a quantitative trading analyst. Timeframe: ${tf.label}. Focus: ${tf.focus}
+[UPGRADE]/[INSIDER/FUND] = bullish. [DOWNGRADE]/[SHORT ATTACK] = bearish.
+Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
+    messages: [{
+      role: 'user',
+      content: `${ticker} @ $${price?.toFixed(2)} | ${tf.label}
+PRICE: ${JSON.stringify(ohlcv?.close?.slice(-5))}
+TECHNICALS: ${tf.indicators}
+FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe} | RevGrowth=${fundamentals?.revenueGrowth}
+OPTIONS FLOW: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%
+${hasUpgrade ? '🟢 UPGRADE' : ''}${hasDowngrade ? '🔴 DOWNGRADE' : ''}${hasFund ? '🏦 INSTITUTIONAL' : ''}
+NEWS: ${categorized.slice(0, 6).join(' | ')}
+${macroCtx}
 Return JSON only.`
+    }]
+  });
+}
+
+// Keep for backward compat with expiry switching
+export async function runOptionsAnalysis(ticker, price, expiry, chain, fundamentals, news, priceSignal, bonds, macroNews, intlMarkets, calendar, ta) {
+  const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
+  const categorized = categorizeNews(news).slice(0, 8);
+  const calls       = chain?.topCalls?.slice(0, 5) || [];
+  const puts        = chain?.topPuts?.slice(0,  5) || [];
+  const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
+  const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
+  const hasTarget    = categorized.some(n => n.startsWith('[ANALYST TARGET]'));
+  const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
+  const hasShort     = categorized.some(n => n.startsWith('[SHORT ATTACK]'));
+
+  const callMid      = calls[0]?.mid || 0;
+  const putMid       = puts[0]?.mid  || 0;
+  const callContracts = Math.max(1, Math.floor(1500 / (callMid * 100)));
+  const putContracts  = Math.max(1, Math.floor(1500 / (putMid  * 100)));
+  const callStop     = (callMid * 0.50).toFixed(2);
+  const callTarget   = (callMid * 2.00).toFixed(2);
+  const putStop      = (putMid  * 0.50).toFixed(2);
+  const putTarget    = (putMid  * 2.00).toFixed(2);
+
+  return callClaude({
+    model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+    system: `You are an expert options trader. Use EXACT bid/ask/mid from contracts. Never invent prices.
+[UPGRADE]=bullish CALL. [DOWNGRADE]=bearish PUT. [INSIDER/FUND]=smart money. [SHORT ATTACK]=bearish.
+Return ONLY JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"}}`,
+    messages: [{
+      role: 'user',
+      content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry} | ${isMarketClosed() ? 'CLOSED' : 'OPEN'}
+Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact} | Global: ${priceSignal?.globalMarketTrend}
+TECHNICALS: RSI=${ta?.rsi14} [${ta?.rsiSignal}] | Trend=${ta?.trendSignal} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)
+FUNDAMENTALS: Rec=${fundamentals?.recommendationKey?.toUpperCase()} | Target=$${fundamentals?.targetMeanPrice} | Analysts=${fundamentals?.numberOfAnalystOpinions}
+${hasUpgrade ? '🟢 UPGRADE' : ''}${hasDowngrade ? '🔴 DOWNGRADE' : ''}${hasTarget ? '📊 TARGET CHANGE' : ''}${hasFund ? '🏦 INSTITUTIONAL' : ''}${hasShort ? '⚠ SHORT ATTACK' : ''}
+NEWS: ${categorized.slice(0, 6).join(' | ')}
+CALLS: ${calls.map(c => `$${c.strike}|b$${c.bid.toFixed(2)}|a$${c.ask.toFixed(2)}|m$${c.mid.toFixed(2)}|IV${c.iv}%|d${c.delta}|OI${c.oi}`).join(' ')}
+PUTS:  ${puts.map(p => `$${p.strike}|b$${p.bid.toFixed(2)}|a$${p.ask.toFixed(2)}|m$${p.mid.toFixed(2)}|IV${p.iv}%|d${p.delta}|OI${p.oi}`).join(' ')}
+${macroCtx}
+RULES: Strike closest to $${price?.toFixed(2)}, OI>50. expiry="${expiry}". exitRule="Sell at $${callTarget} (100% gain). Stop: $${callStop}". Return JSON only.`
     }]
   });
 }
