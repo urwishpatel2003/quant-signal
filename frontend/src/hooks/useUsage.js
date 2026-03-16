@@ -1,6 +1,6 @@
 import { useUser } from '@clerk/clerk-react';
 
-const LIMITS = { scans: 5, options: 3 };
+const LIMITS = { scans: 10, options: 5 };
 
 function getKey(userId) {
   const today = new Date().toISOString().split('T')[0];
