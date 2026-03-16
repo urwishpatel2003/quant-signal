@@ -14,18 +14,18 @@ import HelpTab     from './tabs/HelpTab';
 import WelcomePage from './components/WelcomePage';
 
 export default function App() {
-  const [showWelcome,   setShowWelcome]   = useState(true);
+  const [enteredApp,    setEnteredApp]    = useState(false);
   const [activeTab,     setActiveTab]     = useState('scanner');
   const [optionsTicker, setOptionsTicker] = useState('');
 
-  const macro              = useMacroData();
-  const { user }           = useUser();
+  const macro                    = useMacroData();
+  const { user }                 = useUser();
   const { isLoaded, isSignedIn } = useAuth();
 
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
 
-  // Wait for Clerk to initialise
+  // Wait for Clerk
   if (!isLoaded) {
     return (
       <div style={{ minHeight: '100vh', background: '#07070e',
@@ -38,17 +38,14 @@ export default function App() {
     );
   }
 
-  // Already signed in — skip welcome
-  if (isSignedIn && showWelcome) {
-    setShowWelcome(false);
-  }
+  // Show welcome if: not signed in AND hasn't clicked Enter App
+  const showWelcome = !isSignedIn && !enteredApp;
 
-  // Welcome page — public, no auth required
   if (showWelcome) {
     return (
       <WelcomePage
-        onEnter={() => setShowWelcome(false)}
-        onNavigate={tab => { handleNavigate(tab); setShowWelcome(false); }}
+        onEnter={() => setEnteredApp(true)}
+        onNavigate={tab => { handleNavigate(tab); setEnteredApp(true); }}
       />
     );
   }
@@ -123,7 +120,7 @@ export default function App() {
         })}
       </div>
 
-      {/* ── Content — gated behind auth ── */}
+      {/* ── Content ── */}
       <div className="app-content">
         <SignedIn>
           {activeTab === 'scanner' && <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />}
