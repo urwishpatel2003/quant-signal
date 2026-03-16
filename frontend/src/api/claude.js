@@ -1,15 +1,22 @@
 import { isMarketClosed } from './tradier';
 
 async function callClaude(payload) {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/analyze`, {
+  const res  = await fetch(`${import.meta.env.VITE_API_BASE}/api/analyze`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload), mode: 'cors', credentials: 'omit',
   });
   const data = await res.json();
   const text = data.content?.[0]?.text || '{}';
-  return JSON.parse(text.replace(/```json|```/g, '').trim());
+  const clean = text.replace(/```json|```/g, '').trim();
+  try {
+    return JSON.parse(clean);
+  } catch (e) {
+    console.error('Claude JSON parse error:', e.message);
+    console.error('Raw response length:', clean.length);
+    console.error('Raw response tail:', clean.slice(-200));
+    throw new Error('AI response was cut off — please try again');
+  }
 }
-
 function categorizeNews(headlines) {
   return (headlines || []).map(n => {
     const t = n.title?.toLowerCase() || '';
@@ -85,7 +92,7 @@ export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, ch
   const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
   const result = await callClaude({
-    model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+    model: 'claude-sonnet-4-20250514', max_tokens: 1500,
     system: `You are a quantitative trading analyst and expert options trader.
 Return ONLY a single JSON object with two keys: "price" and "options".
 No markdown, no explanation, just the JSON.`,
@@ -184,7 +191,7 @@ export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, optio
   const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
   return callClaude({
-    model: 'claude-sonnet-4-20250514', max_tokens: 800,
+    model: 'claude-sonnet-4-20250514', max_tokens: 1500,
     system: `You are a quantitative trading analyst. Timeframe: ${tf.label}. Focus: ${tf.focus}
 [UPGRADE]/[INSIDER/FUND] = bullish. [DOWNGRADE]/[SHORT ATTACK] = bearish.
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
@@ -225,7 +232,7 @@ export async function runOptionsAnalysis(ticker, price, expiry, chain, fundament
   const putTarget    = (putMid  * 2.00).toFixed(2);
 
   return callClaude({
-    model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+    model: 'claude-sonnet-4-20250514', max_tokens: 1500,
     system: `You are an expert options trader. Use EXACT bid/ask/mid from contracts. Never invent prices.
 [UPGRADE]=bullish CALL. [DOWNGRADE]=bearish PUT. [INSIDER/FUND]=smart money. [SHORT ATTACK]=bearish.
 Return ONLY JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":0,"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"string","thesis":"string","delta":"string","iv":"string"}}`,
