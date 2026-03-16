@@ -110,7 +110,6 @@ async function polygonAggs(ticker, days = 10) {
     if (!bars.length) return null;
     const current = bars[bars.length - 1]?.c;
     const prev    = bars[bars.length - 2]?.c;
-    console.log(`[Polygon] ${ticker} → $${current?.toFixed(2)}`);
     return {
       current, prev,
       change:    current && prev ? current - prev : null,
@@ -161,30 +160,50 @@ app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Fundamentals — Polygon ───────────────────────────────────────────────────
+// ─── Fundamentals — Polygon + Tradier ────────────────────────────────────────
 
 app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   const { ticker } = req.params;
   try {
-    const [details, financials] = await Promise.all([
+    const [details, financials, quoteData] = await Promise.all([
       polygonGet(`/v3/reference/tickers/${ticker}`),
       polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=1&timeframe=annual`),
+      tradierGet(`/v1/markets/quotes?symbols=${ticker}&greeks=false`),
     ]);
+
     const d       = details?.results    || {};
     const f       = financials?.results?.[0]?.financials || {};
     const income  = f.income_statement  || {};
     const balance = f.balance_sheet     || {};
+    const q       = quoteData?.quotes?.quote || {};
+
     const revenue     = income.revenues?.value;
     const netIncome   = income.net_income_loss?.value;
     const totalEquity = balance.equity?.value;
     const totalDebt   = balance.liabilities?.value;
     const eps         = income.basic_earnings_per_share?.value;
     const grossProfit = income.gross_profit?.value;
+
+    // Tradier quote fields
+    const pe         = q.pe_ratio       || null;
+    const beta       = q.beta           || null;
+    const week52High = q.week_52_high   || null;
+    const week52Low  = q.week_52_low    || null;
+    const avgVolume  = q.average_volume || null;
+
     res.json({
       quoteSummary: {
         result: [{
-          summaryDetail:        { trailingPE: { raw: null }, beta: { raw: null } },
-          defaultKeyStatistics: { trailingEps: { raw: eps || null } },
+          summaryDetail: {
+            trailingPE:       { raw: pe   },
+            beta:             { raw: beta },
+            fiftyTwoWeekHigh: { raw: week52High },
+            fiftyTwoWeekLow:  { raw: week52Low  },
+            averageVolume:    { raw: avgVolume   },
+          },
+          defaultKeyStatistics: {
+            trailingEps: { raw: eps || null },
+          },
           financialData: {
             targetMeanPrice:         { raw: null },
             recommendationKey:       'hold',
@@ -230,7 +249,6 @@ app.get('/search', async (req, res) => {
     const seen    = new Set();
     const results = [];
 
-    // Exact ticker match first
     for (const t of (byTicker.results || [])) {
       if (!seen.has(t.ticker)) {
         seen.add(t.ticker);
@@ -238,7 +256,6 @@ app.get('/search', async (req, res) => {
       }
     }
 
-    // Name/partial matches — CS stocks first, ETFs after
     const nameResults = (byName.results || [])
       .filter(t => !seen.has(t.ticker))
       .sort((a, b) => {

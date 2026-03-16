@@ -31,6 +31,10 @@ export async function fetchFundamentals(ticker) {
     return {
       pe:                      r.summaryDetail?.trailingPE?.raw,
       eps:                     r.defaultKeyStatistics?.trailingEps?.raw,
+      beta:                    r.summaryDetail?.beta?.raw,
+      fiftyTwoWeekHigh:        r.summaryDetail?.fiftyTwoWeekHigh?.raw,
+      fiftyTwoWeekLow:         r.summaryDetail?.fiftyTwoWeekLow?.raw,
+      averageVolume:           r.summaryDetail?.averageVolume?.raw,
       roe:                     r.financialData?.returnOnEquity?.raw,
       debtToEquity:            r.financialData?.debtToEquity?.raw,
       revenueGrowth:           r.financialData?.revenueGrowth?.raw,
@@ -38,7 +42,6 @@ export async function fetchFundamentals(ticker) {
       targetMeanPrice:         r.financialData?.targetMeanPrice?.raw,
       recommendationKey:       r.financialData?.recommendationKey,
       numberOfAnalystOpinions: r.financialData?.numberOfAnalystOpinions?.raw,
-      beta:                    r.summaryDetail?.beta?.raw,
     };
   } catch { return null; }
 }

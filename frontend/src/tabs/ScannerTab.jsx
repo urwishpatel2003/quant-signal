@@ -18,6 +18,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIdx,    setActiveIdx]    = useState(-1);
   const [showUpgrade,  setShowUpgrade]  = useState(false);
+  const [isWide,       setIsWide]       = useState(window.innerWidth > 768);
   const dropdownRef = useRef(null);
   const scan = useScan(macro);
   const { usage, limits, canScan, trackScan } = useUsage();
@@ -27,6 +28,14 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
     : null;
 
+  // Track window width for responsive grid
+  useEffect(() => {
+    const handler = () => setIsWide(window.innerWidth > 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  // Fetch suggestions as user types
   useEffect(() => {
     if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
@@ -41,6 +50,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => clearTimeout(timer);
   }, [inputVal]);
 
+  // Close on outside mousedown
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -218,8 +228,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
       {/* ── Results: SignalCard left, Details right on desktop ── */}
       {scan.analysis && (
-        <div className="scanner-results-grid">
-
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isWide ? 'minmax(0, 1.6fr) minmax(0, 1fr)' : '1fr',
+          gap: 16,
+          alignItems: 'start',
+        }}>
           {/* Left — AI Recommendation */}
           <div className="fade-in">
             <SignalCard analysis={scan.analysis} news={scan.news} />
@@ -234,6 +248,8 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                   ['P/E',          scan.fundamentals.pe?.toFixed(1)],
                   ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
                   ['Beta',         scan.fundamentals.beta?.toFixed(2)],
+                  ['52W High',     scan.fundamentals.fiftyTwoWeekHigh ? `$${scan.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
+                  ['52W Low',      scan.fundamentals.fiftyTwoWeekLow  ? `$${scan.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
                   ['ROE',          scan.fundamentals.roe ? `${(scan.fundamentals.roe * 100).toFixed(1)}%` : null],
                   ['Gross Margin', scan.fundamentals.grossMargins ? `${(scan.fundamentals.grossMargins * 100).toFixed(1)}%` : null],
                   ['Rev Growth',   scan.fundamentals.revenueGrowth ? `${(scan.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
