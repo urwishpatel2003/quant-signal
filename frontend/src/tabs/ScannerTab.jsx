@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { SC, MC, GC } from '../utils/constants';
+import { SC, MC, GC, RC } from '../utils/constants';
 import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
 import { useUsage } from '../hooks/useUsage';
@@ -232,41 +232,76 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       </div>
 
-      {/* ── Price bar ── */}
+      {/* ── Clean Price Bar — ticker, price, change, chart only ── */}
       {scan.ohlcv && (
-        <div className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          background: '#0f0f18', border: '1px solid #1e1e2e', padding: '12px 16px', marginBottom: 20 }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24 }}>{scan.ticker}</div>
-          <div style={{ fontSize: 20, fontWeight: 600 }}>${livePrice?.toFixed(2)}</div>
-          <div style={{ fontSize: 13, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
-            {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
+        <div className="fade-in" style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          background: '#0f0f18', border: '1px solid #1e1e2e',
+          padding: '12px 16px', marginBottom: 16,
+        }}>
+          {/* Ticker + company */}
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1 }}>{scan.ticker}</div>
+            <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em' }}>
+              {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
+            </div>
           </div>
-          <span style={{ fontSize: 9, background: '#ffaa0011', border: '1px solid #ffaa0033',
-            color: '#ffaa00', padding: '2px 8px', borderRadius: 2 }}>
-            {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
-          </span>
-          {scan.ta?.rsiSignal && (
-            <span style={{ fontSize: 10, color: scan.ta.rsi14 > 70 ? '#ff4444' : scan.ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>
-              RSI: {scan.ta.rsi14} [{scan.ta.rsiSignal}]
-            </span>
-          )}
-          {scan.ta?.trendSignal && (
-            <span style={{ fontSize: 10, color: scan.ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444' }}>
-              {scan.ta.trendSignal === 'BULLISH' ? '▲' : '▼'} {scan.ta.trendSignal}
-            </span>
-          )}
-          {scan.ta?.sma200 && (
-            <span style={{ fontSize: 10, color: livePrice > scan.ta.sma200 ? '#00ff88' : '#ff4444' }}>
-              SMA200: ${scan.ta.sma200}
-            </span>
-          )}
-          {scan.analysis?.macroImpact       && <span style={{ fontSize: 10, color: MC[scan.analysis.macroImpact]       }}>MACRO: {scan.analysis.macroImpact}</span>}
-          {scan.analysis?.globalMarketTrend && <span style={{ fontSize: 10, color: GC[scan.analysis.globalMarketTrend] }}>GLOBAL: {scan.analysis.globalMarketTrend}</span>}
-          <div style={{ marginLeft: 'auto' }}><MiniChart data={scan.ohlcv} /></div>
+
+          {/* Price + change */}
+          <div>
+            <div style={{ fontSize: 24, fontWeight: 600 }}>${livePrice?.toFixed(2)}</div>
+            <div style={{ fontSize: 13, fontWeight: 600,
+              color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
+              {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div style={{ marginLeft: 'auto' }}>
+            <MiniChart data={scan.ohlcv} />
+          </div>
+
+          {/* Signal badge */}
           {scan.analysis && (
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: SC[scan.analysis.signal] }}>{scan.analysis.signal}</div>
-              <div style={{ fontSize: 10, color: '#555' }}>{scan.analysis.confidence}%</div>
+            <div style={{
+              textAlign: 'center', background: SC[scan.analysis.signal] + '11',
+              border: `1px solid ${SC[scan.analysis.signal]}44`,
+              padding: '8px 16px', borderRadius: 2,
+            }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: SC[scan.analysis.signal], lineHeight: 1 }}>
+                {scan.analysis.signal}
+              </div>
+              <div style={{ fontSize: 10, color: '#556' }}>{scan.analysis.confidence}%</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Quick signals card — shown after scan ── */}
+      {scan.analysis && (
+        <div className="card fade-in" style={{ marginBottom: 16, borderColor: SC[scan.analysis.signal] + '33' }}>
+          <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 12 }}>
+            SIGNAL OVERVIEW
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
+            {[
+              ['TARGET',   `$${scan.analysis.priceTarget?.toFixed(2)}`,  '#00ff88'],
+              ['STOP',     `$${scan.analysis.stopLoss?.toFixed(2)}`,      '#ff4444'],
+              ['RISK',     scan.analysis.riskLevel,                        scan.analysis.riskLevel === 'LOW' ? '#00ff88' : scan.analysis.riskLevel === 'HIGH' ? '#ff4444' : '#ffaa00'],
+              ['MACRO',    scan.analysis.macroImpact,                      MC[scan.analysis.macroImpact]],
+              ['GLOBAL',   scan.analysis.globalMarketTrend,                GC[scan.analysis.globalMarketTrend]],
+              ['GEO RISK', scan.analysis.geopoliticalRisk,                 scan.analysis.geopoliticalRisk === 'LOW' ? '#00ff88' : scan.analysis.geopoliticalRisk === 'HIGH' ? '#ff4444' : '#ffaa00'],
+            ].map(([l, v, c]) => (
+              <div key={l} style={{ background: '#070710', padding: '8px 10px', textAlign: 'center' }}>
+                <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>{l}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: c }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {scan.analysis.thesis && (
+            <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.7, marginTop: 12,
+              borderLeft: `2px solid ${SC[scan.analysis.signal]}44`, paddingLeft: 12 }}>
+              {scan.analysis.thesis}
             </div>
           )}
         </div>
@@ -280,7 +315,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           gap: 16,
           alignItems: 'start',
         }}>
-          {/* Left — AI Recommendation */}
+          {/* Left — Full Signal Card (bull/bear/news) */}
           <div className="fade-in">
             <SignalCard analysis={scan.analysis} news={scan.news} />
           </div>
