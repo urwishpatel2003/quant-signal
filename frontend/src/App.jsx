@@ -9,7 +9,6 @@ import MacroBar    from './components/MacroBar';
 import ScannerTab  from './tabs/ScannerTab';
 import OptionsTab  from './tabs/OptionsTab';
 import MarketsTab  from './tabs/MarketsTab';
-import ModelsTab   from './tabs/ModelsTab';
 import HelpTab     from './tabs/HelpTab';
 import WelcomePage from './components/WelcomePage';
 
@@ -126,7 +125,6 @@ export default function App() {
           {activeTab === 'scanner' && <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />}
           {activeTab === 'options' && <OptionsTab macro={macro} initialTicker={optionsTicker} />}
           {activeTab === 'markets' && <MarketsTab intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
-          {activeTab === 'models'  && <ModelsTab  macro={macro} />}
           {activeTab === 'help'    && <HelpTab />}
         </SignedIn>
 
