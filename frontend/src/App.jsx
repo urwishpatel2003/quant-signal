@@ -1,44 +1,40 @@
 import { useState } from 'react';
+import {
+  SignedIn, SignedOut, SignInButton,
+  UserButton, useUser,
+} from '@clerk/clerk-react';
 import { TABS } from './utils/constants';
 import { useMacroData } from './hooks/useMacroData';
 import MacroBar     from './components/MacroBar';
 import ScannerTab   from './tabs/ScannerTab';
 import OptionsTab   from './tabs/OptionsTab';
 import MarketsTab   from './tabs/MarketsTab';
-import WatchlistTab from './tabs/WatchlistTab';
-import PortfolioTab from './tabs/PortfolioTab';
-import JournalTab   from './tabs/JournalTab';
+import ModelsTab    from './tabs/ModelsTab';
 import HelpTab      from './tabs/HelpTab';
 import WelcomePage  from './components/WelcomePage';
 
 export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
-  const [activeTab, setActiveTab]         = useState('scanner');
-  const [optionsTicker, setOptionsTicker] = useState('');
-  const macro = useMacroData();
+  const [activeTab,      setActiveTab]      = useState('scanner');
+  const [optionsTicker,  setOptionsTicker]  = useState('');
+  const macro   = useMacroData();
+  const { user } = useUser();
 
-  const openOptions = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
-  const addToWatchlist = (ticker, analysis, price) => {
-    const key = 'qs_watchlist';
-    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-    if (!existing.find(w => w.ticker === ticker)) {
-      localStorage.setItem(key, JSON.stringify([...existing, { ticker, analysis, price, added: Date.now() }]));
-    }
-  };
+  const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
+  const handleNavigate = tab    => setActiveTab(tab);
 
-  const handleNavigate = (tab) => setActiveTab(tab);
-
+  // Welcome page — always public
   if (showWelcome) {
     return (
       <WelcomePage
         onEnter={() => setShowWelcome(false)}
-        onNavigate={handleNavigate}
+        onNavigate={tab => { handleNavigate(tab); setShowWelcome(false); }}
       />
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#07070e', color: '#c8c8d0', fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#07070e', color: '#c8c8d0', fontFamily: "'IBM Plex Mono', monospace" }}>
 
       {/* ── Header ── */}
       <div className="app-header">
@@ -52,12 +48,40 @@ export default function App() {
             AI-POWERED MARKET INTELLIGENCE
           </div>
         </div>
+
         <MacroBar
           bonds={macro.bonds}
           intlMarkets={macro.intlMarkets}
           macroNews={macro.macroNews}
           loading={macro.loading}
         />
+
+        {/* ── Auth ── */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap' }}>
+                SIGN IN
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {user?.firstName && (
+                <span style={{ fontSize: 10, color: '#445' }}>
+                  {user.firstName.toUpperCase()}
+                </span>
+              )}
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: { width: 28, height: 28 },
+                  }
+                }}
+              />
+            </div>
+          </SignedIn>
+        </div>
       </div>
 
       {/* ── Tabs ── */}
@@ -81,15 +105,32 @@ export default function App() {
         })}
       </div>
 
-      {/* ── Content ── */}
+      {/* ── Content — gated behind auth ── */}
       <div className="app-content">
-        {activeTab === 'scanner'   && <ScannerTab   macro={macro} onOpenOptions={openOptions} onAddToWatchlist={addToWatchlist} />}
-        {activeTab === 'options'   && <OptionsTab   macro={macro} initialTicker={optionsTicker} />}
-        {activeTab === 'markets'   && <MarketsTab   intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
-        {activeTab === 'watchlist' && <WatchlistTab macro={macro} onOpenOptions={openOptions} />}
-        {activeTab === 'portfolio' && <PortfolioTab />}
-        {activeTab === 'journal'   && <JournalTab />}
-        {activeTab === 'help'      && <HelpTab />}
+        <SignedIn>
+          {activeTab === 'scanner' && <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />}
+          {activeTab === 'options' && <OptionsTab macro={macro} initialTicker={optionsTicker} />}
+          {activeTab === 'markets' && <MarketsTab intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
+          {/* {activeTab === 'models'  && <ModelsTab  macro={macro} />} */}
+          {activeTab === 'help'    && <HelpTab />}
+        </SignedIn>
+
+        <SignedOut>
+          {/* Prompt sign in if user somehow lands on app without auth */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 20 }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
+              SIGN IN TO ACCESS
+            </div>
+            <div style={{ fontSize: 13, color: '#556', marginBottom: 8 }}>
+              Create a free account to use QuAInt Signal
+            </div>
+            <SignInButton mode="modal">
+              <button className="btn" style={{ fontSize: 14, padding: '14px 40px' }}>
+                SIGN IN / CREATE ACCOUNT
+              </button>
+            </SignInButton>
+          </div>
+        </SignedOut>
       </div>
     </div>
   );
