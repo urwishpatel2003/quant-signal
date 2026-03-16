@@ -1,29 +1,16 @@
 import { useEffect, useState } from 'react';
 
-const TICKERS = [
-  { sym: 'SPY',   price: '669.42', up: true  },
-  { sym: 'AAPL',  price: '189.30', up: false },
-  { sym: 'NVDA',  price: '875.20', up: true  },
-  { sym: 'TSLA',  price: '242.10', up: false },
-  { sym: 'QQQ',   price: '445.80', up: true  },
-  { sym: 'MSFT',  price: '415.60', up: true  },
-  { sym: 'AMZN',  price: '198.40', up: false },
-  { sym: 'META',  price: '523.10', up: true  },
-  { sym: 'GOOGL', price: '171.90', up: false },
-  { sym: 'AMD',   price: '162.30', up: true  },
-];
 
 const FEATURES = [
-  { icon: '🎯', title: 'AI Options Plays',  desc: 'Get exact entry price, exit price, and stop loss for CALL and PUT options — powered by Claude AI with global macro context.', tab: 'options',  color: '#00ff88' },
-  { icon: '📡', title: 'Market Scanner',    desc: 'Scan any ticker for BUY/SELL/HOLD signals with RSI, SMA, volume, and institutional flow analysis.',                           tab: 'scanner',  color: '#ffaa00' },
-  { icon: '🌍', title: 'Global Macro',      desc: 'Live bond yields, Asia/Europe markets, VIX, DXY, gold, and oil — all factored into every trade recommendation.',              tab: 'markets',  color: '#4488ff' },
-  { icon: '📓', title: 'Trade Journal',     desc: 'Log every trade, track your win rate, P&L, and average win vs loss. Know your real performance.',                              tab: 'journal',  color: '#ff8844' },
-  { icon: '✅', title: 'Trade Checklist',   desc: 'AI-powered GO/NO-GO verdict before every trade. 7 checks including trend, RSI, macro, IV, and earnings risk.',                tab: 'options',  color: '#aa44ff' },
-  { icon: '❓', title: 'Help & Guide',      desc: 'New to options? Step-by-step interactive guide covering everything from reading contracts to using the P&L simulator.',        tab: 'help',     color: '#ff4488' },
+  { icon: '⚡', title: 'AI Options Plays',    desc: 'Get exact entry price, exit price, and stop loss for CALL and PUT options — powered by Claude AI with global macro context.', tab: 'options',  color: '#00ff88' },
+  { icon: '📡', title: 'Stock Scanner',       desc: 'Scan any ticker for BUY/SELL/HOLD signals with RSI, SMA, volume, and institutional flow analysis. Know when to buy and when to stay out.', tab: 'scanner',  color: '#ffaa00' },
+  { icon: '🌍', title: 'Global Macro',        desc: 'Live bond yields, Asia/Europe markets, VIX, DXY, gold, and oil — all factored into every recommendation so you trade with the market, not against it.', tab: 'markets',  color: '#4488ff' },
+  { icon: '📐', title: 'Options Models',      desc: 'Black-Scholes pricer, IV calculator, Greeks dashboard, volatility surface, and strategy backtester — all the tools pros use, simplified.', tab: 'models',   color: '#ff8844' },
+  { icon: '✅', title: 'Trade Checklist',     desc: 'AI-powered GO/NO-GO verdict before every trade. 7 checks including trend, RSI, macro, IV, and earnings risk — never trade blind again.', tab: 'options',  color: '#aa44ff' },
+  { icon: '❓', title: 'Help & Guide',        desc: 'New to investing? Step-by-step interactive guide covering everything from reading charts to understanding options contracts.', tab: 'help',     color: '#ff4488' },
 ];
 
 export default function WelcomePage({ onEnter, onNavigate }) {
-  const [tickIdx, setTickIdx] = useState(0);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -42,7 +29,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
       <div className="welcome-hero">
         <div style={{ display: 'inline-block', fontSize: 10, letterSpacing: '0.3em',
           color: '#ffaa0088', border: '1px solid #ffaa0033', padding: '4px 16px', marginBottom: 24, borderRadius: 2 }}>
-          AI-POWERED OPTIONS TRADING
+          AI-POWERED INVESTING INTELLIGENCE
         </div>
 
         <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(48px, 10vw, 120px)',
@@ -54,11 +41,11 @@ export default function WelcomePage({ onEnter, onNavigate }) {
           <span style={{ color: '#ffaa00' }}>SIGNAL</span>
         </div>
 
-        <div style={{ fontSize: 'clamp(14px, 2vw, 18px)', color: '#8899aa', marginBottom: 12, fontWeight: 300 }}>
-          Institutional-grade options analysis for every trader
+        <div style={{ fontSize: 'clamp(14px, 2vw, 20px)', color: '#8899aa', marginBottom: 12, fontWeight: 300 }}>
+          Your AI investing buddy — stocks, options & global markets
         </div>
-        <div style={{ fontSize: 13, color: '#556', maxWidth: 500, margin: '0 auto 40px', lineHeight: 1.8 }}>
-          Real-time AI signals · Global macro context · Exact entry & exit prices · Trade journaling
+        <div style={{ fontSize: 13, color: '#556', maxWidth: 540, margin: '0 auto 40px', lineHeight: 1.8 }}>
+          Real-time AI signals · Global macro context · Exact entry & exit prices · Options analysis · Risk management
         </div>
 
         {/* CTA buttons */}
@@ -72,11 +59,42 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             HOW IT WORKS
           </button>
         </div>
+
+        {/* Live ticker spotlight */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12,
+          background: '#0f0f18', border: '1px solid #1e1e2e', padding: '10px 20px', borderRadius: 4 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00ff88',
+            boxShadow: '0 0 8px #00ff88', animation: 'pulse 1.5s infinite' }} />
+          <span style={{ fontSize: 11, color: '#445' }}>LIVE</span>
+          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00',
+            transition: 'all 0.3s', minWidth: 60 }}>{TICKERS[tickIdx].sym}</span>
+          <span style={{ fontSize: 13, color: TICKERS[tickIdx].up ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
+            ${TICKERS[tickIdx].price} {TICKERS[tickIdx].up ? '▲' : '▼'}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Value props ── */}
+      <div style={{ padding: '0 40px 40px', maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+          {[
+            { icon: '🤖', title: 'AI-Powered',       desc: 'Claude AI analyzes technicals, macro, and options flow together' },
+            { icon: '📊', title: 'Stocks + Options',  desc: 'BUY/SELL signals for stocks AND exact options plays with entry/exit' },
+            { icon: '🌍', title: 'Global Context',    desc: 'Every signal factors in bonds, VIX, Asia/Europe markets and more' },
+            { icon: '🎯', title: 'Actionable',        desc: 'No vague signals — exact strike, premium, entry price, stop loss' },
+          ].map((v, i) => (
+            <div key={i} style={{ background: '#0f0f18', border: '1px solid #1e1e2e', padding: '20px 16px', borderRadius: 4 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{v.icon}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#ffaa00', marginBottom: 6 }}>{v.title}</div>
+              <div style={{ fontSize: 11, color: '#556', lineHeight: 1.6 }}>{v.desc}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Features ── */}
       <div className="welcome-features">
-        <div style={{ textAlign: 'center', fontSize: 10, color: '#ffaa0066', letterSpacing: '0.3em', marginBottom: 24 }}>FEATURES</div>
+        <div style={{ textAlign: 'center', fontSize: 10, color: '#ffaa0066', letterSpacing: '0.3em', marginBottom: 24 }}>WHAT YOU GET</div>
         <div className="welcome-features-grid">
           {FEATURES.map((f, i) => (
             <div key={i} onClick={() => handleNavigate(f.tab)}
@@ -96,12 +114,12 @@ export default function WelcomePage({ onEnter, onNavigate }) {
       {/* ── About Us ── */}
       <div className="welcome-about">
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', fontSize: 10, color: '#ffaa0066', letterSpacing: '0.3em', marginBottom: 32 }}>ABOUT US</div>
+          <div style={{ textAlign: 'center', fontSize: 10, color: '#ffaa0066', letterSpacing: '0.3em', marginBottom: 32 }}>ABOUT</div>
           <div className="welcome-about-grid">
             <div>
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(24px, 4vw, 36px)',
                 color: '#ffaa00', lineHeight: 1.1, marginBottom: 16 }}>
-                BUILT FOR TRADERS<br />BY TRADERS
+                YOUR AI INVESTING<br />BUDDY
               </div>
               <div style={{ fontSize: 13, color: '#8899aa', lineHeight: 1.8, marginBottom: 16 }}>
                 QuAInt Signal was built out of frustration with expensive, complex trading tools
@@ -109,23 +127,24 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                 institutional-level analysis with plain English explanations anyone can follow.
               </div>
               <div style={{ fontSize: 13, color: '#8899aa', lineHeight: 1.8, marginBottom: 16 }}>
-                Every recommendation includes the exact entry price, exit price, and stop loss —
-                no vague "the stock looks bullish" nonsense. Just clear, actionable plays backed
-                by AI analysis of technicals, global macro, and real-time options flow.
+                Whether you're scanning stocks for swing trades or looking for the best options play,
+                every recommendation includes the exact entry price, exit price, and stop loss —
+                no vague "the stock looks bullish" nonsense. Just clear, actionable intelligence
+                backed by AI analysis of technicals, global macro, and real-time options flow.
               </div>
               <div style={{ fontSize: 13, color: '#8899aa', lineHeight: 1.8 }}>
-                Whether you're placing your first options trade or your thousandth, QuAInt Signal
+                Whether you're placing your first trade or your thousandth, QuAInt Signal
                 gives you the same data institutional desks use — without the six-figure subscription.
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { icon: '🤖', label: 'AI Engine',    value: 'Claude Sonnet by Anthropic',      color: '#00ff88' },
-                { icon: '📈', label: 'Options Data', value: 'Tradier — Real-time chains',       color: '#ffaa00' },
-                { icon: '📊', label: 'Market Data',  value: 'Yahoo Finance — Live quotes',      color: '#4488ff' },
-                { icon: '🌍', label: 'Macro Data',   value: 'Global bonds, FX, commodities',    color: '#ff8844' },
-                { icon: '🔒', label: 'Your Data',    value: 'Journal stored locally — private', color: '#aa44ff' },
+                { icon: '🤖', label: 'AI Engine',      value: 'Claude Sonnet by Anthropic',   color: '#00ff88' },
+                { icon: '📈', label: 'Options Data',   value: 'Tradier — Real-time chains',   color: '#ffaa00' },
+                { icon: '📊', label: 'Stock History',  value: 'Tradier — OHLCV + quotes',     color: '#4488ff' },
+                { icon: '🌍', label: 'Macro Data',     value: 'Polygon — Global ETF proxies', color: '#ff8844' },
+                { icon: '🔒', label: 'Your Privacy',   value: 'No accounts required — free',  color: '#aa44ff' },
               ].map((item, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14,
                   background: '#0f0f18', border: `1px solid ${item.color}22`,
@@ -147,7 +166,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
         <div style={{ fontSize: 10, color: '#2a2a3e', maxWidth: 700, margin: '0 auto', lineHeight: 1.8 }}>
           ⚠ RISK DISCLAIMER: QuAInt Signal is an educational and analytical tool only. Nothing on this
           platform constitutes financial advice, investment advice, or a recommendation to buy or sell
-          any security. Options trading involves significant risk and is not suitable for all investors.
+          any security. Trading involves significant risk and is not suitable for all investors.
           You may lose your entire investment. Always do your own research and consult a licensed
           financial advisor before trading.
         </div>
