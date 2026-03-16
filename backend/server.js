@@ -39,6 +39,31 @@ app.use('/api/analyze', claudeLimiter);
 app.use('/yahoo',       dataLimiter);
 app.use('/tradier',     dataLimiter);
 
+// ─── Usage tracking (in-memory, keyed by userId + date) ──────────────────────
+
+const usageStore = new Map();
+
+function getUsageKey(userId) {
+  const today = new Date().toISOString().split('T')[0];
+  return `${userId}_${today}`;
+}
+
+app.get('/usage/:userId', (req, res) => {
+  const key   = getUsageKey(req.params.userId);
+  const usage = usageStore.get(key) || { scans: 0, options: 0 };
+  res.json(usage);
+});
+
+app.post('/usage/:userId/track', (req, res) => {
+  const key   = getUsageKey(req.params.userId);
+  const usage = usageStore.get(key) || { scans: 0, options: 0 };
+  const { type } = req.body;
+  if (type === 'scan')    usage.scans++;
+  if (type === 'options') usage.options++;
+  usageStore.set(key, usage);
+  res.json(usage);
+});
+
 // ─── httpsGet helper ──────────────────────────────────────────────────────────
 
 function httpsGet(hostname, path, headers = {}) {
@@ -184,7 +209,6 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
     const eps         = income.basic_earnings_per_share?.value;
     const grossProfit = income.gross_profit?.value;
 
-    // Tradier quote fields
     const pe         = q.pe_ratio       || null;
     const beta       = q.beta           || null;
     const week52High = q.week_52_high   || null;

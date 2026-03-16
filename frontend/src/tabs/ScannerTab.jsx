@@ -12,6 +12,15 @@ import UpgradeModal   from '../components/UpgradeModal';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
 
+const STAGE_LABELS = {
+  price:        'FETCHING PRICE DATA...',
+  fundamentals: 'LOADING FUNDAMENTALS...',
+  options:      'SCANNING OPTIONS FLOW...',
+  news:         'GATHERING NEWS...',
+  claude:       'RUNNING AI ANALYSIS...',
+};
+const STAGES = ['price', 'fundamentals', 'options', 'news', 'claude'];
+
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [inputVal,     setInputVal]     = useState('');
   const [suggestions,  setSuggestions]  = useState([]);
@@ -28,14 +37,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
     : null;
 
-  // Track window width for responsive grid
   useEffect(() => {
     const handler = () => setIsWide(window.innerWidth > 768);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  // Fetch suggestions as user types
   useEffect(() => {
     if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
@@ -50,7 +57,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => clearTimeout(timer);
   }, [inputVal]);
 
-  // Close on outside mousedown
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -92,8 +98,56 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   };
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       {showUpgrade && <UpgradeModal type="scan" onClose={() => setShowUpgrade(false)} />}
+
+      {/* ── Full screen loading overlay ── */}
+      {scan.loading && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 7, 14, 0.88)', backdropFilter: 'blur(4px)',
+          zIndex: 999, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 20,
+        }}>
+          <div style={{
+            width: 60, height: 60, borderRadius: '50%',
+            border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 24, color: '#ffaa00',
+              letterSpacing: '0.15em', marginBottom: 8,
+            }}>
+              ANALYZING
+            </div>
+            <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
+              {STAGE_LABELS[scan.stage] || 'LOADING...'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {STAGES.map((s, i) => {
+              const currentIdx = STAGES.indexOf(scan.stage);
+              const done   = i < currentIdx;
+              const active = i === currentIdx;
+              return (
+                <div key={s} style={{
+                  width:        active ? 12 : 8,
+                  height:       active ? 12 : 8,
+                  borderRadius: '50%',
+                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition:   'all 0.3s',
+                  boxShadow:    active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
+                }} />
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: '#334' }}>
+            {scan.ticker && `${scan.ticker} · `}This may take 10–20 seconds
+          </div>
+        </div>
+      )}
 
       {/* ── Controls ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -145,14 +199,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             {scan.ticker && !scan.loading && (
               <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
                 onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
-            )}
-            {scan.loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 16, height: 16, borderRadius: '50%',
-                  border: '2px solid #ffaa0033', borderTop: '2px solid #ffaa00',
-                  animation: 'spin 0.8s linear infinite' }} />
-                <span style={{ fontSize: 10, color: '#ffaa0066' }}>ANALYZING...</span>
-              </div>
             )}
             {scan.error && <div style={{ fontSize: 11, color: '#ff4444' }}>{scan.error}</div>}
           </div>
