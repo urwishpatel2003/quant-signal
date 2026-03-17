@@ -18,7 +18,7 @@ import UsageBadge      from '../components/UsageBadge';
 import UpgradeModal    from '../components/UpgradeModal';
 
 export default function OptionsTab({ macro, initialTicker }) {
-  const [inputVal,       setInputVal]       = useState(initialTicker || 'AAPL');
+  const [inputVal,       setInputVal]       = useState(initialTicker || '');
   const [ticker,         setTicker]         = useState('');
   const [loading,        setLoading]        = useState(false);
   const [reanalyzing,    setReanalyzing]    = useState(false);
@@ -35,16 +35,79 @@ export default function OptionsTab({ macro, initialTicker }) {
   const [optionsSignal,  setOptionsSignal]  = useState(null);
   const [selectedSide,   setSelectedSide]   = useState(null);
   const [showUpgrade,    setShowUpgrade]    = useState(false);
+  const [priceLoaded,    setPriceLoaded]    = useState(false);
 
   const { usage, limits, canOptions, trackOptions, refreshUsage } = useUsage();
 
   useEffect(() => {
-    if (initialTicker) { setInputVal(initialTicker); run(initialTicker); }
+    if (initialTicker) { setInputVal(initialTicker); fetchTickerPrice(initialTicker); }
   }, [initialTicker]);
 
+  // Step 1 — fetch price + expirations when ticker entered
+  const fetchTickerPrice = async t => {
+    const sym = t.toUpperCase();
+    setTicker(sym); setError(''); setPriceLoaded(false);
+    setQuote(null); setOhlcv(null); setTa(null);
+    setExpirations([]); setSelectedExpiry('');
+    setOptionsSignal(null); setPriceSignal(null);
+    try {
+      const [q, p, exps] = await Promise.all([
+        fetchTradierQuote(sym),
+        fetchPrice(sym),
+        fetchTradierExpirations(sym),
+      ]);
+      if (!q && !p) throw new Error('Ticker not found');
+      setQuote(q); setOhlcv(p);
+      setTa(calcIndicators(p));
+      setExpirations(exps);
+      if (exps.length > 0) setSelectedExpiry(exps[0]);
+      setPriceLoaded(true);
+    } catch (e) { setError(e.message); }
+  };
+
+  const handleTickerSubmit = () => {
+    if (!inputVal.trim()) return;
+    fetchTickerPrice(inputVal);
+  };
+
+  // Step 2 — run full options analysis
+  const run = async () => {
+    if (!ticker || !selectedExpiry) return;
+    await refreshUsage();
+    if (!canOptions()) { setShowUpgrade(true); return; }
+    trackOptions();
+    setLoading(true); setError(''); setOptionsSignal(null); setPriceSignal(null);
+    setSelectedSide(null);
+    try {
+      const livePrice = quote?.last || ohlcv?.current;
+
+      setStage('chain');
+      const [c, f, n] = await Promise.all([
+        fetchTradierChain(ticker, selectedExpiry, livePrice),
+        fetchFundamentals(ticker),
+        fetchStockNews(ticker),
+      ]);
+      setFundamentals(f); setNews(n);
+
+      setStage('options-signal');
+      const { priceSignal: ps, optionsSignal: os } = await runCombinedAnalysis(
+        ticker, livePrice, ohlcv, f, c, n,
+        macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar,
+        ta, selectedExpiry, 'swing'
+      );
+      setPriceSignal(ps);
+      setOptionsSignal(os);
+      setStage('done');
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  // Expiry switch — re-analyze with new expiry
   const switchExpiry = async expiry => {
     if (!ticker || reanalyzing) return;
-    setSelectedExpiry(expiry); setReanalyzing(true); setOptionsSignal(null);
+    setSelectedExpiry(expiry);
+    if (!optionsSignal) return; // only re-analyze if already have results
+    setReanalyzing(true); setOptionsSignal(null);
     try {
       const livePrice = quote?.last || ohlcv?.current;
       const c  = await fetchTradierChain(ticker, expiry, livePrice);
@@ -54,63 +117,15 @@ export default function OptionsTab({ macro, initialTicker }) {
     finally { setReanalyzing(false); }
   };
 
-  const run = async t => {
-    // Always re-fetch usage from server first for cross-device consistency
-    await refreshUsage();
-    if (!canOptions()) { setShowUpgrade(true); return; }
-    trackOptions();
-    setLoading(true); setError(''); setOptionsSignal(null); setPriceSignal(null);
-    setTa(null); setSelectedSide(null);
-    const sym = t.toUpperCase(); setTicker(sym);
-    try {
-      setStage('quote');
-      const [q, p] = await Promise.all([fetchTradierQuote(sym), fetchPrice(sym)]);
-      if (!q && !p) throw new Error('Ticker not found');
-      setQuote(q); setOhlcv(p);
-      const livePrice  = q?.last || p?.current;
-      const indicators = calcIndicators(p);
-      setTa(indicators);
-
-      setStage('expirations');
-      const [exps, f, n] = await Promise.all([
-        fetchTradierExpirations(sym),
-        fetchFundamentals(sym),
-        fetchStockNews(sym),
-      ]);
-      if (exps.length === 0) throw new Error('No valid expirations found');
-      setExpirations(exps);
-      setFundamentals(f);
-      setNews(n);
-      const nextExpiry = exps[0];
-
-      setStage('chain');
-      const c = await fetchTradierChain(sym, nextExpiry, livePrice);
-      setSelectedExpiry(nextExpiry);
-
-      setStage('options-signal');
-      const { priceSignal: ps, optionsSignal: os } = await runCombinedAnalysis(
-        sym, livePrice, p, f, c, n,
-        macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar,
-        indicators, nextExpiry, 'swing'
-      );
-      setPriceSignal(ps);
-      setOptionsSignal(os);
-      setStage('done');
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  const livePrice    = quote?.last || ohlcv?.current;
-  const changePct    = quote?.changePct || (ohlcv?.current && ohlcv?.prev ? ((ohlcv.current - ohlcv.prev) / ohlcv.prev * 100) : null);
-  const recColor     = optionsSignal?.recommendation === 'CALL' ? '#00ff88' : optionsSignal?.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
-  const ivColor      = optionsSignal?.ivRank === 'LOW' ? '#00ff88' : optionsSignal?.ivRank === 'HIGH' ? '#ff4444' : '#ffaa00';
-  const activeSide   = selectedSide || optionsSignal?.recommendation || 'CALL';
+  const livePrice  = quote?.last || ohlcv?.current;
+  const changePct  = quote?.changePct || (ohlcv?.current && ohlcv?.prev ? ((ohlcv.current - ohlcv.prev) / ohlcv.prev * 100) : null);
+  const recColor   = optionsSignal?.recommendation === 'CALL' ? '#00ff88' : optionsSignal?.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
+  const ivColor    = optionsSignal?.ivRank === 'LOW' ? '#00ff88' : optionsSignal?.ivRank === 'HIGH' ? '#ff4444' : '#ffaa00';
+  const activeSide = selectedSide || optionsSignal?.recommendation || 'CALL';
   const activeSignal = { ...optionsSignal, recommendation: activeSide };
 
-  const STAGES = ['quote', 'expirations', 'chain', 'options-signal'];
+  const STAGES = ['chain', 'options-signal'];
   const stageLabels = {
-    'quote':          'FETCHING PRICE DATA...',
-    'expirations':    'LOADING OPTIONS CHAIN...',
     'chain':          'SCANNING OPTIONS FLOW...',
     'options-signal': 'GENERATING OPTIONS PLAYS...',
   };
@@ -162,19 +177,22 @@ export default function OptionsTab({ macro, initialTicker }) {
         </div>
       )}
 
-      {/* ── Top bar ── */}
+      {/* ── Step 1: Ticker input ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, width: '100%' }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
-            <input value={inputVal} onChange={e => setInputVal(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && !loading && run(inputVal)}
-              placeholder="TICKER" className="input"
+            <input value={inputVal}
+              onChange={e => setInputVal(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === 'Enter' && handleTickerSubmit()}
+              placeholder="ENTER TICKER..."
+              className="input"
               style={{ padding: '10px 12px 10px 26px', fontSize: 14, fontWeight: 600 }} />
           </div>
-          <button className="btn" disabled={loading} onClick={() => run(inputVal)}
-            style={{ whiteSpace: 'nowrap' }}>
-            {loading ? 'ANALYZING...' : 'FIND OPTIONS PLAYS'}
+          <button className="btn-sm"
+            onClick={handleTickerSubmit}
+            style={{ whiteSpace: 'nowrap', color: '#ffaa00', borderColor: '#ffaa0044', padding: '10px 16px' }}>
+            LOAD
           </button>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -182,74 +200,156 @@ export default function OptionsTab({ macro, initialTicker }) {
             <div style={{ fontSize: 10, color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
               {isMarketClosed() ? '🔴 MKT CLOSED' : '🟢 MKT OPEN'}
             </div>
-            {macro?.bonds?.isYahoo && macro.bonds.tnx?.current && (
-              <div style={{ fontSize: 10, color: '#ffaa0066' }}>
-                10Y: {macro.bonds.tnx.current.toFixed(2)}%{macro.bonds.inverted ? ' ⚠' : ''}
-              </div>
-            )}
             {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
           </div>
           <UsageBadge used={usage.options} limit={limits.options} label="ANALYSES" />
         </div>
       </div>
 
-      {/* ── Price bar ── */}
-      {(quote || ohlcv) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          background: '#0f0f18', border: '1px solid #1e1e2e', padding: '12px 16px', marginBottom: 12 }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24 }}>{ticker}</div>
-          <div style={{ fontSize: 20, fontWeight: 600 }}>${livePrice?.toFixed(2)}</div>
-          {changePct !== null && (
-            <div style={{ fontSize: 13, color: changePct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
-              {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(2)}%
+      {/* ── Clean Price Bar — no signals ── */}
+      {priceLoaded && (quote || ohlcv) && (
+        <div className="fade-in" style={{
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+          background: '#0f0f18', border: '1px solid #1e1e2e',
+          padding: '14px 16px', marginBottom: 16,
+        }}>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
+              {ticker}
             </div>
-          )}
-          {ta?.rsi14      && <span style={{ fontSize: 10, color: ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>RSI: {ta.rsi14} [{ta.rsiSignal}]</span>}
-          {ta?.trendSignal && <span style={{ fontSize: 10, color: ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444' }}>{ta.trendSignal === 'BULLISH' ? '▲' : '▼'} {ta.trendSignal}</span>}
-          {priceSignal?.macroImpact       && <span style={{ fontSize: 10, color: MC[priceSignal.macroImpact]       }}>MACRO: {priceSignal.macroImpact}</span>}
-          {priceSignal?.globalMarketTrend && <span style={{ fontSize: 10, color: GC[priceSignal.globalMarketTrend] }}>GLOBAL: {priceSignal.globalMarketTrend}</span>}
-          {priceSignal?.geopoliticalRisk  && <span style={{ fontSize: 10, color: RC[priceSignal.geopoliticalRisk]  }}>GEO: {priceSignal.geopoliticalRisk}</span>}
-          <div style={{ marginLeft: 'auto' }}><MiniChart data={ohlcv} /></div>
-          {optionsSignal && !reanalyzing && (
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: recColor }}>LONG {optionsSignal.recommendation}S</div>
-              <div style={{ fontSize: 10, color: '#555' }}>{optionsSignal.confidence}%</div>
+            <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginTop: 2 }}>
+              {isMarketClosed() ? 'MARKET CLOSED' : 'LIVE'}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Expiry selector ── */}
-      {expirations.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ fontSize: 10, color: '#444', marginRight: 4 }}>EXPIRY:</div>
-          {expirations.slice(0, 8).map(exp => (
-            <button key={exp} className="btn-sm"
-              style={{ color: selectedExpiry === exp ? '#ffaa00' : '#556', borderColor: selectedExpiry === exp ? '#ffaa00' : '#2a2a3e', background: selectedExpiry === exp ? '#ffaa0011' : '#1a1a2e' }}
-              onClick={() => switchExpiry(exp)} disabled={reanalyzing || loading}>
-              {exp}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── Single column layout ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {!optionsSignal && !loading && !reanalyzing && (
-          <div className="card" style={{ textAlign: 'center', padding: 40, color: '#333' }}>
-            <div style={{ fontSize: 14, marginBottom: 8 }}>Enter a ticker and click FIND OPTIONS PLAYS</div>
-            <div style={{ fontSize: 11 }}>Includes RSI · SMA · Volume · Bond market · Global macro analysis</div>
           </div>
-        )}
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: changePct !== null && changePct >= 0 ? '#00ff88' : '#ff4444' }}>
+              {changePct !== null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          {ta?.rsi14 && (
+            <div style={{ fontSize: 11, color: ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>
+              RSI {ta.rsi14}
+            </div>
+          )}
+          {ta?.trendSignal && (
+            <div style={{ fontSize: 11, color: ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444' }}>
+              {ta.trendSignal === 'BULLISH' ? '▲' : '▼'} {ta.trendSignal}
+            </div>
+          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
+            <MiniChart data={ohlcv} />
+            {optionsSignal && !reanalyzing && (
+              <div style={{
+                textAlign: 'center',
+                background: recColor + '11',
+                border: `1px solid ${recColor}44`,
+                padding: '8px 16px', borderRadius: 2, minWidth: 90,
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: recColor, lineHeight: 1 }}>
+                  LONG {optionsSignal.recommendation}S
+                </div>
+                <div style={{ fontSize: 10, color: '#556', marginTop: 2 }}>{optionsSignal.confidence}%</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
+      {/* ── Step 2: Expiry selector — prominent card ── */}
+      {priceLoaded && expirations.length > 0 && (
+        <div className="card fade-in" style={{
+          marginBottom: 16,
+          borderColor: optionsSignal ? '#1e1e2e' : '#ffaa0044',
+          borderWidth: optionsSignal ? 1 : 1,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.2em', marginBottom: 2 }}>
+                STEP 2 — SELECT EXPIRY DATE
+              </div>
+              <div style={{ fontSize: 11, color: '#556' }}>
+                Choose when your options contract expires
+              </div>
+            </div>
+            {!optionsSignal && (
+              <div style={{ fontSize: 9, color: '#ffaa0066', background: '#ffaa0011',
+                border: '1px solid #ffaa0033', padding: '3px 10px', borderRadius: 2 }}>
+                REQUIRED
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {expirations.slice(0, 10).map((exp, i) => {
+              const isSelected = selectedExpiry === exp;
+              const daysOut = Math.round((new Date(exp) - new Date()) / (1000 * 60 * 60 * 24));
+              const label   = daysOut <= 7 ? 'THIS WEEK' : daysOut <= 30 ? 'THIS MONTH' : daysOut <= 90 ? 'QUARTERLY' : 'LEAPS';
+              const labelColor = daysOut <= 7 ? '#ff4444' : daysOut <= 30 ? '#ffaa00' : daysOut <= 90 ? '#00ff88' : '#4488ff';
+              return (
+                <button key={exp}
+                  onClick={() => switchExpiry(exp)}
+                  disabled={reanalyzing || loading}
+                  style={{
+                    background:   isSelected ? '#ffaa0011' : '#0a0a14',
+                    border:       `1px solid ${isSelected ? '#ffaa00' : '#2a2a3e'}`,
+                    color:        isSelected ? '#ffaa00' : '#556',
+                    cursor:       'pointer',
+                    padding:      '8px 12px',
+                    borderRadius: 2,
+                    display:      'flex',
+                    flexDirection: 'column',
+                    alignItems:   'center',
+                    gap:          2,
+                    transition:   'all 0.15s',
+                    fontFamily:   'inherit',
+                    minWidth:     80,
+                  }}>
+                  <span style={{ fontSize: 12, fontWeight: isSelected ? 600 : 400 }}>{exp}</span>
+                  <span style={{ fontSize: 9, color: isSelected ? labelColor : '#334' }}>{label}</span>
+                  <span style={{ fontSize: 9, color: isSelected ? '#ffaa0088' : '#2a2a3e' }}>{daysOut}d</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 3: Find Options Plays button ── */}
+      {priceLoaded && !optionsSignal && !loading && (
+        <button className="btn" onClick={run}
+          disabled={!selectedExpiry || loading}
+          style={{ width: '100%', fontSize: 15, padding: '14px', marginBottom: 16,
+            opacity: selectedExpiry ? 1 : 0.4 }}>
+          ⚡ FIND OPTIONS PLAYS FOR {ticker} — {selectedExpiry}
+        </button>
+      )}
+
+      {/* ── Empty state ── */}
+      {!priceLoaded && !error && (
+        <div className="card" style={{ textAlign: 'center', padding: 48, color: '#333' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
+          <div style={{ fontSize: 14, color: '#556', marginBottom: 8 }}>
+            Enter a ticker above to get started
+          </div>
+          <div style={{ fontSize: 11, color: '#334', lineHeight: 1.6 }}>
+            Step 1: Enter ticker · Step 2: Select expiry · Step 3: Get AI options plays
+          </div>
+        </div>
+      )}
+
+      {/* ── Results ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {optionsSignal && !reanalyzing && (
           <>
             <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
 
+            {/* AI Recommendation */}
             <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>AI OPTIONS RECOMMENDATION · {selectedExpiry}</div>
+                  <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>
+                    AI OPTIONS RECOMMENDATION · {selectedExpiry}
+                  </div>
                   <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>
                     LONG {optionsSignal.recommendation}S
                   </div>
@@ -275,6 +375,7 @@ export default function OptionsTab({ macro, initialTicker }) {
               )}
             </div>
 
+            {/* Contract cards */}
             <div className="options-contracts">
               <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
               <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
@@ -285,6 +386,7 @@ export default function OptionsTab({ macro, initialTicker }) {
             <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
             <RiskRewardBar optionsSignal={activeSignal} />
 
+            {/* Technical + Underlying Signal */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               {ta && <TechnicalPanel ta={ta} />}
               {priceSignal && (
@@ -332,6 +434,7 @@ export default function OptionsTab({ macro, initialTicker }) {
 
             <BondPanel bonds={macro?.bonds} />
 
+            {/* Catalysts / Risks / Macro */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div className="card">
                 <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8 }}>⚡ CATALYSTS</div>
