@@ -1,24 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-
-    <!-- Google Analytics -->
-      <script async src="https://www.googletagmanager.com/gtag/js?id=G-4LKYVR1S23"></script>
-        <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-4LKYVR1S23');
-        </script>
-
-
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4LKYVR1S23"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-4LKYVR1S23');
+    </script>
+
     <!-- Primary SEO -->
     <title>QuAInt Signal — AI Trade Signals for Stocks & Options</title>
-    <meta name="description" content="AI-powered trade signals for stocks and options. Get exact entry price, exit price, stop loss, and global macro context for every trade. Built on Claude AI with live options flow." />
-    <meta name="keywords" content="AI trade signals, options trading, stock scanner, entry exit levels, macro analysis, options plays, AI investing" />
+    <meta name="description" content="AI-powered trade signals for stocks and options. Get exact entry price, exit price, stop loss, and global macro context for every trade. Built on Claude AI with live options flow analysis." />
+    <meta name="keywords" content="AI trade signals, options trading, stock scanner, entry exit levels, macro analysis, options plays, AI investing, Black-Scholes, implied volatility, options flow" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quaint-signal.tech" />
 
@@ -38,13 +36,13 @@
     <meta name="twitter:image"       content="https://quaint-signal.tech/og-image.png" />
 
     <!-- PWA -->
-    <meta name="theme-color"                    content="#ffaa00" />
-    <meta name="mobile-web-app-capable"         content="yes" />
-    <meta name="apple-mobile-web-app-capable"   content="yes" />
+    <meta name="theme-color"                           content="#ffaa00" />
+    <meta name="mobile-web-app-capable"                content="yes" />
+    <meta name="apple-mobile-web-app-capable"          content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title"     content="QuAInt Signal" />
-    <link rel="apple-touch-icon"  href="/icon-192.png" />
-    <link rel="manifest"          href="/manifest.json" />
+    <meta name="apple-mobile-web-app-title"            content="QuAInt Signal" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest"         href="/manifest.json" />
 
     <!-- Structured Data — Organization -->
     <script type="application/ld+json">
@@ -55,9 +53,7 @@
       "url": "https://quaint-signal.tech",
       "logo": "https://quaint-signal.tech/icon-512.png",
       "description": "AI-powered trade signals for stocks and options with global macro context.",
-      "sameAs": [
-        "https://twitter.com/QuAIntSignal"
-      ]
+      "sameAs": ["https://twitter.com/QuAIntSignal"]
     }
     </script>
 
@@ -117,16 +113,45 @@
             "@type": "Answer",
             "text": "QuAInt Signal covers US stocks and options across all major tickers, with global macro context including Asian markets (Nikkei, Hang Seng), European markets (DAX, FTSE, CAC), US bond yields, VIX, DXY, gold, and oil."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "What options models does QuAInt Signal include?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuAInt Signal includes Black-Scholes option pricer, Binomial tree model, Implied Volatility calculator, Greeks dashboard (Delta, Gamma, Theta, Vega, Rho), Volatility Surface viewer, and a Strategy Backtester."
+          }
         }
       ]
     }
     </script>
   </head>
   <body style="margin:0; background:#07070e;">
-    <!-- H1 for SEO — hidden visually but readable by search engines -->
-    <h1 style="position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0;">
-      QuAInt Signal — AI Trade Signals for Stocks and Options
-    </h1>
+
+    <!-- SEO content — readable by crawlers, hidden visually -->
+    <div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">
+      <h1>QuAInt Signal — AI Trade Signals for Stocks and Options</h1>
+      <h2>AI-Powered Stock Scanner and Options Trading Signals</h2>
+      <p>QuAInt Signal is an AI-powered investing platform built on Claude AI by Anthropic. Our system analyzes any US stock or options contract using technical indicators including RSI, SMA20, SMA50, SMA200, and volume, combined with real-time options flow data from Tradier, company fundamentals, news sentiment analysis, and global macro conditions including bond yields, VIX fear index, DXY dollar strength, gold, oil, and 15 international markets across Asia and Europe.</p>
+      <h2>Key Features</h2>
+      <ul>
+        <li>AI Stock Scanner with BUY, SELL, and HOLD signals for any ticker across 4 timeframes</li>
+        <li>Options plays with exact entry price, exit price, and stop loss levels</li>
+        <li>Global macro context including 15 international markets, US bond yields, VIX, DXY, gold, and oil</li>
+        <li>Trade checklist with GO or NO-GO verdict based on 7 risk factors including trend, RSI, macro, IV, and earnings risk</li>
+        <li>P&L simulator to model profit and loss outcomes before placing trades</li>
+        <li>Options pricing models including Black-Scholes pricer, Binomial tree, IV calculator, Greeks dashboard, Volatility Surface, and Strategy Backtester</li>
+      </ul>
+      <h2>How It Works</h2>
+      <p>Enter any stock ticker to receive an AI-generated signal with exact entry price, price target, and stop loss. The AI analyzes technical indicators, real-time options flow data, fundamentals, recent news sentiment, and global macro conditions. Every recommendation includes the specific strike price, expiry date, estimated premium, entry timing, and exit rules for both CALL and PUT options.</p>
+      <h2>Free and Pro Plans</h2>
+      <p>QuAInt Signal offers a free tier with 10 stock scans and 5 options analyses per day. The Pro plan at $15 per month provides unlimited access to all features.</p>
+      <h2>Supported Markets</h2>
+      <p>QuAInt Signal covers all US stocks and options. Global macro context includes Nikkei 225, Hang Seng, Shanghai Composite, Sensex, DAX, FTSE 100, CAC 40, US Treasury yields at 2-year, 10-year, and 30-year maturities, VIX volatility index, DXY dollar index, gold prices, and crude oil prices.</p>
+      <h2>Options Analysis</h2>
+      <p>Options analysis uses real-time chain data with Black-Scholes pricing, implied volatility ranking, Greeks analysis including Delta, Gamma, Theta, Vega, and Rho, put/call ratio analysis, and a 7-point trade checklist that gives a GO or NO-GO verdict before every trade. The P&L simulator models outcomes across a range of stock prices before you place the trade.</p>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
