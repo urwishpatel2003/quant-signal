@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SC, MC, GC, RC } from '../utils/constants';
 import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
@@ -32,9 +32,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [moversOpen,   setMoversOpen]   = useState(true);
   const [movers,       setMovers]       = useState({ gainers: [], losers: [] });
   const [moversLoad,   setMoversLoad]   = useState(true);
-  const dropdownRef = useRef(null);
+
+  const dropdownRef  = useRef(null);
+  const skipSearch   = useRef(false); // blocks search when selecting from movers/keyboard
+  const searchCache  = useRef({});    // simple in-memory cache per query
+
   const scan = useScan(macro);
-  const { usage, limits, canScan, trackScan } = useUsage();
+  const { usage, limits, canScan, canOptions, trackScan } = useUsage();
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
   const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
@@ -65,20 +69,33 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
+  // Search with cache + skip flag
   useEffect(() => {
+    if (skipSearch.current) { skipSearch.current = false; return; }
     if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
+
+    // Return cached result instantly
+    if (searchCache.current[inputVal]) {
+      setSuggestions(searchCache.current[inputVal]);
+      setShowDropdown(searchCache.current[inputVal].length > 0);
+      setActiveIdx(-1);
+      return;
+    }
+
     const timer = setTimeout(async () => {
       try {
-        const res  = await fetch(`/api/search?q=${encodeURIComponent(inputVal)}`);
+        const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(inputVal)}`);
         const data = await res.json();
+        searchCache.current[inputVal] = data; // cache result
         setSuggestions(data);
         setShowDropdown(data.length > 0);
         setActiveIdx(-1);
       } catch { setSuggestions([]); }
-    }, 250);
+    }, 150); // reduced from 250ms to 150ms
     return () => clearTimeout(timer);
   }, [inputVal]);
 
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -91,6 +108,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const handleScan = (ticker, tf = null) => {
     if (!canScan()) { setShowUpgrade(true); return; }
     trackScan();
+    skipSearch.current = true; // prevent search from firing on setInputVal
     setShowDropdown(false);
     setSuggestions([]);
     setInputVal(ticker);
@@ -102,7 +120,8 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     }
   };
 
-  const selectTicker = ticker => {
+  const selectTicker = (ticker) => {
+    skipSearch.current = true;
     setShowDropdown(false);
     setSuggestions([]);
     setActiveIdx(-1);
@@ -120,7 +139,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (activeIdx >= 0) selectTicker(suggestions[activeIdx].ticker);
-      else { setShowDropdown(false); handleScan(inputVal); }
+      else { skipSearch.current = true; setShowDropdown(false); handleScan(inputVal); }
     }
     if (e.key === 'Escape') setShowDropdown(false);
   };
@@ -145,11 +164,8 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             animation: 'spin 0.8s linear infinite',
           }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 24, color: '#ffaa00',
-              letterSpacing: '0.15em', marginBottom: 8,
-            }}>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
+              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>
               ANALYZING
             </div>
             <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
@@ -186,7 +202,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12, zIndex: 1 }}>$</span>
             <input
               value={inputVal}
-              onChange={e => setInputVal(e.target.value.toUpperCase())}
+              onChange={e => { setInputVal(e.target.value.toUpperCase()); }}
               onKeyDown={handleKeyDown}
               placeholder="SEARCH TICKER..."
               className="input"
@@ -196,22 +212,27 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             {showDropdown && suggestions.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                background: '#0f0f18', border: '1px solid #ffaa0044',
-                borderTop: 'none', maxHeight: 280, overflowY: 'auto',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                background: '#0a0a14', border: '1px solid #ffaa0044',
+                borderTop: 'none', maxHeight: 320, overflowY: 'auto',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
               }}>
                 {suggestions.map((s, i) => (
-                  <div key={s.ticker} onClick={() => selectTicker(s.ticker)}
+                  <div key={s.ticker}
+                    onMouseDown={e => { e.preventDefault(); selectTicker(s.ticker); }}
                     onMouseEnter={() => setActiveIdx(i)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '10px 14px', cursor: 'pointer',
-                      background: i === activeIdx ? '#ffaa0011' : 'transparent',
-                      borderBottom: '1px solid #1a1a26', transition: 'background 0.1s',
+                      background: i === activeIdx ? '#ffaa0015' : 'transparent',
+                      borderBottom: '1px solid #12121e',
+                      transition: 'background 0.08s',
                     }}>
-                    <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{s.ticker}</span>
-                    <span style={{ fontSize: 11, color: '#8899aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{s.name}</span>
-                    <span style={{ fontSize: 9, color: '#334', flexShrink: 0 }}>{s.type}</span>
+                    <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17,
+                      color: '#ffaa00', minWidth: 64, letterSpacing: '0.05em' }}>{s.ticker}</span>
+                    <span style={{ fontSize: 11, color: '#667', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{s.name}</span>
+                    <span style={{ fontSize: 9, color: '#2a2a3e', flexShrink: 0,
+                      background: '#1a1a2e', padding: '1px 6px', borderRadius: 2 }}>{s.type}</span>
                   </div>
                 ))}
               </div>
@@ -228,11 +249,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {scan.ticker && !scan.loading && (
               <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
-                onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
+                onClick={() => {
+                  if (!canOptions()) { setShowUpgrade(true); return; }
+                  onOpenOptions(scan.ticker);
+                }}>⚡ OPTIONS</button>
             )}
             {scan.analysis && !scan.loading && (
-              <button className="btn-sm"
-                style={{ color: '#556', borderColor: '#2a2a3e' }}
+              <button className="btn-sm" style={{ color: '#556', borderColor: '#2a2a3e' }}
                 onClick={() => { scan.reset(); setInputVal(''); }}>
                 ← NEW SCAN
               </button>
@@ -271,7 +294,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
       {/* ── Gainers / Losers — collapsible accordion ── */}
       <div className="card" style={{ marginBottom: 16 }}>
-        {/* Header — always visible */}
         <div style={{
           display: 'flex', gap: 0,
           borderBottom: moversOpen ? '1px solid #1e1e2e' : 'none',
@@ -292,27 +314,19 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             </button>
           ))}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, paddingRight: 4 }}>
-            {/* Show current ticker when collapsed */}
             {scan.ticker && !moversOpen && (
               <span style={{ fontSize: 10, color: '#445' }}>
                 {scan.ticker} · {TIMEFRAMES[scan.timeframe]?.label}
               </span>
             )}
-            {!scan.ticker && !moversOpen && (
-              <span style={{ fontSize: 9, color: '#334', letterSpacing: '0.1em' }}>CLICK TO SCAN · LONG TERM</span>
-            )}
             <button onClick={() => setMoversOpen(o => !o)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: '#445', fontSize: 12, padding: '4px 8px',
-                fontFamily: 'inherit',
-              }}>
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                color: '#445', fontSize: 12, padding: '4px 8px', fontFamily: 'inherit' }}>
               {moversOpen ? '▲' : '▼'}
             </button>
           </div>
         </div>
 
-        {/* Collapsible content */}
         {moversOpen && (
           moversLoad ? (
             <div className="pulse" style={{ fontSize: 11, color: '#445', textAlign: 'center', padding: '20px 0' }}>
@@ -325,9 +339,9 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {list.map((m, i) => {
-                const isGainer  = m.changePct >= 0;
-                const color     = isGainer ? '#00ff88' : '#ff4444';
-                const isActive  = scan.ticker === m.ticker;
+                const isGainer = m.changePct >= 0;
+                const color    = isGainer ? '#00ff88' : '#ff4444';
+                const isActive = scan.ticker === m.ticker;
                 return (
                   <div key={m.ticker}
                     onClick={() => handleScan(m.ticker, 'longterm')}
@@ -432,15 +446,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       )}
 
-      {/* ── Results: Bull/Bear/News left, Details right on desktop ── */}
+      {/* ── Results: Bull/Bear/News left, Details right ── */}
       {scan.analysis && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: isWide ? 'minmax(0, 1.6fr) minmax(0, 1fr)' : '1fr',
-          gap: 16,
-          alignItems: 'start',
+          gap: 16, alignItems: 'start',
         }}>
-          {/* Left — Bull/Bear + News */}
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="card">
@@ -481,7 +493,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             )}
           </div>
 
-          {/* Right — Details */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {scan.fundamentals && (
               <div className="card fade-in">
