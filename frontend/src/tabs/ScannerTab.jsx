@@ -29,6 +29,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [showUpgrade,  setShowUpgrade]  = useState(false);
   const [isWide,       setIsWide]       = useState(window.innerWidth > 768);
   const [moversTab,    setMoversTab]    = useState('gainers');
+  const [moversOpen,   setMoversOpen]   = useState(true);
   const [movers,       setMovers]       = useState({ gainers: [], losers: [] });
   const [moversLoad,   setMoversLoad]   = useState(true);
   const dropdownRef = useRef(null);
@@ -47,6 +48,16 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       .then(data => { setMovers(data); setMoversLoad(false); })
       .catch(() => setMoversLoad(false));
   }, []);
+
+  // Auto-collapse movers when scan starts
+  useEffect(() => {
+    if (scan.loading) setMoversOpen(false);
+  }, [scan.loading]);
+
+  // Auto-expand movers when scan is reset
+  useEffect(() => {
+    if (!scan.analysis && !scan.loading) setMoversOpen(true);
+  }, [scan.analysis, scan.loading]);
 
   useEffect(() => {
     const handler = () => setIsWide(window.innerWidth > 768);
@@ -219,6 +230,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
                 onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS</button>
             )}
+            {scan.analysis && !scan.loading && (
+              <button className="btn-sm"
+                style={{ color: '#556', borderColor: '#2a2a3e' }}
+                onClick={() => { scan.reset(); setInputVal(''); }}>
+                ← NEW SCAN
+              </button>
+            )}
             {scan.error && <div style={{ fontSize: 11, color: '#ff4444' }}>{scan.error}</div>}
           </div>
           <UsageBadge used={usage.scans} limit={limits.scans} label="SCANS" />
@@ -251,31 +269,52 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       </div>
 
-      {/* ── Gainers / Losers — shown before first scan ── */}
-      {!scan.analysis && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          {/* Tab header */}
-          <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid #1e1e2e' }}>
-            {['gainers', 'losers'].map(t => (
-              <button key={t} onClick={() => setMoversTab(t)}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  padding: '8px 20px', fontSize: 11, letterSpacing: '0.15em',
-                  textTransform: 'uppercase', fontFamily: 'inherit',
-                  color:        moversTab === t ? (t === 'gainers' ? '#00ff88' : '#ff4444') : '#445',
-                  borderBottom: moversTab === t ? `2px solid ${t === 'gainers' ? '#00ff88' : '#ff4444'}` : '2px solid transparent',
-                  marginBottom: -1,
-                }}>
-                {t === 'gainers' ? '▲ TOP GAINERS' : '▼ TOP LOSERS'}
-              </button>
-            ))}
-            <div style={{ marginLeft: 'auto', fontSize: 9, color: '#334', alignSelf: 'center', paddingRight: 8 }}>
-              CLICK TO SCAN · LONG TERM
-            </div>
+      {/* ── Gainers / Losers — collapsible accordion ── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        {/* Header — always visible */}
+        <div style={{
+          display: 'flex', gap: 0,
+          borderBottom: moversOpen ? '1px solid #1e1e2e' : 'none',
+          marginBottom: moversOpen ? 16 : 0,
+        }}>
+          {['gainers', 'losers'].map(t => (
+            <button key={t}
+              onClick={() => { setMoversTab(t); setMoversOpen(true); }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '8px 16px', fontSize: 11, letterSpacing: '0.12em',
+                textTransform: 'uppercase', fontFamily: 'inherit',
+                color:        moversTab === t ? (t === 'gainers' ? '#00ff88' : '#ff4444') : '#445',
+                borderBottom: moversTab === t ? `2px solid ${t === 'gainers' ? '#00ff88' : '#ff4444'}` : '2px solid transparent',
+                marginBottom: -1,
+              }}>
+              {t === 'gainers' ? '▲ GAINERS' : '▼ LOSERS'}
+            </button>
+          ))}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, paddingRight: 4 }}>
+            {/* Show current ticker when collapsed */}
+            {scan.ticker && !moversOpen && (
+              <span style={{ fontSize: 10, color: '#445' }}>
+                {scan.ticker} · {TIMEFRAMES[scan.timeframe]?.label}
+              </span>
+            )}
+            {!scan.ticker && !moversOpen && (
+              <span style={{ fontSize: 9, color: '#334', letterSpacing: '0.1em' }}>CLICK TO SCAN · LONG TERM</span>
+            )}
+            <button onClick={() => setMoversOpen(o => !o)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: '#445', fontSize: 12, padding: '4px 8px',
+                fontFamily: 'inherit',
+              }}>
+              {moversOpen ? '▲' : '▼'}
+            </button>
           </div>
+        </div>
 
-          {/* Movers list */}
-          {moversLoad ? (
+        {/* Collapsible content */}
+        {moversOpen && (
+          moversLoad ? (
             <div className="pulse" style={{ fontSize: 11, color: '#445', textAlign: 'center', padding: '20px 0' }}>
               LOADING MARKET MOVERS...
             </div>
@@ -286,55 +325,42 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {list.map((m, i) => {
-                const isGainer = m.changePct >= 0;
-                const color    = isGainer ? '#00ff88' : '#ff4444';
+                const isGainer  = m.changePct >= 0;
+                const color     = isGainer ? '#00ff88' : '#ff4444';
+                const isActive  = scan.ticker === m.ticker;
                 return (
                   <div key={m.ticker}
                     onClick={() => handleScan(m.ticker, 'longterm')}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '9px 12px', cursor: 'pointer', borderRadius: 2,
-                      background: 'transparent', transition: 'background 0.1s',
+                      background:   isActive ? '#ffaa0008' : 'transparent',
+                      borderLeft:   `2px solid ${isActive ? '#ffaa00' : 'transparent'}`,
                       borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
+                      transition:   'background 0.1s',
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#ffffff08'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    {/* Rank */}
-                    <div style={{ fontSize: 10, color: '#334', minWidth: 18, textAlign: 'right' }}>
-                      {i + 1}
-                    </div>
-
-                    {/* Ticker */}
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
-                      color: '#ffaa00', minWidth: 60 }}>
-                      {m.ticker}
-                    </div>
-
-                    {/* Price */}
-                    <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 70 }}>
-                      ${m.price?.toFixed(2)}
-                    </div>
-
-                    {/* Change % */}
+                    <div style={{ fontSize: 10, color: '#334', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{m.ticker}</div>
+                    <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 70 }}>${m.price?.toFixed(2)}</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color, marginLeft: 'auto', minWidth: 70, textAlign: 'right' }}>
                       {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                     </div>
-
-                    {/* Change $ */}
                     <div style={{ fontSize: 11, color: color + '88', minWidth: 60, textAlign: 'right' }}>
                       {isGainer ? '+' : ''}${m.change?.toFixed(2)}
                     </div>
-
-                    {/* Scan arrow */}
-                    <div style={{ fontSize: 10, color: '#334' }}>→</div>
+                    <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#334' }}>
+                      {isActive ? '●' : '→'}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
-      )}
+          )
+        )}
+      </div>
 
       {/* ── Clean Price Bar ── */}
       {scan.ohlcv && (
@@ -351,14 +377,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
             </div>
           </div>
-
           <div>
             <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
               {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
             </div>
           </div>
-
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
             <MiniChart data={scan.ohlcv} />
             {scan.analysis && (

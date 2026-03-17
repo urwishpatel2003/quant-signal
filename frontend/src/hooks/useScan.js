@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain } from '../api/tradier';
 import { runPriceAnalysis } from '../api/claude';
@@ -32,7 +32,6 @@ export function useScan(macro) {
       ]);
       if (!p) throw new Error('Ticker not found');
       setOhlcv(p); setQuote(q);
-
       const indicators = calcIndicators(p, tf);
       setTa(indicators);
       const livePrice = q?.last || p.current;
@@ -65,10 +64,24 @@ export function useScan(macro) {
     finally { setLoading(false); }
   };
 
+  const reset = () => {
+    setTicker('');
+    setLoading(false);
+    setStage('');
+    setError('');
+    setOhlcv(null);
+    setQuote(null);
+    setFundamentals(null);
+    setOptions(null);
+    setNews([]);
+    setAnalysis(null);
+    setTa(null);
+  };
+
   return {
     ticker, timeframe, setTimeframe,
     loading, stage, error,
     ohlcv, quote, fundamentals, options, news, analysis, ta,
-    terminalRef, runScan,
+    terminalRef, runScan, reset,
   };
 }
