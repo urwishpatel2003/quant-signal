@@ -303,26 +303,29 @@ app.get('/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Top Gainers & Losers — Polygon ──────────────────────────────────────────
-
+// ─── Top Gainers & Losers — Tradier ──────────────────────────────────────────
 app.get('/movers', async (req, res) => {
   try {
+    // Tradier market screener — sort by % change
     const [gainers, losers] = await Promise.all([
-      polygonGet('/v2/snapshot/locale/us/markets/stocks/gainers?include_otc=false'),
-      polygonGet('/v2/snapshot/locale/us/markets/stocks/losers?include_otc=false'),
+      tradierGet('/v1/markets/screener?exchange=N,Q&changePercentMin=3&priceMin=5&volumeMin=500000&limit=10&sort=changePercentage&sortdir=desc'),
+      tradierGet('/v1/markets/screener?exchange=N,Q&changePercentMax=-3&priceMin=5&volumeMin=500000&limit=10&sort=changePercentage&sortdir=asc'),
     ]);
 
-    const map = t => ({
-      ticker:    t.ticker,
-      price:     t.day?.c  || t.prevDay?.c  || 0,
-      change:    t.todaysChange     || 0,
-      changePct: t.todaysChangePerc || 0,
-      volume:    t.day?.v  || 0,
+    const map = s => ({
+      ticker:    s.symbol,
+      price:     parseFloat(s.last  || 0),
+      change:    parseFloat(s.change || 0),
+      changePct: parseFloat(s.change_percentage || 0),
+      volume:    parseInt(s.volume  || 0),
     });
 
+    const g = (gainers?.screener?.security || []);
+    const l = (losers?.screener?.security  || []);
+
     res.json({
-      gainers: (gainers.tickers || []).slice(0, 10).map(map),
-      losers:  (losers.tickers  || []).slice(0, 10).map(map),
+      gainers: (Array.isArray(g) ? g : [g]).map(map),
+      losers:  (Array.isArray(l) ? l : [l]).map(map),
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
