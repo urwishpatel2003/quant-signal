@@ -232,58 +232,55 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       </div>
 
-      {/* ── Clean Price Bar — ticker, price, change, chart only ── */}
+      {/* ── Clean Price Bar — ticker, price, change, chart, signal only ── */}
       {scan.ohlcv && (
         <div className="fade-in" style={{
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
           background: '#0f0f18', border: '1px solid #1e1e2e',
-          padding: '12px 16px', marginBottom: 16,
+          padding: '14px 16px', marginBottom: 16,
         }}>
-          {/* Ticker + company */}
           <div>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1 }}>{scan.ticker}</div>
-            <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em' }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
+              {scan.ticker}
+            </div>
+            <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginTop: 2 }}>
               {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
             </div>
           </div>
 
-          {/* Price + change */}
           <div>
-            <div style={{ fontSize: 24, fontWeight: 600 }}>${livePrice?.toFixed(2)}</div>
-            <div style={{ fontSize: 13, fontWeight: 600,
-              color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
               {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
             </div>
           </div>
 
-          {/* Chart */}
-          <div style={{ marginLeft: 'auto' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
             <MiniChart data={scan.ohlcv} />
-          </div>
-
-          {/* Signal badge */}
-          {scan.analysis && (
-            <div style={{
-              textAlign: 'center', background: SC[scan.analysis.signal] + '11',
-              border: `1px solid ${SC[scan.analysis.signal]}44`,
-              padding: '8px 16px', borderRadius: 2,
-            }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: SC[scan.analysis.signal], lineHeight: 1 }}>
-                {scan.analysis.signal}
+            {scan.analysis && (
+              <div style={{
+                textAlign: 'center',
+                background: SC[scan.analysis.signal] + '11',
+                border: `1px solid ${SC[scan.analysis.signal]}44`,
+                padding: '8px 16px', borderRadius: 2, minWidth: 80,
+              }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: SC[scan.analysis.signal], lineHeight: 1 }}>
+                  {scan.analysis.signal}
+                </div>
+                <div style={{ fontSize: 10, color: '#556', marginTop: 2 }}>{scan.analysis.confidence}%</div>
               </div>
-              <div style={{ fontSize: 10, color: '#556' }}>{scan.analysis.confidence}%</div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
-      {/* ── Quick signals card — shown after scan ── */}
+      {/* ── Signal Overview Card ── */}
       {scan.analysis && (
         <div className="card fade-in" style={{ marginBottom: 16, borderColor: SC[scan.analysis.signal] + '33' }}>
           <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 12 }}>
             SIGNAL OVERVIEW
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8, marginBottom: 12 }}>
             {[
               ['TARGET',   `$${scan.analysis.priceTarget?.toFixed(2)}`,  '#00ff88'],
               ['STOP',     `$${scan.analysis.stopLoss?.toFixed(2)}`,      '#ff4444'],
@@ -299,7 +296,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             ))}
           </div>
           {scan.analysis.thesis && (
-            <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.7, marginTop: 12,
+            <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.7,
               borderLeft: `2px solid ${SC[scan.analysis.signal]}44`, paddingLeft: 12 }}>
               {scan.analysis.thesis}
             </div>
@@ -307,7 +304,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       )}
 
-      {/* ── Results: SignalCard left, Details right on desktop ── */}
+      {/* ── Results: Bull/Bear/News left, Details right on desktop ── */}
       {scan.analysis && (
         <div style={{
           display: 'grid',
@@ -315,9 +312,47 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           gap: 16,
           alignItems: 'start',
         }}>
-          {/* Left — Full Signal Card (bull/bear/news) */}
-          <div className="fade-in">
-            <SignalCard analysis={scan.analysis} news={scan.news} />
+          {/* Left — Bull/Bear factors + News only (no duplicate signal card) */}
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Bull / Bear */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="card">
+                <div style={{ fontSize: 10, color: '#00ff8866', marginBottom: 10 }}>BULL FACTORS</div>
+                {scan.analysis.bullFactors?.map((f, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #0f1a14', display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#00ff88', flexShrink: 0 }}>▲</span>{f}
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div style={{ fontSize: 10, color: '#ff444466', marginBottom: 10 }}>BEAR FACTORS</div>
+                {scan.analysis.bearFactors?.map((f, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#ff4444', flexShrink: 0 }}>▼</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* News */}
+            {scan.news?.length > 0 && (
+              <div className="card">
+                <div style={{ fontSize: 10, color: '#444', marginBottom: 12 }}>RECENT NEWS</div>
+                {scan.news.slice(0, 5).map((n, i) => (
+                  <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 11 }}>
+                    <a href={n.url} target="_blank" rel="noopener noreferrer"
+                      style={{ color: '#aab', lineHeight: 1.4, marginBottom: 2, display: 'block', textDecoration: 'none' }}
+                      onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}>
+                      {n.title}
+                    </a>
+                    <div style={{ color: '#445', fontSize: 10 }}>
+                      {n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Right — Details */}
