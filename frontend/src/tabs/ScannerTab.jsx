@@ -4,13 +4,13 @@ import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
 import { useUsage } from '../hooks/useUsage';
 import MiniChart      from '../components/MiniChart';
-import SignalCard     from '../components/SignalCard';
 import BondPanel      from '../components/BondPanel';
 import TechnicalPanel from '../components/TechnicalPanel';
 import UsageBadge     from '../components/UsageBadge';
 import UpgradeModal   from '../components/UpgradeModal';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
+const BASE = import.meta.env.VITE_API_BASE;
 
 const STAGE_LABELS = {
   price:        'FETCHING PRICE DATA...',
@@ -28,6 +28,9 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [activeIdx,    setActiveIdx]    = useState(-1);
   const [showUpgrade,  setShowUpgrade]  = useState(false);
   const [isWide,       setIsWide]       = useState(window.innerWidth > 768);
+  const [moversTab,    setMoversTab]    = useState('gainers');
+  const [movers,       setMovers]       = useState({ gainers: [], losers: [] });
+  const [moversLoad,   setMoversLoad]   = useState(true);
   const dropdownRef = useRef(null);
   const scan = useScan(macro);
   const { usage, limits, canScan, trackScan } = useUsage();
@@ -36,6 +39,14 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
     ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
     : null;
+
+  // Fetch movers on mount
+  useEffect(() => {
+    fetch(`${BASE}/movers`)
+      .then(r => r.json())
+      .then(data => { setMovers(data); setMoversLoad(false); })
+      .catch(() => setMoversLoad(false));
+  }, []);
 
   useEffect(() => {
     const handler = () => setIsWide(window.innerWidth > 768);
@@ -66,12 +77,18 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleScan = ticker => {
+  const handleScan = (ticker, tf = null) => {
     if (!canScan()) { setShowUpgrade(true); return; }
     trackScan();
     setShowDropdown(false);
     setSuggestions([]);
-    scan.runScan(ticker);
+    setInputVal(ticker);
+    if (tf) {
+      scan.setTimeframe(tf);
+      scan.runScan(ticker, tf);
+    } else {
+      scan.runScan(ticker);
+    }
   };
 
   const selectTicker = ticker => {
@@ -96,6 +113,8 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     }
     if (e.key === 'Escape') setShowDropdown(false);
   };
+
+  const list = moversTab === 'gainers' ? movers.gainers : movers.losers;
 
   return (
     <div style={{ position: 'relative' }}>
@@ -232,7 +251,92 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       </div>
 
-      {/* ── Clean Price Bar — ticker, price, change, chart, signal only ── */}
+      {/* ── Gainers / Losers — shown before first scan ── */}
+      {!scan.analysis && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          {/* Tab header */}
+          <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid #1e1e2e' }}>
+            {['gainers', 'losers'].map(t => (
+              <button key={t} onClick={() => setMoversTab(t)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '8px 20px', fontSize: 11, letterSpacing: '0.15em',
+                  textTransform: 'uppercase', fontFamily: 'inherit',
+                  color:        moversTab === t ? (t === 'gainers' ? '#00ff88' : '#ff4444') : '#445',
+                  borderBottom: moversTab === t ? `2px solid ${t === 'gainers' ? '#00ff88' : '#ff4444'}` : '2px solid transparent',
+                  marginBottom: -1,
+                }}>
+                {t === 'gainers' ? '▲ TOP GAINERS' : '▼ TOP LOSERS'}
+              </button>
+            ))}
+            <div style={{ marginLeft: 'auto', fontSize: 9, color: '#334', alignSelf: 'center', paddingRight: 8 }}>
+              CLICK TO SCAN · LONG TERM
+            </div>
+          </div>
+
+          {/* Movers list */}
+          {moversLoad ? (
+            <div className="pulse" style={{ fontSize: 11, color: '#445', textAlign: 'center', padding: '20px 0' }}>
+              LOADING MARKET MOVERS...
+            </div>
+          ) : list.length === 0 ? (
+            <div style={{ fontSize: 11, color: '#334', textAlign: 'center', padding: '20px 0' }}>
+              Market data unavailable — market may be closed
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {list.map((m, i) => {
+                const isGainer = m.changePct >= 0;
+                const color    = isGainer ? '#00ff88' : '#ff4444';
+                return (
+                  <div key={m.ticker}
+                    onClick={() => handleScan(m.ticker, 'longterm')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '9px 12px', cursor: 'pointer', borderRadius: 2,
+                      background: 'transparent', transition: 'background 0.1s',
+                      borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#ffffff08'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    {/* Rank */}
+                    <div style={{ fontSize: 10, color: '#334', minWidth: 18, textAlign: 'right' }}>
+                      {i + 1}
+                    </div>
+
+                    {/* Ticker */}
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
+                      color: '#ffaa00', minWidth: 60 }}>
+                      {m.ticker}
+                    </div>
+
+                    {/* Price */}
+                    <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 70 }}>
+                      ${m.price?.toFixed(2)}
+                    </div>
+
+                    {/* Change % */}
+                    <div style={{ fontSize: 13, fontWeight: 600, color, marginLeft: 'auto', minWidth: 70, textAlign: 'right' }}>
+                      {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
+                    </div>
+
+                    {/* Change $ */}
+                    <div style={{ fontSize: 11, color: color + '88', minWidth: 60, textAlign: 'right' }}>
+                      {isGainer ? '+' : ''}${m.change?.toFixed(2)}
+                    </div>
+
+                    {/* Scan arrow */}
+                    <div style={{ fontSize: 10, color: '#334' }}>→</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Clean Price Bar ── */}
       {scan.ohlcv && (
         <div className="fade-in" style={{
           display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
@@ -312,9 +416,8 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           gap: 16,
           alignItems: 'start',
         }}>
-          {/* Left — Bull/Bear factors + News only (no duplicate signal card) */}
+          {/* Left — Bull/Bear + News */}
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* Bull / Bear */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="card">
                 <div style={{ fontSize: 10, color: '#00ff8866', marginBottom: 10 }}>BULL FACTORS</div>
@@ -334,7 +437,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               </div>
             </div>
 
-            {/* News */}
             {scan.news?.length > 0 && (
               <div className="card">
                 <div style={{ fontSize: 10, color: '#444', marginBottom: 12 }}>RECENT NEWS</div>

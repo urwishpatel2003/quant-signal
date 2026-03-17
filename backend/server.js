@@ -39,7 +39,7 @@ app.use('/api/analyze', claudeLimiter);
 app.use('/yahoo',       dataLimiter);
 app.use('/tradier',     dataLimiter);
 
-// ─── Usage tracking (in-memory, keyed by userId + date) ──────────────────────
+// ─── Usage tracking ───────────────────────────────────────────────────────────
 
 const usageStore = new Map();
 
@@ -300,6 +300,30 @@ app.get('/search', async (req, res) => {
     }
 
     res.json(results.slice(0, 8));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Top Gainers & Losers — Polygon ──────────────────────────────────────────
+
+app.get('/movers', async (req, res) => {
+  try {
+    const [gainers, losers] = await Promise.all([
+      polygonGet('/v2/snapshot/locale/us/markets/stocks/gainers?include_otc=false'),
+      polygonGet('/v2/snapshot/locale/us/markets/stocks/losers?include_otc=false'),
+    ]);
+
+    const map = t => ({
+      ticker:    t.ticker,
+      price:     t.day?.c  || t.prevDay?.c  || 0,
+      change:    t.todaysChange     || 0,
+      changePct: t.todaysChangePerc || 0,
+      volume:    t.day?.v  || 0,
+    });
+
+    res.json({
+      gainers: (gainers.tickers || []).slice(0, 10).map(map),
+      losers:  (losers.tickers  || []).slice(0, 10).map(map),
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
