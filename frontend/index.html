@@ -3,27 +3,119 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffaa00" />
-    <meta name="description" content="AI-powered options trading intelligence with global macro context" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="QuAInt Signal" />
+
+    <!-- Primary SEO -->
+    <title>QuAInt Signal — AI Trade Signals for Stocks & Options</title>
+    <meta name="description" content="AI-powered trade signals for stocks and options. Get exact entry price, exit price, stop loss, and global macro context for every trade. Built on Claude AI with live options flow." />
+    <meta name="keywords" content="AI trade signals, options trading, stock scanner, entry exit levels, macro analysis, options plays, AI investing" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quaint-signal.tech" />
 
     <!-- Open Graph -->
-    <meta property="og:title" content="QuAInt Signal" />
-    <meta property="og:description" content="AI-powered options trading intelligence" />
-    <meta property="og:type" content="website" />
+    <meta property="og:type"        content="website" />
+    <meta property="og:url"         content="https://quaint-signal.tech" />
+    <meta property="og:title"       content="QuAInt Signal — AI Trade Signals for Stocks & Options" />
+    <meta property="og:description" content="AI-powered trade signals for stocks and options. Exact entry, exit, and stop loss levels with global macro context. Powered by Claude AI." />
+    <meta property="og:image"       content="https://quaint-signal.tech/og-image.png" />
+    <meta property="og:site_name"   content="QuAInt Signal" />
 
-    <!-- Apple touch icons -->
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:site"        content="@QuAIntSignal" />
+    <meta name="twitter:title"       content="QuAInt Signal — AI Trade Signals for Stocks & Options" />
+    <meta name="twitter:description" content="AI-powered trade signals for stocks and options with global macro context." />
+    <meta name="twitter:image"       content="https://quaint-signal.tech/og-image.png" />
 
-    <!-- PWA manifest -->
-    <link rel="manifest" href="/manifest.json" />
+    <!-- PWA -->
+    <meta name="theme-color"                    content="#ffaa00" />
+    <meta name="mobile-web-app-capable"         content="yes" />
+    <meta name="apple-mobile-web-app-capable"   content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title"     content="QuAInt Signal" />
+    <link rel="apple-touch-icon"  href="/icon-192.png" />
+    <link rel="manifest"          href="/manifest.json" />
 
-    <title>QuAInt Signal</title>
+    <!-- Structured Data — Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "QuAInt Signal",
+      "url": "https://quaint-signal.tech",
+      "logo": "https://quaint-signal.tech/icon-512.png",
+      "description": "AI-powered trade signals for stocks and options with global macro context.",
+      "sameAs": [
+        "https://twitter.com/QuAIntSignal"
+      ]
+    }
+    </script>
+
+    <!-- Structured Data — SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "QuAInt Signal",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web, iOS, Android",
+      "url": "https://quaint-signal.tech",
+      "description": "AI-powered investing buddy for stocks and options trading. Get exact entry price, exit price, stop loss, and global macro context for every trade.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free tier available. Pro plan at $15/month."
+      },
+      "featureList": [
+        "AI stock scanner with BUY/SELL/HOLD signals",
+        "Options plays with exact entry and exit prices",
+        "Global macro context including bonds, VIX, and international markets",
+        "Trade checklist with GO/NO-GO verdict",
+        "P&L simulator",
+        "Options pricing models including Black-Scholes"
+      ]
+    }
+    </script>
+
+    <!-- Structured Data — FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How does QuAInt Signal generate trade signals?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuAInt Signal uses Claude AI by Anthropic to analyze real-time price data, technical indicators (RSI, SMA, volume), options flow, fundamentals, news sentiment, and global macro conditions including bond yields, VIX, and international markets to generate BUY, SELL, or HOLD signals with exact entry and exit prices."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is QuAInt Signal free to use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, QuAInt Signal offers a free tier with 10 stock scans and 5 options analyses per day. A Pro plan is available at $15/month for unlimited access."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What markets does QuAInt Signal cover?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuAInt Signal covers US stocks and options across all major tickers, with global macro context including Asian markets (Nikkei, Hang Seng), European markets (DAX, FTSE, CAC), US bond yields, VIX, DXY, gold, and oil."
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body style="margin:0; background:#07070e;">
+    <!-- H1 for SEO — hidden visually but readable by search engines -->
+    <h1 style="position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0;">
+      QuAInt Signal — AI Trade Signals for Stocks and Options
+    </h1>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
