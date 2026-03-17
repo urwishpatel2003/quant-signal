@@ -303,30 +303,57 @@ app.get('/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Top Gainers & Losers — Tradier ──────────────────────────────────────────
+// ─── Top Gainers & Losers — Tradier quotes ────────────────────────────────────
 app.get('/movers', async (req, res) => {
   try {
-    // Tradier market screener — sort by % change
-    const [gainers, losers] = await Promise.all([
-      tradierGet('/v1/markets/screener?exchange=N,Q&changePercentMin=3&priceMin=5&volumeMin=500000&limit=10&sort=changePercentage&sortdir=desc'),
-      tradierGet('/v1/markets/screener?exchange=N,Q&changePercentMax=-3&priceMin=5&volumeMin=500000&limit=10&sort=changePercentage&sortdir=asc'),
-    ]);
+    const TICKERS = [
+  // Mega cap tech
+  'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
+  // Semiconductors
+  'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
+  // AI / Cloud
+  'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
+  // Fintech / Crypto
+  'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
+  // EV / Clean Energy
+  'RIVN','LCID','NIO','XPEV','LI','FSR','CHPT','BLNK','OKLO','SMR',
+  // Biotech / Healthcare
+  'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','RXRX','SANA','BLUE',
+  // Nuclear / Energy
+  'CCJ','UEC','DNN','UUUU','LEU','NNE','OKLO','BWXT','GEV','VST',
+  // Defense / Space
+  'LMT','RTX','NOC','GD','BA','RKLB','ASTS','LUNR','PL','SPCE',
+  // Consumer / Retail
+  'DIS','NFLX','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT',
+  // Banks / Finance
+  'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
+  // Big pharma
+  'PFE','MRNA','JNJ','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN',
+  // Emerging AI / Tech
+  'NBIS','ACHR','JOBY','LILM','EVTL','ARCHER','GRAB','SE','DKNG','PENN',
+  // Commodities / Materials
+  'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
+  // ETFs for reference
+  'SPY','QQQ','IWM','ARKK','SOXS','SOXL','TQQQ','SQQQ','UVXY','VIX',
+];
 
-    const map = s => ({
-      ticker:    s.symbol,
-      price:     parseFloat(s.last  || 0),
-      change:    parseFloat(s.change || 0),
-      changePct: parseFloat(s.change_percentage || 0),
-      volume:    parseInt(s.volume  || 0),
-    });
+    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
+    const raw  = data?.quotes?.quote || [];
+    const list = (Array.isArray(raw) ? raw : [raw])
+      .filter(q => q.last && q.change_percentage != null)
+      .map(q => ({
+        ticker:    q.symbol,
+        price:     parseFloat(q.last            || 0),
+        change:    parseFloat(q.change          || 0),
+        changePct: parseFloat(q.change_percentage || 0),
+        volume:    parseInt(q.volume            || 0),
+      }));
 
-    const g = (gainers?.screener?.security || []);
-    const l = (losers?.screener?.security  || []);
+    const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
+    const gainers = sorted.filter(s => s.changePct > 0).slice(0, 10);
+    const losers  = sorted.filter(s => s.changePct < 0).reverse().slice(0, 10);
 
-    res.json({
-      gainers: (Array.isArray(g) ? g : [g]).map(map),
-      losers:  (Array.isArray(l) ? l : [l]).map(map),
-    });
+    res.json({ gainers, losers });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
