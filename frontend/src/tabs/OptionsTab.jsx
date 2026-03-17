@@ -36,9 +36,11 @@ export default function OptionsTab({ macro, initialTicker }) {
   const [selectedSide,   setSelectedSide]   = useState(null);
   const [showUpgrade,    setShowUpgrade]    = useState(false);
 
-  const { usage, limits, canOptions, trackOptions } = useUsage();
+  const { usage, limits, canOptions, trackOptions, refreshUsage } = useUsage();
 
-  useEffect(() => { if (initialTicker) { setInputVal(initialTicker); run(initialTicker); } }, [initialTicker]);
+  useEffect(() => {
+    if (initialTicker) { setInputVal(initialTicker); run(initialTicker); }
+  }, [initialTicker]);
 
   const switchExpiry = async expiry => {
     if (!ticker || reanalyzing) return;
@@ -53,6 +55,8 @@ export default function OptionsTab({ macro, initialTicker }) {
   };
 
   const run = async t => {
+    // Always re-fetch usage from server first for cross-device consistency
+    await refreshUsage();
     if (!canOptions()) { setShowUpgrade(true); return; }
     trackOptions();
     setLoading(true); setError(''); setOptionsSignal(null); setPriceSignal(null);
@@ -142,11 +146,12 @@ export default function OptionsTab({ macro, initialTicker }) {
               const active = i === currentIdx;
               return (
                 <div key={s} style={{
-                  width: active ? 12 : 8, height: active ? 12 : 8,
+                  width:        active ? 12 : 8,
+                  height:       active ? 12 : 8,
                   borderRadius: '50%',
-                  background: done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
-                  transition: 'all 0.3s',
-                  boxShadow: active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
+                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition:   'all 0.3s',
+                  boxShadow:    active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
                 }} />
               );
             })}

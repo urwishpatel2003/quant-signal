@@ -17,6 +17,15 @@ export function useUsage() {
       .catch(() => {});
   }, [userId, user]);
 
+  const refreshUsage = async () => {
+    if (!user) return;
+    try {
+      const res  = await fetch(`${BASE}/usage/${userId}`);
+      const data = await res.json();
+      setUsage(data);
+    } catch {}
+  };
+
   const canScan    = () => usage.scans   < LIMITS.scans;
   const canOptions = () => usage.options < LIMITS.options;
 
@@ -46,5 +55,5 @@ export function useUsage() {
     }
   };
 
-  return { usage, limits: LIMITS, canScan, canOptions, trackScan, trackOptions };
+  return { usage, limits: LIMITS, canScan, canOptions, trackScan, trackOptions, refreshUsage };
 }
