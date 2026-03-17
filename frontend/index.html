@@ -24,14 +24,15 @@
     <meta property="og:type"        content="website" />
     <meta property="og:url"         content="https://quaint-signal.tech" />
     <meta property="og:title"       content="QuAInt Signal — AI Trade Signals for Stocks & Options" />
-   <meta property="og:description" content="AI trade signals with exact entry, exit, stop loss levels plus global macro context. Powered by Claude AI." />
+    <meta property="og:description" content="AI trade signals with exact entry, exit, stop loss levels plus global macro context. Powered by Claude AI." />
+    <meta property="og:image"       content="https://quaint-signal.tech/og-image.png" />
     <meta property="og:site_name"   content="QuAInt Signal" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card"        content="summary_large_image" />
     <meta name="twitter:site"        content="@QuAIntSignal" />
     <meta name="twitter:title"       content="QuAInt Signal — AI Trade Signals for Stocks & Options" />
-    <meta name="twitter:description" content="AI-powered trade signals for stocks and options with global macro context." />
+    <meta name="twitter:description" content="AI trade signals with exact entry, exit, stop loss levels plus global macro context. Powered by Claude AI." />
     <meta name="twitter:image"       content="https://quaint-signal.tech/og-image.png" />
 
     <!-- PWA -->
@@ -53,6 +54,56 @@
       "logo": "https://quaint-signal.tech/icon-512.png",
       "description": "AI-powered trade signals for stocks and options with global macro context.",
       "sameAs": ["https://twitter.com/QuAIntSignal"]
+    }
+    </script>
+
+    <!-- Structured Data — FinancialService -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FinancialService",
+      "name": "QuAInt Signal",
+      "url": "https://quaint-signal.tech",
+      "logo": "https://quaint-signal.tech/icon-512.png",
+      "description": "AI-powered trade signals for stocks and options. Provides exact entry price, exit price, stop loss, and global macro context for every trade using Claude AI.",
+      "priceRange": "Free - $15/month",
+      "areaServed": "US",
+      "serviceType": "Investment Advisory",
+      "provider": {
+        "@type": "Organization",
+        "name": "QuAInt Signal",
+        "url": "https://quaint-signal.tech"
+      },
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Trading Signal Services",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Stock Signals",
+              "description": "AI-powered BUY/SELL/HOLD signals for US stocks with exact entry, exit, and stop loss levels"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Options Analysis",
+              "description": "Exact entry and exit prices for options trades with Black-Scholes pricing and Greeks analysis"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Global Macro Context",
+              "description": "Global market analysis including bonds, VIX, DXY, and 15+ international markets"
+            }
+          }
+        ]
+      }
     }
     </script>
 
@@ -78,7 +129,11 @@
         "Global macro context including bonds, VIX, and international markets",
         "Trade checklist with GO/NO-GO verdict",
         "P&L simulator",
-        "Options pricing models including Black-Scholes"
+        "Options pricing models including Black-Scholes",
+        "Greeks dashboard with Delta, Gamma, Theta, Vega, Rho",
+        "Implied volatility calculator",
+        "Volatility surface viewer",
+        "Strategy backtester"
       ]
     }
     </script>
@@ -102,7 +157,7 @@
           "name": "Is QuAInt Signal free to use?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes, QuAInt Signal offers a free tier with 10 stock scans and 5 options analyses per day. A Pro plan is available at $15/month for unlimited access."
+            "text": "Yes, QuAInt Signal offers a free tier with 10 stock scans and 5 options analyses per day. A Pro plan is available at $15/month for unlimited access to all features."
           }
         },
         {
@@ -120,6 +175,54 @@
             "@type": "Answer",
             "text": "QuAInt Signal includes Black-Scholes option pricer, Binomial tree model, Implied Volatility calculator, Greeks dashboard (Delta, Gamma, Theta, Vega, Rho), Volatility Surface viewer, and a Strategy Backtester."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "What makes QuAInt Signal different from other trading signal services?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuAInt Signal is built on Claude AI by Anthropic, providing not just signals but complete trade context including global macro analysis across 15+ international markets, bonds, VIX, exact entry/exit/stop-loss prices, and a GO/NO-GO checklist. Every signal includes reasoning and risk assessment."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use QuAInt Signal for options trading?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. QuAInt Signal provides detailed options analysis including specific strike prices, expiration dates, exact entry and exit prices, and P&L projections using Black-Scholes and Binomial tree pricing models. The trade checklist gives a GO or NO-GO verdict based on 7 risk factors before every trade."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What technical indicators does QuAInt Signal analyze?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuAInt Signal analyzes RSI (14), SMA20, SMA50, SMA200, volume ratio, trend direction, put/call ratio, average call IV, and average put IV. It also incorporates bond yield curve, VIX, DXY, gold, oil, and 15+ international market indices."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does the trade checklist work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The trade checklist scores your setup out of 7 criteria: trend alignment, RSI level, price signal confirmation, volume confirmation, macro environment, earnings risk, and IV environment. It returns a GO (70%+), CAUTION (50-69%), or NO-GO (below 50%) verdict."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <!-- Structured Data — BreadcrumbList -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://quaint-signal.tech"
         }
       ]
     }
@@ -137,7 +240,7 @@
         <li>AI Stock Scanner with BUY, SELL, and HOLD signals for any ticker across 4 timeframes</li>
         <li>Options plays with exact entry price, exit price, and stop loss levels</li>
         <li>Global macro context including 15 international markets, US bond yields, VIX, DXY, gold, and oil</li>
-        <li>Trade checklist with GO or NO-GO verdict based on 7 risk factors including trend, RSI, macro, IV, and earnings risk</li>
+        <li>Trade checklist with GO or NO-GO verdict based on 7 risk factors</li>
         <li>P&L simulator to model profit and loss outcomes before placing trades</li>
         <li>Options pricing models including Black-Scholes pricer, Binomial tree, IV calculator, Greeks dashboard, Volatility Surface, and Strategy Backtester</li>
       </ul>
@@ -148,7 +251,7 @@
       <h2>Supported Markets</h2>
       <p>QuAInt Signal covers all US stocks and options. Global macro context includes Nikkei 225, Hang Seng, Shanghai Composite, Sensex, DAX, FTSE 100, CAC 40, US Treasury yields at 2-year, 10-year, and 30-year maturities, VIX volatility index, DXY dollar index, gold prices, and crude oil prices.</p>
       <h2>Options Analysis</h2>
-      <p>Options analysis uses real-time chain data with Black-Scholes pricing, implied volatility ranking, Greeks analysis including Delta, Gamma, Theta, Vega, and Rho, put/call ratio analysis, and a 7-point trade checklist that gives a GO or NO-GO verdict before every trade. The P&L simulator models outcomes across a range of stock prices before you place the trade.</p>
+      <p>Options analysis uses real-time chain data with Black-Scholes pricing, implied volatility ranking, Greeks analysis including Delta, Gamma, Theta, Vega, and Rho, put/call ratio analysis, and a 7-point trade checklist that gives a GO or NO-GO verdict before every trade.</p>
     </div>
 
     <div id="root"></div>
