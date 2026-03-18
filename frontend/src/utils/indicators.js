@@ -80,11 +80,10 @@ export function calcAvgVolume(volumes, period = 20) {
   return Math.round(slice.reduce((a, b) => a + b, 0) / slice.length);
 }
 
-// ─── ATR (Average True Range) ─────────────────────────────────────────────────
+// ─── ATR ──────────────────────────────────────────────────────────────────────
 export function calcATR(ohlcv, period = 14) {
   const { high, low, close } = ohlcv;
   if (!high || !low || !close || close.length < period + 1) return null;
-
   const trueRanges = [];
   for (let i = 1; i < close.length; i++) {
     const hl  = high[i]  - low[i];
@@ -92,46 +91,35 @@ export function calcATR(ohlcv, period = 14) {
     const lpc = Math.abs(low[i]   - close[i - 1]);
     trueRanges.push(Math.max(hl, hpc, lpc));
   }
-
-  // Wilder smoothing (same as RSI)
   let atr = trueRanges.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < trueRanges.length; i++) {
+  for (let i = period; i < trueRanges.length; i++)
     atr = (atr * (period - 1) + trueRanges[i]) / period;
-  }
-
   const price      = close[close.length - 1];
   const atrPct     = parseFloat((atr / price * 100).toFixed(2));
-  const atr2       = parseFloat((atr * 2).toFixed(2));  // 2x ATR stop
-  const atr1       = parseFloat(atr.toFixed(2));         // 1x ATR stop
-  const volatility = atrPct > 4 ? 'HIGH' : atrPct > 2 ? 'MEDIUM' : 'LOW';
-
+  const atr1       = parseFloat(atr.toFixed(2));
+  const atr2       = parseFloat((atr * 2).toFixed(2));
   return {
-    atr:         parseFloat(atr.toFixed(2)),
+    atr:         atr1,
     atrPct,
-    atr1Stop:    parseFloat((price - atr1).toFixed(2)),   // long stop: price - 1ATR
-    atr2Stop:    parseFloat((price - atr2).toFixed(2)),   // long stop: price - 2ATR
-    atr1Target:  parseFloat((price + atr1).toFixed(2)),   // long target: price + 1ATR
-    atr2Target:  parseFloat((price + atr2).toFixed(2)),   // long target: price + 2ATR
-    shortStop:   parseFloat((price + atr1).toFixed(2)),   // short stop: price + 1ATR
-    shortTarget: parseFloat((price - atr2).toFixed(2)),   // short target: price - 2ATR
-    volatility,
+    atr1Stop:    parseFloat((price - atr1).toFixed(2)),
+    atr2Stop:    parseFloat((price - atr2).toFixed(2)),
+    atr1Target:  parseFloat((price + atr1).toFixed(2)),
+    atr2Target:  parseFloat((price + atr2).toFixed(2)),
+    shortStop:   parseFloat((price + atr1).toFixed(2)),
+    shortTarget: parseFloat((price - atr2).toFixed(2)),
+    volatility:  atrPct > 4 ? 'HIGH' : atrPct > 2 ? 'MEDIUM' : 'LOW',
   };
 }
 
-// ─── Stochastic RSI ───────────────────────────────────────────────────────────
+// ─── Stochastic RSI — thresholds 90/10 ───────────────────────────────────────
 export function calcStochRSI(closes, rsiPeriod = 14, stochPeriod = 14, smoothK = 3, smoothD = 3) {
   if (closes.length < rsiPeriod + stochPeriod + smoothK + smoothD) return null;
-
-  // Build RSI series
   const rsiSeries = [];
   for (let i = rsiPeriod; i <= closes.length; i++) {
     const val = calcRSI(closes.slice(0, i), rsiPeriod);
     if (val != null) rsiSeries.push(val);
   }
-
   if (rsiSeries.length < stochPeriod) return null;
-
-  // Stochastic of RSI
   const rawK = [];
   for (let i = stochPeriod - 1; i < rsiSeries.length; i++) {
     const slice  = rsiSeries.slice(i - stochPeriod + 1, i + 1);
@@ -140,57 +128,44 @@ export function calcStochRSI(closes, rsiPeriod = 14, stochPeriod = 14, smoothK =
     const range  = maxRSI - minRSI;
     rawK.push(range === 0 ? 50 : ((rsiSeries[i] - minRSI) / range) * 100);
   }
-
   if (rawK.length < smoothK) return null;
-
-  // Smooth %K
   const smoothedK = [];
   for (let i = smoothK - 1; i < rawK.length; i++) {
     const avg = rawK.slice(i - smoothK + 1, i + 1).reduce((a, b) => a + b, 0) / smoothK;
     smoothedK.push(parseFloat(avg.toFixed(2)));
   }
-
   if (smoothedK.length < smoothD) return null;
-
-  // %D = SMA of smoothed %K
   const dValues = [];
   for (let i = smoothD - 1; i < smoothedK.length; i++) {
     const avg = smoothedK.slice(i - smoothD + 1, i + 1).reduce((a, b) => a + b, 0) / smoothD;
     dValues.push(parseFloat(avg.toFixed(2)));
   }
-
   const k = smoothedK[smoothedK.length - 1];
   const d = dValues[dValues.length - 1];
-
+  // ── Raised thresholds: 90/10 instead of 80/20 ─────────────────────────────
   const signal =
-    k > 80 && d > 80 ? 'OVERBOUGHT' :
-    k < 20 && d < 20 ? 'OVERSOLD'   :
+    k > 90 && d > 90 ? 'OVERBOUGHT' :
+    k < 10 && d < 10 ? 'OVERSOLD'   :
     k > d            ? 'BULLISH'    :
     k < d            ? 'BEARISH'    : 'NEUTRAL';
-
+  const prevK = smoothedK[smoothedK.length - 2];
+  const prevD = dValues[dValues.length - 2];
   const crossover =
-    k > d && smoothedK[smoothedK.length - 2] <= dValues[dValues.length - 2]
-      ? 'BULLISH_CROSS' :
-    k < d && smoothedK[smoothedK.length - 2] >= dValues[dValues.length - 2]
-      ? 'BEARISH_CROSS' : null;
-
+    k > d && prevK <= prevD ? 'BULLISH_CROSS' :
+    k < d && prevK >= prevD ? 'BEARISH_CROSS' : null;
   return { k, d, signal, crossover };
 }
 
-// ─── Support & Resistance levels ──────────────────────────────────────────────
+// ─── Support & Resistance — 5% proximity warning ─────────────────────────────
 export function calcSupportResistance(ohlcv, lookback = 20) {
   const { high, low, close } = ohlcv;
   if (!high || !low || !close || close.length < lookback) return null;
-
-  const recentHigh  = high.slice(-lookback);
-  const recentLow   = low.slice(-lookback);
-  const price       = close[close.length - 1];
-
-  // Pivot-based S/R — find local highs and lows
+  const recentHigh = high.slice(-lookback);
+  const recentLow  = low.slice(-lookback);
+  const price      = close[close.length - 1];
   const pivotHighs = [];
   const pivotLows  = [];
-  const window     = 3; // bars each side
-
+  const window     = 3;
   for (let i = window; i < recentHigh.length - window; i++) {
     const slice = recentHigh.slice(i - window, i + window + 1);
     if (recentHigh[i] === Math.max(...slice)) pivotHighs.push(recentHigh[i]);
@@ -199,12 +174,11 @@ export function calcSupportResistance(ohlcv, lookback = 20) {
     const slice = recentLow.slice(i - window, i + window + 1);
     if (recentLow[i] === Math.min(...slice)) pivotLows.push(recentLow[i]);
   }
-
-  // Cluster nearby pivots (within 0.5%)
   const cluster = (levels) => {
-    const sorted  = [...levels].sort((a, b) => a - b);
+    if (!levels.length) return [];
+    const sorted   = [...levels].sort((a, b) => a - b);
     const clusters = [];
-    let group = [sorted[0]];
+    let group      = [sorted[0]];
     for (let i = 1; i < sorted.length; i++) {
       if ((sorted[i] - group[group.length - 1]) / group[group.length - 1] < 0.005) {
         group.push(sorted[i]);
@@ -216,93 +190,55 @@ export function calcSupportResistance(ohlcv, lookback = 20) {
     if (group.length) clusters.push(parseFloat((group.reduce((a, b) => a + b, 0) / group.length).toFixed(2)));
     return clusters;
   };
-
-  const resistanceLevels = cluster(pivotHighs).filter(r => r > price).slice(0, 3);
-  const supportLevels    = cluster(pivotLows).filter(s => s < price).reverse().slice(0, 3);
-
-  // Period high/low as hard S/R
-  const periodHigh = parseFloat(Math.max(...recentHigh).toFixed(2));
-  const periodLow  = parseFloat(Math.min(...recentLow).toFixed(2));
-
-  // Nearest support and resistance
-  const nearestResistance = resistanceLevels.length
-    ? Math.min(...resistanceLevels) : periodHigh;
-  const nearestSupport    = supportLevels.length
-    ? Math.max(...supportLevels) : periodLow;
-
-  // Distance from price
+  const resistanceLevels  = cluster(pivotHighs).filter(r => r > price).slice(0, 3);
+  const supportLevels     = cluster(pivotLows).filter(s => s < price).reverse().slice(0, 3);
+  const periodHigh        = parseFloat(Math.max(...recentHigh).toFixed(2));
+  const periodLow         = parseFloat(Math.min(...recentLow).toFixed(2));
+  const nearestResistance = resistanceLevels.length ? Math.min(...resistanceLevels) : periodHigh;
+  const nearestSupport    = supportLevels.length    ? Math.max(...supportLevels)    : periodLow;
   const distToResistance  = parseFloat(((nearestResistance - price) / price * 100).toFixed(2));
   const distToSupport     = parseFloat(((price - nearestSupport)    / price * 100).toFixed(2));
-
-  // Risk/reward based on S/R
-  const srRatio = distToSupport > 0
+  const srRatio           = distToSupport > 0
     ? parseFloat((distToResistance / distToSupport).toFixed(2)) : null;
-
   return {
-    resistanceLevels,
-    supportLevels,
-    nearestResistance,
-    nearestSupport,
-    periodHigh,
-    periodLow,
-    distToResistance,  // % above current price
-    distToSupport,     // % below current price
-    srRatio,           // reward/risk — higher = better long setup
+    resistanceLevels, supportLevels,
+    nearestResistance, nearestSupport,
+    periodHigh, periodLow,
+    distToResistance, distToSupport, srRatio,
   };
 }
 
-// ─── Earnings date proximity ──────────────────────────────────────────────────
+// ─── Earnings proximity ───────────────────────────────────────────────────────
 export function calcEarningsProximity(calendar, ticker, selectedExpiry = null) {
   if (!calendar?.length) return null;
-
-  // Find earnings-related events for this ticker
   const earningsKeywords = ['earnings', 'eps', 'quarterly results', 'q1', 'q2', 'q3', 'q4', 'results'];
   const tickerEvents = calendar.filter(e => {
-    const title = (e.title || '').toLowerCase();
+    const title       = (e.title || '').toLowerCase();
     const hasTicker   = title.includes(ticker?.toLowerCase() || '');
     const hasEarnings = earningsKeywords.some(kw => title.includes(kw));
     return hasTicker || (hasEarnings && e.category === 'TECH/EARNINGS');
   });
-
   if (!tickerEvents.length) return null;
-
-  const now          = Date.now();
-  const upcoming     = tickerEvents
+  const now      = Date.now();
+  const upcoming = tickerEvents
     .map(e => ({ ...e, date: e.time * 1000 }))
     .filter(e => e.date > now)
     .sort((a, b) => a.date - b.date);
-
   if (!upcoming.length) return null;
-
-  const next         = upcoming[0];
+  const next           = upcoming[0];
   const daysToEarnings = Math.round((next.date - now) / (1000 * 60 * 60 * 24));
-
-  // Check if earnings falls before expiry
-  let earningsBeforeExpiry = false;
-  if (selectedExpiry) {
-    const expiryDate = new Date(selectedExpiry).getTime();
-    earningsBeforeExpiry = next.date < expiryDate;
-  }
-
+  const earningsBeforeExpiry = selectedExpiry
+    ? next.date < new Date(selectedExpiry).getTime() : false;
   const risk =
     daysToEarnings <= 3  ? 'CRITICAL' :
     daysToEarnings <= 7  ? 'HIGH'     :
     daysToEarnings <= 14 ? 'MEDIUM'   : 'LOW';
-
   const advice =
-    daysToEarnings <= 3  ? 'Earnings in <3 days — IV crush risk extreme after report. Avoid buying options.' :
-    daysToEarnings <= 7  ? 'Earnings within 1 week — IV elevated, premium expensive. High risk for option buyers.' :
-    daysToEarnings <= 14 ? 'Earnings within 2 weeks — factor IV expansion into premium cost.' :
+    daysToEarnings <= 3  ? 'Earnings <3 days away — IV crush risk extreme. Avoid buying options.' :
+    daysToEarnings <= 7  ? 'Earnings within 1 week — IV elevated, premium expensive.' :
+    daysToEarnings <= 14 ? 'Earnings within 2 weeks — factor IV expansion into cost.' :
                            'No imminent earnings risk.';
-
-  return {
-    daysToEarnings,
-    earningsDate:        new Date(next.date).toISOString().split('T')[0],
-    earningsTitle:       next.title,
-    earningsBeforeExpiry,
-    risk,
-    advice,
-  };
+  return { daysToEarnings, earningsDate: new Date(next.date).toISOString().split('T')[0], earningsTitle: next.title, earningsBeforeExpiry, risk, advice };
 }
 
 // ─── RSI contradiction checker ────────────────────────────────────────────────
@@ -325,7 +261,6 @@ export function calcDeltaAdjustedSize(delta, premium, budget = 1500) {
   const absDelta    = Math.abs(parseFloat(delta));
   const contracts   = Math.max(1, Math.floor(budget / (premium * 100)));
   const dollarDelta = contracts * 100 * absDelta;
-
   let sizeAdvice;
   if (absDelta >= 0.7)
     sizeAdvice = `High delta (${absDelta}) — deep ITM, 1-2 contracts for defined risk`;
@@ -335,13 +270,7 @@ export function calcDeltaAdjustedSize(delta, premium, budget = 1500) {
     sizeAdvice = `OTM delta (${absDelta}) — needs larger move, consider fewer contracts`;
   else
     sizeAdvice = `Far OTM delta (${absDelta}) — lottery ticket, limit to 1 contract`;
-
-  return {
-    contracts,
-    absDelta,
-    dollarDelta: parseFloat(dollarDelta.toFixed(0)),
-    sizeAdvice,
-  };
+  return { contracts, absDelta, dollarDelta: parseFloat(dollarDelta.toFixed(0)), sizeAdvice };
 }
 
 export const TIMEFRAMES = {
@@ -356,49 +285,33 @@ export function calcIndicators(ohlcv, timeframeKey = 'swing') {
   const tf      = TIMEFRAMES[timeframeKey] || TIMEFRAMES.swing;
   const closes  = ohlcv.close.filter(Boolean);
   const volumes = ohlcv.volume || [];
-
-  const rsi14  = calcRSI(closes, tf.rsiPeriod);
-  const sma20  = tf.smas.includes(20)  ? calcSMA(closes, 20)  : null;
-  const sma50  = tf.smas.includes(50)  ? calcSMA(closes, 50)  : null;
-  const sma200 = tf.smas.includes(200) ? calcSMA(closes, 200) : null;
-  const macd   = calcMACD(closes);
-  const bb     = calcBollingerBands(closes, 20, 2);
-  const atr    = calcATR(ohlcv, 14);
+  const rsi14   = calcRSI(closes, tf.rsiPeriod);
+  const sma20   = tf.smas.includes(20)  ? calcSMA(closes, 20)  : null;
+  const sma50   = tf.smas.includes(50)  ? calcSMA(closes, 50)  : null;
+  const sma200  = tf.smas.includes(200) ? calcSMA(closes, 200) : null;
+  const macd    = calcMACD(closes);
+  const bb      = calcBollingerBands(closes, 20, 2);
+  const atr     = calcATR(ohlcv, 14);
   const stochRSI = calcStochRSI(closes, 14, 14, 3, 3);
-  const sr     = calcSupportResistance(ohlcv, 30);
-  const price  = closes[closes.length - 1];
-
-  const avgVol = calcAvgVolume(volumes, 20);
-  const curVol = volumes.filter(Boolean).slice(-1)[0] || 0;
-
+  const sr      = calcSupportResistance(ohlcv, 30);
+  const price   = closes[closes.length - 1];
+  const avgVol  = calcAvgVolume(volumes, 20);
+  const curVol  = volumes.filter(Boolean).slice(-1)[0] || 0;
   const rsiSignal = rsi14 > 70 ? 'OVERBOUGHT' : rsi14 < 30 ? 'OVERSOLD' : 'NEUTRAL';
-
   let trendSignal = 'UNKNOWN';
-  if (timeframeKey === 'short') {
-    trendSignal = sma20 ? (price > sma20 ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
-  } else if (timeframeKey === 'swing') {
-    trendSignal = sma20 && sma50 ? (sma20 > sma50 ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
-  } else {
-    trendSignal = sma50 && sma200 ? (sma50 > sma200 ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
-  }
-
+  if      (timeframeKey === 'short')  trendSignal = sma20  ? (price > sma20  ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
+  else if (timeframeKey === 'swing')  trendSignal = sma20 && sma50  ? (sma20  > sma50  ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
+  else                                trendSignal = sma50 && sma200 ? (sma50  > sma200 ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
   const priceVsSma20  = sma20  ? ((price - sma20)  / sma20  * 100).toFixed(2) : null;
   const priceVsSma50  = sma50  ? ((price - sma50)  / sma50  * 100).toFixed(2) : null;
   const priceVsSma200 = sma200 ? ((price - sma200) / sma200 * 100).toFixed(2) : null;
   const volumeRatio   = avgVol ? parseFloat((curVol / avgVol).toFixed(2)) : null;
   const volumeSignal  = volumeRatio > 1.5 ? 'HIGH' : volumeRatio < 0.5 ? 'LOW' : 'NORMAL';
-
   return {
-    timeframeKey,
-    timeframeLabel: tf.label,
-    rsi14, rsiSignal,
-    sma20, sma50, sma200,
-    trendSignal,
+    timeframeKey, timeframeLabel: tf.label,
+    rsi14, rsiSignal, sma20, sma50, sma200, trendSignal,
     priceVsSma20, priceVsSma50, priceVsSma200,
     macd, bb, atr, stochRSI, sr,
-    currentVolume: curVol,
-    avgVolume:     avgVol,
-    volumeRatio,
-    volumeSignal,
+    currentVolume: curVol, avgVolume: avgVol, volumeRatio, volumeSignal,
   };
 }

@@ -39,7 +39,6 @@ function categorizeNews(headlines) {
   });
 }
 
-// ─── Intraday context ─────────────────────────────────────────────────────────
 function buildIntradayContext(ohlcv, quote) {
   const current   = quote?.last     || ohlcv?.current;
   const open      = quote?.open     || null;
@@ -49,10 +48,10 @@ function buildIntradayContext(ohlcv, quote) {
     const dayChangePct = ((current - prevClose) / prevClose * 100);
     const abs          = Math.abs(dayChangePct).toFixed(2);
     ctx += `TODAY: ${dayChangePct > 0 ? 'UP' : 'DOWN'} ${abs}% | prev $${prevClose.toFixed(2)} → $${current.toFixed(2)}\n`;
-    if      (dayChangePct <= -1.5) ctx += `⚠ DOWN ${abs}% TODAY — put IV spiked, remaining downside may be priced in. Mean reversion risk HIGH.\n`;
-    else if (dayChangePct <= -0.75) ctx += `⚠ DOWN ${abs}% TODAY — put premiums elevated.\n`;
-    else if (dayChangePct >= 1.5)  ctx += `⚠ UP ${abs}% TODAY — call IV spiked, remaining upside may be priced in. Mean reversion risk HIGH.\n`;
-    else if (dayChangePct >= 0.75) ctx += `⚠ UP ${abs}% TODAY — call premiums elevated.\n`;
+    if      (dayChangePct <= -1.5)  ctx += `⚠ DOWN ${abs}% TODAY — put IV likely elevated, assess if move already priced in.\n`;
+    else if (dayChangePct <= -0.75) ctx += `NOTE: Down ${abs}% today — put premiums slightly elevated.\n`;
+    else if (dayChangePct >= 1.5)   ctx += `⚠ UP ${abs}% TODAY — call IV likely elevated, assess if move already priced in.\n`;
+    else if (dayChangePct >= 0.75)  ctx += `NOTE: Up ${abs}% today — call premiums slightly elevated.\n`;
   }
   if (current && open)
     ctx += `FROM OPEN: ${((current - open) / open * 100).toFixed(2)}% (open=$${open.toFixed(2)})\n`;
@@ -63,13 +62,12 @@ function buildIntradayContext(ohlcv, quote) {
     let downDays = 0, upDays = 0;
     for (let i = closes.length - 1; i > 0; i--) { if (closes[i] < closes[i-1]) downDays++; else break; }
     for (let i = closes.length - 1; i > 0; i--) { if (closes[i] > closes[i-1]) upDays++;   else break; }
-    if (downDays >= 3) ctx += `⚠ ${downDays} CONSECUTIVE DOWN SESSIONS — bounce risk HIGH for new PUT entries.\n`;
-    if (upDays   >= 3) ctx += `⚠ ${upDays} CONSECUTIVE UP SESSIONS — pullback risk HIGH for new CALL entries.\n`;
+    if (downDays >= 4) ctx += `⚠ ${downDays} CONSECUTIVE DOWN SESSIONS — extended move, bounce risk elevated.\n`;
+    if (upDays   >= 4) ctx += `⚠ ${upDays} CONSECUTIVE UP SESSIONS — extended move, pullback risk elevated.\n`;
   }
   return ctx;
 }
 
-// ─── Enhanced TA context ──────────────────────────────────────────────────────
 function buildTAContext(ta, ticker = '', calendar = null, selectedExpiry = null) {
   if (!ta) return '';
   let ctx = '\n=== TECHNICAL ANALYSIS ===\n';
@@ -84,50 +82,52 @@ function buildTAContext(ta, ticker = '', calendar = null, selectedExpiry = null)
   // Bollinger Bands
   if (ta.bb) {
     ctx += `BB: Upper=$${ta.bb.upper} | Mid=$${ta.bb.middle} | Lower=$${ta.bb.lower} | Width=${ta.bb.bWidth}% | %B=${ta.bb.bPct} | ${ta.bb.position}\n`;
-    if (ta.bb.squeeze)                    ctx += `🔥 BB SQUEEZE — low volatility, breakout imminent\n`;
-    if (ta.bb.position === 'NEAR_UPPER')  ctx += `⚠ Price near BB upper — overbought, CALL entry risky\n`;
-    if (ta.bb.position === 'NEAR_LOWER')  ctx += `✅ Price near BB lower — oversold, PUT entry risky\n`;
+    if (ta.bb.squeeze)                    ctx += `🔥 BB SQUEEZE — breakout likely soon\n`;
+    if (ta.bb.position === 'NEAR_UPPER')  ctx += `NOTE: Price near BB upper band — slightly extended\n`;
+    if (ta.bb.position === 'NEAR_LOWER')  ctx += `NOTE: Price near BB lower band — potential support\n`;
   }
 
   // ATR
   if (ta.atr) {
     ctx += `ATR(14): ${ta.atr.atr} (${ta.atr.atrPct}% of price) | Volatility=${ta.atr.volatility}\n`;
-    ctx += `ATR STOPS: Long stop=$${ta.atr.atr1Stop} (1x) | $${ta.atr.atr2Stop} (2x) | Short stop=$${ta.atr.shortStop}\n`;
+    ctx += `ATR STOPS: Long=$${ta.atr.atr1Stop} (1x) / $${ta.atr.atr2Stop} (2x) | Short=$${ta.atr.shortStop}\n`;
     ctx += `ATR TARGETS: 1x=$${ta.atr.atr1Target} | 2x=$${ta.atr.atr2Target}\n`;
-    if (ta.atr.volatility === 'HIGH')   ctx += `⚠ HIGH ATR — wide price swings, options premiums likely elevated, use wider stops\n`;
-    if (ta.atr.volatility === 'LOW')    ctx += `ℹ LOW ATR — tight range, options may be cheap, good for debit spreads\n`;
+    if (ta.atr.volatility === 'HIGH') ctx += `⚠ HIGH ATR — wide price swings, size down accordingly\n`;
+    if (ta.atr.volatility === 'LOW')  ctx += `ℹ LOW ATR — tight range, options may be cheap\n`;
   }
 
-  // Stochastic RSI
+  // Stochastic RSI — 90/10 thresholds, informational only
   if (ta.stochRSI) {
     ctx += `STOCH RSI: K=${ta.stochRSI.k} | D=${ta.stochRSI.d} | ${ta.stochRSI.signal}${ta.stochRSI.crossover ? ` | ${ta.stochRSI.crossover}` : ''}\n`;
-    if (ta.stochRSI.signal === 'OVERBOUGHT')      ctx += `⚠ STOCH RSI OVERBOUGHT (K=${ta.stochRSI.k}) — pullback likely, CALL entry risky\n`;
-    if (ta.stochRSI.signal === 'OVERSOLD')        ctx += `✅ STOCH RSI OVERSOLD (K=${ta.stochRSI.k}) — bounce likely, PUT entry risky\n`;
+    // Only flag at extreme 90/10 thresholds
+    if (ta.stochRSI.signal === 'OVERBOUGHT') ctx += `⚠ STOCH RSI EXTREME OVERBOUGHT (K=${ta.stochRSI.k} >90) — strong mean reversion warning\n`;
+    if (ta.stochRSI.signal === 'OVERSOLD')   ctx += `✅ STOCH RSI EXTREME OVERSOLD (K=${ta.stochRSI.k} <10) — strong bounce signal\n`;
     if (ta.stochRSI.crossover === 'BULLISH_CROSS') ctx += `✅ STOCH RSI BULLISH CROSS — short-term momentum turning up\n`;
     if (ta.stochRSI.crossover === 'BEARISH_CROSS') ctx += `🔴 STOCH RSI BEARISH CROSS — short-term momentum turning down\n`;
   }
 
-  // Support & Resistance
+  // Support & Resistance — 5% proximity threshold
   if (ta.sr) {
     ctx += `SUPPORT: ${ta.sr.supportLevels.map(s => `$${s}`).join(', ') || 'none'} | Nearest=$${ta.sr.nearestSupport} (${ta.sr.distToSupport}% below)\n`;
     ctx += `RESISTANCE: ${ta.sr.resistanceLevels.map(r => `$${r}`).join(', ') || 'none'} | Nearest=$${ta.sr.nearestResistance} (${ta.sr.distToResistance}% above)\n`;
-    ctx += `PERIOD HIGH=$${ta.sr.periodHigh} | PERIOD LOW=$${ta.sr.periodLow} | S/R Ratio=${ta.sr.srRatio} (>1 = better long setup)\n`;
-    if (ta.sr.distToResistance < 1.5) ctx += `⚠ NEAR RESISTANCE ($${ta.sr.nearestResistance}) — only ${ta.sr.distToResistance}% upside to resistance, CALL reward limited\n`;
-    if (ta.sr.distToSupport    < 1.5) ctx += `⚠ NEAR SUPPORT ($${ta.sr.nearestSupport}) — only ${ta.sr.distToSupport}% to support, PUT reward limited\n`;
-    if (ta.sr.srRatio && ta.sr.srRatio > 2) ctx += `✅ GOOD LONG SETUP: ${ta.sr.distToResistance}% to resistance vs ${ta.sr.distToSupport}% to support (ratio=${ta.sr.srRatio})\n`;
+    ctx += `S/R Ratio=${ta.sr.srRatio} | Period High=$${ta.sr.periodHigh} | Period Low=$${ta.sr.periodLow}\n`;
+    // Only warn if within 5%
+    if (ta.sr.distToResistance < 5)  ctx += `NOTE: Within 5% of resistance ($${ta.sr.nearestResistance}) — factor into CALL target\n`;
+    if (ta.sr.distToSupport    < 5)  ctx += `NOTE: Within 5% of support ($${ta.sr.nearestSupport}) — factor into PUT target\n`;
+    if (ta.sr.srRatio && ta.sr.srRatio > 2) ctx += `✅ GOOD LONG SETUP: ${ta.sr.distToResistance}% to resistance vs ${ta.sr.distToSupport}% to support\n`;
   }
 
   // SMA distances
   if (ta.priceVsSma20 != null)
     ctx += `SMA DIST: vs SMA20=${ta.priceVsSma20}% | vs SMA50=${ta.priceVsSma50 ?? 'N/A'}% | vs SMA200=${ta.priceVsSma200 ?? 'N/A'}%\n`;
-  if (ta.priceVsSma200 && Math.abs(parseFloat(ta.priceVsSma200)) > 10)
-    ctx += `⚠ Price ${ta.priceVsSma200}% from SMA200 — EXTENDED, mean reversion risk elevated\n`;
+  if (ta.priceVsSma200 && Math.abs(parseFloat(ta.priceVsSma200)) > 15)
+    ctx += `⚠ Price ${ta.priceVsSma200}% from SMA200 — very extended, mean reversion risk\n`;
 
   // Earnings proximity
   if (ticker && calendar) {
     const ep = calcEarningsProximity(calendar, ticker, selectedExpiry);
     if (ep) {
-      ctx += `\nEARNINGS: ${ep.daysToEarnings} days away (${ep.earningsDate})${ep.earningsBeforeExpiry ? ' — ⚠ BEFORE EXPIRY' : ''} | Risk=${ep.risk}\n`;
+      ctx += `\nEARNINGS: ${ep.daysToEarnings}d away (${ep.earningsDate})${ep.earningsBeforeExpiry ? ' ⚠ BEFORE EXPIRY' : ''} | Risk=${ep.risk}\n`;
       ctx += `EARNINGS ADVICE: ${ep.advice}\n`;
     }
   }
@@ -135,14 +135,12 @@ function buildTAContext(ta, ticker = '', calendar = null, selectedExpiry = null)
   return ctx;
 }
 
-// ─── Chain context ────────────────────────────────────────────────────────────
 function buildChainContext(chain) {
   if (!chain) return '';
   let ctx = '\n=== OPTIONS INTELLIGENCE ===\n';
-  ctx += `IV SKEW: ${chain.ivSkewPct}% (${chain.ivSkewLabel}) — ${
-    chain.ivSkewLabel === 'PUT_SKEW'  ? 'Market pricing crash risk, puts expensive' :
-    chain.ivSkewLabel === 'CALL_SKEW' ? 'Market pricing melt-up, calls expensive'  : 'Balanced IV'}\n`;
-  ctx += `IV PERCENTILE: ${chain.ivPercentile}% — ${chain.ivPctLabel}\n`;
+  ctx += `IV SKEW: ${chain.ivSkewPct}% (${chain.ivSkewLabel})\n`;
+  // IV percentile — informational only, lower weight
+  ctx += `IV PERCENTILE (session estimate): ${chain.ivPercentile}% — ${chain.ivPctLabel} (note: rough estimate, use as secondary signal only)\n`;
   ctx += `VOL/OI: Calls=${chain.callVolOIRatio} | Puts=${chain.putVolOIRatio} | P/C Vol=${parseFloat(chain.putCallVolRatio)?.toFixed(2)}\n`;
   if (chain.unusualCalls?.length) ctx += `🔥 UNUSUAL CALL VOL: ${chain.unusualCalls.join(', ')}\n`;
   if (chain.unusualPuts?.length)  ctx += `🔥 UNUSUAL PUT VOL: ${chain.unusualPuts.join(', ')}\n`;
@@ -154,7 +152,6 @@ function buildChainContext(chain) {
   return ctx;
 }
 
-// ─── Delta-adjusted sizing context ───────────────────────────────────────────
 function buildSizingContext(calls, puts, budget = 1500) {
   let ctx = '\n=== DELTA-ADJUSTED SIZING ===\n';
   const bestCall = calls[0];
@@ -180,7 +177,7 @@ export function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
     const vix  = find('^VIX'), dxy = find('DX-Y.NYB'), gold = find('GC=F'), oil = find('CL=F');
     ctx += `ASIA: N225=${pct(find('^N225'))} | HSI=${pct(find('^HSI'))} | Sensex=${pct(find('^BSESN'))}\n`;
     ctx += `EUROPE: DAX=${pct(find('^GDAXI'))} | FTSE=${pct(find('^FTSE'))} | CAC=${pct(find('^FCHI'))}\n`;
-    ctx += `SIGNALS: VIX=${vix?.current?.toFixed(2)} ${vix?.current > 25 ? '⚠ HIGH — options expensive' : vix?.current > 20 ? 'ELEVATED' : 'CALM — options cheap'} | DXY=${dxy?.current?.toFixed(2)} | Gold=$${gold?.current?.toFixed(2)} | Oil=$${oil?.current?.toFixed(2)}\n`;
+    ctx += `SIGNALS: VIX=${vix?.current?.toFixed(2)} ${vix?.current > 25 ? '⚠ HIGH' : vix?.current > 20 ? 'ELEVATED' : 'CALM'} | DXY=${dxy?.current?.toFixed(2)} | Gold=$${gold?.current?.toFixed(2)} | Oil=$${oil?.current?.toFixed(2)}\n`;
   }
   if (calendar?.length) ctx += `CALENDAR: ${calendar.slice(0, 4).map(e => e.title).join(' | ')}\n`;
   if (macroNews?.length) ctx += `GEO NEWS: ${macroNews.slice(0, 4).map(n => n.title).join(' | ')}\n`;
@@ -215,16 +212,13 @@ export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, ch
 
   const prevClose    = ohlcv?.prev || quote?.prevClose;
   const dayChangePct = price && prevClose ? ((price - prevClose) / prevClose * 100) : 0;
-
   const callContradiction = checkRSIContradiction(ta?.rsi14, 'CALL');
   const putContradiction  = checkRSIContradiction(ta?.rsi14, 'PUT');
-
-  // Earnings proximity
   const ep = calcEarningsProximity(calendar, ticker, expiry);
 
   const tfMeta = {
     short:    { label: 'Short Term (1-5 days)',       indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
-    swing:    { label: 'Swing Trade (1-4 weeks)',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
+    swing:    { label: 'Swing Trade (1-4 weeks)',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | ATR=${ta?.atr?.atr} | BB=${ta?.bb?.position} | Trend=${ta?.trendSignal}` },
     position: { label: 'Position Trade (1-3 months)',  indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
     longterm: { label: 'Long Term (6-12 months)',      indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
   };
@@ -234,27 +228,30 @@ export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, ch
     model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
     system: `You are a quantitative trading analyst and expert options trader.
 
-CRITICAL OPTIONS RULES:
-1. Already down >1% today: PUT IV spiked — justify new PUT or recommend NEUTRAL.
-2. Already up >1% today: CALL IV spiked — justify new CALL or recommend NEUTRAL.
-3. IV PERCENTILE >80%: Options EXPENSIVE — buying outright is high risk.
-4. IV PERCENTILE <20%: Options CHEAP — good for outright buys.
-5. Wide spread (>15%): Illiquid — avoid these strikes.
-6. Unusual volume 🔥: Smart money signal — weight heavily.
-7. RSI >70 + CALL: Contradiction — address explicitly.
-8. RSI <30 + PUT: Contradiction — address explicitly.
-9. StochRSI OVERBOUGHT + CALL: Contradiction — address.
-10. StochRSI OVERSOLD + PUT: Contradiction — address.
-11. MACD cross contradicts direction: Address it.
-12. BB NEAR_UPPER + CALL: Overbought risk.
-13. BB NEAR_LOWER + PUT: Oversold risk.
-14. Price near resistance (<2%): CALL reward limited — address.
-15. Price near support (<2%): PUT reward limited — address.
-16. ATR HIGH: Wide stops needed, adjust position size.
-17. Earnings before expiry: IV crush risk after report — critical risk.
-18. SMA200 distance >10%: Extended, mean reversion risk.
-19. 3+ consecutive same-direction days: Mean reversion risk.
-20. Use delta-adjusted sizing. NEUTRAL is valid. Exact prices only.
+HARD RULES (these MUST block or heavily penalize a recommendation):
+1. RSI >70 + CALL recommendation: Must explicitly address overbought risk.
+2. RSI <30 + PUT recommendation: Must explicitly address oversold/bounce risk.
+3. StochRSI >90 + CALL: Extreme overbought — strong warning.
+4. StochRSI <10 + PUT: Extreme oversold — strong warning.
+5. Earnings BEFORE expiry + CRITICAL/HIGH risk: Strongly consider NEUTRAL due to IV crush.
+6. Stock already down >2% today + PUT: Assess if move already priced in.
+7. Stock already up >2% today + CALL: Assess if move already priced in.
+8. Wide spread contracts (⚠WIDE): Avoid — recommend liquid alternatives.
+
+INFORMATIONAL SIGNALS (weigh but do not automatically block):
+- IV Percentile (session estimate — lower confidence, use as secondary signal)
+- StochRSI between 10-90: Informational trend signal only
+- MACD cross: Adds directional weight but not a blocker
+- BB position: Context only unless extreme
+- S/R proximity: Note in reasoning if within 5%, but not a blocker
+- ATR HIGH/LOW: Affects sizing recommendation
+- Consecutive days (3+): Elevated caution, not automatic NEUTRAL
+- SMA200 distance >15%: Extended, note in thesis
+
+IMPORTANT: NEUTRAL is valid when multiple HARD RULES fire simultaneously.
+But do NOT default to NEUTRAL for normal market conditions.
+A stock can be slightly overbought with RSI 65 and still be a valid CALL if trend, MACD, and macro are aligned.
+Use all signals together — single signals rarely justify NEUTRAL.
 
 Return ONLY JSON with keys "price" and "options". No markdown.`,
     messages: [{
@@ -265,8 +262,8 @@ ${intradayCtx}
 ${taCtx}
 ${chainCtx}
 ${sizingCtx}
-${callContradiction ? `RSI vs CALLS: ${callContradiction}` : ''}
-${putContradiction  ? `RSI vs PUTS: ${putContradiction}`   : ''}
+${callContradiction ? `RSI WARNING: ${callContradiction}` : ''}
+${putContradiction  ? `RSI WARNING: ${putContradiction}`  : ''}
 ${ep ? `EARNINGS RISK: ${ep.daysToEarnings}d away | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
 FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe}
 OPTIONS FLOW: P/C OI=${chain?.putCallRatio?.toFixed(2)} | P/C Vol=${parseFloat(chain?.putCallVolRatio)?.toFixed(2)} | CallIV=${chain?.avgCallIV}% | PutIV=${chain?.avgPutIV}%
@@ -277,16 +274,16 @@ ${macroCtx}
 ATM CALLS: ${calls.map(c => `$${c.strike}|b$${c.bid}|a$${c.ask}|m$${c.mid}|IV${c.iv}%|d${c.delta}|g${c.gamma}|OI${c.oi}|vol${c.volume}|sprd${c.spreadPct}%${c.unusualVolume ? '🔥' : ''}${c.wideSpread ? '⚠WIDE' : ''}`).join(' ')}
 ATM PUTS:  ${puts.map(p => `$${p.strike}|b$${p.bid}|a$${p.ask}|m$${p.mid}|IV${p.iv}%|d${p.delta}|g${p.gamma}|OI${p.oi}|vol${p.volume}|sprd${p.spreadPct}%${p.unusualVolume ? '🔥' : ''}${p.wideSpread ? '⚠WIDE' : ''}`).join(' ')}
 
-DECISION CHECKLIST:
-- Today's move: ${dayChangePct >= 0 ? 'UP' : 'DOWN'} ${Math.abs(dayChangePct).toFixed(2)}%
-- IV Percentile: ${chain?.ivPercentile}% (${chain?.ivPctLabel})
+DECISION SUMMARY:
+- Today: ${dayChangePct >= 0 ? 'UP' : 'DOWN'} ${Math.abs(dayChangePct).toFixed(2)}%
 - RSI: ${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI: K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}]
 - MACD: ${ta?.macd?.cross || 'N/A'} | BB: ${ta?.bb?.position || 'N/A'}
-- ATR: ${ta?.atr?.atr} (${ta?.atr?.volatility}) | ATR Stop: $${ta?.atr?.atr1Stop}
-- Nearest Resistance: $${ta?.sr?.nearestResistance} (${ta?.sr?.distToResistance}% away)
-- Nearest Support: $${ta?.sr?.nearestSupport} (${ta?.sr?.distToSupport}% away)
-- Earnings: ${ep ? `${ep.daysToEarnings}d [${ep.risk}]${ep.earningsBeforeExpiry ? ' BEFORE EXPIRY ⚠' : ''}` : 'none detected'}
-- Skew: ${chain?.ivSkewLabel} | Unusual vol: ${[...(chain?.unusualCalls || []), ...(chain?.unusualPuts || [])].length > 0 ? 'YES' : 'NONE'}
+- ATR: ${ta?.atr?.atr} (${ta?.atr?.volatility}) | ATR stop: $${ta?.atr?.atr1Stop}
+- Resistance: $${ta?.sr?.nearestResistance} (${ta?.sr?.distToResistance}% away)
+- Support: $${ta?.sr?.nearestSupport} (${ta?.sr?.distToSupport}% away)
+- Earnings: ${ep ? `${ep.daysToEarnings}d [${ep.risk}]${ep.earningsBeforeExpiry ? ' BEFORE EXPIRY ⚠' : ''}` : 'none'}
+- IV Pct (estimate): ${chain?.ivPercentile}% | Skew: ${chain?.ivSkewLabel}
+- Unusual vol: ${[...(chain?.unusualCalls || []), ...(chain?.unusualPuts || [])].length > 0 ? 'YES' : 'NONE'}
 
 Return JSON:
 {
@@ -298,15 +295,14 @@ Return JSON:
   },
   "options": {
     "recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,
-    "reasoning":"MUST address: today's move, IV percentile, RSI+StochRSI vs direction, MACD, BB, S/R proximity, ATR, earnings risk if any, unusual volume",
+    "reasoning":"Address the key signals: today's move, RSI, MACD, BB, S/R, ATR, earnings if any. Explain why the overall picture supports or doesn't support a directional bet.",
     "ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string",
-    "positionSizing":"string — use delta-adjusted + ATR-based stop sizing",
-    "keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string",
+    "positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string",
     "bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"Sell at $${callTarget} — profit $${((parseFloat(callTarget)-callMid)*100*callContracts).toFixed(0)}","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${callTarget} (100% gain). Stop: $${callStop} (50% loss). ATR stop: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},
     "bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"Sell at $${putTarget} — profit $${((parseFloat(putTarget)-putMid)*100*putContracts).toFixed(0)}","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${putTarget} (100% gain). Stop: $${putStop} (50% loss). ATR stop: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}
   }
 }
-RULES: Exact bid/ask/mid only. Avoid wide-spread contracts. OI>50. Return JSON only.`
+RULES: Exact bid/ask/mid only. Avoid wide-spread strikes. OI>50. Return JSON only.`
     }]
   });
 
@@ -323,9 +319,9 @@ export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, optio
   const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
 
   const tfMeta = {
-    short:    { label: 'Short Term (1-5 days)',       focus: 'momentum, RSI, StochRSI, volume spikes, news.',        indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
-    swing:    { label: 'Swing Trade (1-4 weeks)',      focus: 'trend, SMA20/50, MACD, BB, S/R levels.',               indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | BB=${ta?.bb?.position} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
-    position: { label: 'Position Trade (1-3 months)',  focus: 'SMA50/200 trend, fundamentals, ATR, macro.',           indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
+    short:    { label: 'Short Term (1-5 days)',       focus: 'momentum, RSI, StochRSI, volume, news.',               indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+    swing:    { label: 'Swing Trade (1-4 weeks)',      focus: 'trend, SMA20/50, MACD, BB, S/R, ATR stops.',           indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | BB=${ta?.bb?.position} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
+    position: { label: 'Position Trade (1-3 months)',  focus: 'SMA50/200, fundamentals, ATR, macro.',                  indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
     longterm: { label: 'Long Term (6-12 months)',      focus: 'fundamentals, macro cycle, analyst consensus.',         indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
   };
   const tf = tfMeta[timeframeKey] || tfMeta.swing;
@@ -334,8 +330,8 @@ export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, optio
     model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
     system: `You are a quantitative trading analyst. Timeframe: ${tf.label}. Focus: ${tf.focus}
 [UPGRADE]/[INSIDER/FUND]=bullish. [DOWNGRADE]/[SHORT ATTACK]=bearish.
-Use ATR stops for price targets. Consider S/R levels as natural targets/stops.
-If SMA200 dist >10%, price is extended — factor mean reversion into thesis.
+Use ATR for stop/target sizing. Use S/R levels as natural price targets.
+SMA200 dist >15% = extended, factor mean reversion into thesis.
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
     messages: [{
       role: 'user',
@@ -386,7 +382,23 @@ export async function runOptionsAnalysis(ticker, price, expiry, chain, fundament
   return callClaude({
     model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
     system: `You are an expert options trader.
-RULES: 1)Down>1%=PUT IV spiked. 2)Up>1%=CALL IV spiked. 3)IV>80%=expensive. 4)IV<20%=cheap. 5)Wide spread=avoid. 6)Unusual vol=smart money. 7)RSI>70+CALL=contradiction. 8)RSI<30+PUT=contradiction. 9)StochRSI OB+CALL=risky. 10)StochRSI OS+PUT=risky. 11)MACD contradicts=address. 12)BB NEAR_UPPER+CALL=risky. 13)BB NEAR_LOWER+PUT=risky. 14)Near resistance<2%=CALL reward limited. 15)Near support<2%=PUT reward limited. 16)ATR HIGH=wide stops. 17)Earnings before expiry=IV crush risk. 18)SMA200 dist>10%=extended. 19)Delta-adjusted sizing. 20)NEUTRAL is valid. 21)Exact prices only.
+
+HARD RULES (must address explicitly):
+1. RSI >70 + CALL = overbought warning. RSI <30 + PUT = oversold warning.
+2. StochRSI >90 + CALL = extreme overbought. StochRSI <10 + PUT = extreme oversold.
+3. Earnings BEFORE expiry + HIGH/CRITICAL risk = IV crush warning, consider NEUTRAL.
+4. Stock down >2% today + PUT = assess if already priced in.
+5. Stock up >2% today + CALL = assess if already priced in.
+6. Wide spread (⚠WIDE) = avoid that strike.
+
+INFORMATIONAL (weigh but do not auto-block):
+- IV Percentile (session estimate — secondary signal only)
+- MACD, BB, S/R proximity within 5%, ATR, consecutive days
+
+IMPORTANT: Do NOT default to NEUTRAL for normal market conditions.
+Use all signals holistically. Single mild signals do not justify NEUTRAL.
+NEUTRAL is for when multiple hard rules fire or risk/reward is genuinely poor.
+
 Return ONLY JSON.`,
     messages: [{
       role: 'user',
@@ -395,9 +407,9 @@ ${intradayCtx}
 ${taCtx}
 ${chainCtx}
 ${sizingCtx}
-${callContradiction ? `RSI vs CALLS: ${callContradiction}` : ''}
-${putContradiction  ? `RSI vs PUTS: ${putContradiction}`   : ''}
-${ep ? `EARNINGS: ${ep.daysToEarnings}d away | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
+${callContradiction ? `RSI WARNING: ${callContradiction}` : ''}
+${putContradiction  ? `RSI WARNING: ${putContradiction}`  : ''}
+${ep ? `EARNINGS: ${ep.daysToEarnings}d | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
 Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact} | Global: ${priceSignal?.globalMarketTrend}
 FUNDAMENTALS: Rec=${fundamentals?.recommendationKey?.toUpperCase()} | Target=$${fundamentals?.targetMeanPrice}
 ${hasUpgrade ? '🟢 UPGRADE' : ''}${hasDowngrade ? '🔴 DOWNGRADE' : ''}${hasTarget ? '📊 TARGET' : ''}${hasFund ? '🏦 INSTITUTIONAL' : ''}${hasShort ? '⚠ SHORT ATTACK' : ''}
@@ -405,7 +417,7 @@ NEWS: ${categorized.slice(0, 6).join(' | ')}
 CALLS: ${calls.map(c => `$${c.strike}|b$${c.bid}|a$${c.ask}|m$${c.mid}|IV${c.iv}%|d${c.delta}|g${c.gamma}|OI${c.oi}|vol${c.volume}|sprd${c.spreadPct}%${c.unusualVolume ? '🔥' : ''}${c.wideSpread ? '⚠' : ''}`).join(' ')}
 PUTS:  ${puts.map(p => `$${p.strike}|b$${p.bid}|a$${p.ask}|m$${p.mid}|IV${p.iv}%|d${p.delta}|g${p.gamma}|OI${p.oi}|vol${p.volume}|sprd${p.spreadPct}%${p.unusualVolume ? '🔥' : ''}${p.wideSpread ? '⚠' : ''}`).join(' ')}
 ${macroCtx}
-Return JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"MUST address: IV pct (${chain?.ivPercentile}%), skew (${chain?.ivSkewLabel}), RSI (${ta?.rsi14}), StochRSI (${ta?.stochRSI?.signal}), MACD (${ta?.macd?.cross}), BB (${ta?.bb?.position}), S/R proximity (res $${ta?.sr?.nearestResistance} ${ta?.sr?.distToResistance}% away, sup $${ta?.sr?.nearestSupport} ${ta?.sr?.distToSupport}% away), ATR (${ta?.atr?.volatility}), earnings (${ep ? ep.risk : 'none'}), unusual vol, intraday move","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${callTarget} (100% gain). Stop: $${callStop}. ATR stop: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${putTarget} (100% gain). Stop: $${putStop}. ATR stop: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}}`
+Return JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"Explain overall picture — RSI (${ta?.rsi14}), StochRSI (K=${ta?.stochRSI?.k}), MACD (${ta?.macd?.cross}), BB (${ta?.bb?.position}), S/R (res $${ta?.sr?.nearestResistance} ${ta?.sr?.distToResistance}% away), ATR (${ta?.atr?.volatility}), earnings (${ep ? ep.risk : 'none'}), intraday move, unusual vol","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${callTarget} (100% gain). Stop: $${callStop}. ATR stop: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${putTarget} (100% gain). Stop: $${putStop}. ATR stop: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}}`
     }]
   });
 }
