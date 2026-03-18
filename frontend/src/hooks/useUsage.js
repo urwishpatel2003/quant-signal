@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 
-const LIMITS = { scans: 10, options: 5 };
+const LIMITS = { scans: 15, options: 10 };
 const BASE   = import.meta.env.VITE_API_BASE;
 
 export function useUsage() {
