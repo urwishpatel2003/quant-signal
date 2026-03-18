@@ -8,7 +8,7 @@ body {
   margin: 0;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 14px;
-  color: #d8d8e8;          /* brighter base text */
+  color: #e8e8f0;
   background: #07070e;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -20,7 +20,7 @@ body {
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #111; }
-::-webkit-scrollbar-thumb { background: #333; }
+::-webkit-scrollbar-thumb { background: #444; }
 
 /* ── Buttons ── */
 .btn {
@@ -30,61 +30,67 @@ body {
   padding: 11px 22px; cursor: pointer;
 }
 .btn:hover { background: #ffc533; }
-.btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+.btn:disabled { background: #2a2a3e; color: #556; cursor: not-allowed; }
 
 .btn-sm {
-  background: #1a1a2e; color: #aab; border: 1px solid #2a2a3e;
+  background: #1a1a2e; color: #c8c8e0; border: 1px solid #3a3a5e;
   font-family: inherit; font-size: 11px; padding: 6px 12px;
   cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase;
   font-weight: 500;
 }
-.btn-sm:hover:not(:disabled) { color: #ffaa00; border-color: #ffaa00; }
+.btn-sm:hover:not(:disabled) { color: #ffaa00; border-color: #ffaa00; background: #ffaa0011; }
 .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-danger { color: #ff4444 !important; border-color: #ff444433 !important; }
+.btn-danger { color: #ff4444 !important; border-color: #ff444444 !important; }
 .btn-danger:hover:not(:disabled) { background: #ff444411 !important; border-color: #ff4444 !important; }
 
 /* ── Card ── */
 .card {
-  background: #0f0f18; border: 1px solid #1e1e2e;
+  background: #0f0f1a; border: 1px solid #2a2a40;
   padding: 16px; font-size: 13px;
 }
 
 /* ── Input ── */
 .input {
-  background: #0f0f18; border: 1px solid #2a2a3a;
-  color: #fff; font-family: inherit; font-size: 14px;
+  background: #0f0f1a; border: 1px solid #3a3a5e;
+  color: #ffffff; font-family: inherit; font-size: 14px;
   padding: 10px 14px; outline: none; width: 100%;
 }
+.input::placeholder { color: #6677aa; }
 .input:focus { border-color: #ffaa00; }
 
 /* ── KV rows ── */
 .kv {
   display: flex; justify-content: space-between;
-  padding: 7px 0; border-bottom: 1px solid #1a1a26;
+  padding: 8px 0; border-bottom: 1px solid #1e1e30;
   font-size: 13px;
 }
 .kv:last-child { border-bottom: none; }
 .kv-key {
-  color: #8899aa;              /* brighter key labels */
+  color: #99aacc;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 12px;
+  font-weight: 500;
+}
+.kv-value {
+  color: #e8e8f0;
+  font-weight: 600;
 }
 
 /* ── Bars ── */
-.bar-bg  { background: #1a1a26; height: 4px; border-radius: 2px; width: 100%; margin-top: 6px; }
+.bar-bg  { background: #1e1e30; height: 4px; border-radius: 2px; width: 100%; margin-top: 6px; }
 .bar-fill { height: 4px; border-radius: 2px; transition: width 1s ease; }
 
 /* ── App tabs (main nav) ── */
 .tab-btn {
   background: none; border: none;
-  color: #8899aa;              /* brighter inactive tabs */
+  color: #99aacc;
   font-family: inherit;
-  font-size: 13px;             /* bigger */
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 14px 22px;          /* more padding */
+  padding: 14px 24px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
@@ -94,7 +100,7 @@ body {
   color: #ffaa00;
   border-bottom-color: #ffaa00;
 }
-.tab-btn:hover { color: #c8c8d0; }
+.tab-btn:hover:not(.active) { color: #dde0f0; }
 
 /* ── Tag ── */
 .tag {
@@ -104,8 +110,9 @@ body {
 
 /* ── Drop zone ── */
 .drop-zone {
-  border: 2px dashed #2a2a3a; padding: 40px;
+  border: 2px dashed #3a3a5e; padding: 40px;
   text-align: center; cursor: pointer; transition: all 0.2s;
+  color: #99aacc;
 }
 .drop-zone:hover, .drop-zone.dragging { border-color: #ffaa00; background: #ffaa0008; }
 
@@ -114,43 +121,29 @@ body {
 @keyframes fadeIn { from{ opacity:0; transform:translateY(4px) } to{ opacity:1; transform:translateY(0) } }
 @keyframes spin   { to{ transform: rotate(360deg); } }
 .fade-in { animation: fadeIn 0.4s ease forwards; }
-.pulse   { animation: pulse  1s   infinite; }
+.pulse   { animation: pulse 1s infinite; }
 
 /* ── App Layout ── */
 .app-header {
-  border-bottom: 1px solid #1a1a2e;
+  border-bottom: 1px solid #2a2a40;
   padding: calc(12px + env(safe-area-inset-top)) 24px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 12px;
 }
 .app-header-logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
+  display: flex; align-items: center;
+  gap: 12px; flex-shrink: 0;
 }
 .app-tabs {
-  border-bottom: 1px solid #1a1a2e;
+  border-bottom: 1px solid #2a2a40;
   padding: 0 24px;
-  display: flex;
-  gap: 0;
+  display: flex; gap: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .app-tabs::-webkit-scrollbar { display: none; }
 .app-content { padding: 24px; }
-
-/* ── Section headers (card titles) ── */
-.section-label {
-  font-size: 11px;
-  color: #6677aa;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
 
 /* ── Grids ── */
 .scanner-grid      { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -170,13 +163,22 @@ body {
 .welcome-hero          { padding: 80px 40px 60px; text-align: center; }
 .welcome-features      { padding: 0 40px 60px; max-width: 1100px; margin: 0 auto; width: 100%; }
 .welcome-features-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
-.welcome-about         { padding: 60px 40px; background: #0a0a14; border-top: 1px solid #1e1e2e; }
+.welcome-about         { padding: 60px 40px; background: #0a0a14; border-top: 1px solid #2a2a40; }
 .welcome-about-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
 
 /* ── Utilities ── */
 .hide-mobile { display: block; }
 .show-mobile { display: none; }
 .flex-wrap   { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* ── Text utilities ── */
+.text-dim    { color: #99aacc; }
+.text-muted  { color: #6677aa; }
+.text-bright { color: #e8e8f0; }
+.label-sm {
+  font-size: 10px; color: #6677aa;
+  letter-spacing: 0.2em; text-transform: uppercase;
+}
 
 /* ── 1024px ── */
 @media (max-width: 1024px) {
@@ -194,21 +196,17 @@ body {
 
 /* ── 768px ── */
 @media (max-width: 768px) {
-  body                   { font-size: 15px; color: #d8d8e8; }
+  body                   { font-size: 15px; color: #e8e8f0; }
   .app-header            { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; flex-wrap: wrap; }
   .app-tabs              { padding: 0 4px; }
   .app-content           { padding: 14px; }
-
-  /* Bigger, brighter tab buttons on mobile */
-  .tab-btn               { font-size: 12px; padding: 13px 12px; letter-spacing: 0.08em; color: #8899aa; }
-  .tab-btn.active        { color: #ffaa00; }
-
+  .tab-btn               { font-size: 13px; padding: 13px 14px; letter-spacing: 0.08em; }
   .app-header-subtitle   { display: none; }
   .card                  { padding: 14px; font-size: 14px; }
   .kv                    { font-size: 14px; padding: 8px 0; }
-  .kv-key                { font-size: 13px; color: #8899aa; }
+  .kv-key                { font-size: 13px; color: #99aacc; }
   .btn                   { font-size: 13px; padding: 12px 18px; }
-  .btn-sm                { font-size: 12px; padding: 7px 12px; color: #aab; }
+  .btn-sm                { font-size: 12px; padding: 7px 12px; }
   .input                 { font-size: 15px; padding: 11px 14px; }
   .tag                   { font-size: 12px; padding: 3px 10px; }
 
@@ -239,7 +237,7 @@ body {
 @media (max-width: 375px) {
   body                   { font-size: 15px; }
   .app-content           { padding: 10px; }
-  .tab-btn               { font-size: 11px; padding: 12px 8px; letter-spacing: 0.05em; }
+  .tab-btn               { font-size: 12px; padding: 12px 10px; letter-spacing: 0.05em; }
   .card                  { padding: 12px; font-size: 14px; }
   .kv                    { font-size: 13px; }
   .kv-key                { font-size: 12px; }
@@ -254,12 +252,11 @@ body {
   .portfolio-item        { grid-template-columns: 1fr; }
 }
 
-/* ── Scanner results — 2 col desktop, 1 col mobile ── */
+/* ── Scanner results ── */
 .scanner-results-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+  gap: 16px; align-items: start;
 }
 @media (max-width: 768px) {
   .scanner-results-grid { grid-template-columns: 1fr; }
