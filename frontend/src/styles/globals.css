@@ -2,14 +2,13 @@
 
 /* ── Base ── */
 html { font-size: 16px; }
-
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 14px;
-  color: #c8c8d0;
+  color: #d8d8e8;          /* brighter base text */
   background: #07070e;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -26,7 +25,7 @@ body {
 /* ── Buttons ── */
 .btn {
   background: #ffaa00; color: #0a0a0f; border: none;
-  font-family: inherit; font-size: 13px; font-weight: 600;
+  font-family: inherit; font-size: 13px; font-weight: 700;
   letter-spacing: 0.15em; text-transform: uppercase;
   padding: 11px 22px; cursor: pointer;
 }
@@ -34,9 +33,10 @@ body {
 .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
 
 .btn-sm {
-  background: #1a1a2e; color: #888; border: 1px solid #2a2a3e;
+  background: #1a1a2e; color: #aab; border: 1px solid #2a2a3e;
   font-family: inherit; font-size: 11px; padding: 6px 12px;
   cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase;
+  font-weight: 500;
 }
 .btn-sm:hover:not(:disabled) { color: #ffaa00; border-color: #ffaa00; }
 .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -64,21 +64,37 @@ body {
   font-size: 13px;
 }
 .kv:last-child { border-bottom: none; }
-.kv-key { color: #556; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
+.kv-key {
+  color: #8899aa;              /* brighter key labels */
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+}
 
 /* ── Bars ── */
-.bar-bg { background: #1a1a26; height: 4px; border-radius: 2px; width: 100%; margin-top: 6px; }
+.bar-bg  { background: #1a1a26; height: 4px; border-radius: 2px; width: 100%; margin-top: 6px; }
 .bar-fill { height: 4px; border-radius: 2px; transition: width 1s ease; }
 
-/* ── Tabs ── */
+/* ── App tabs (main nav) ── */
 .tab-btn {
-  background: none; border: none; color: #555;
-  font-family: inherit; font-size: 12px; letter-spacing: 0.15em;
-  text-transform: uppercase; padding: 12px 20px; cursor: pointer;
-  border-bottom: 2px solid transparent; white-space: nowrap;
+  background: none; border: none;
+  color: #8899aa;              /* brighter inactive tabs */
+  font-family: inherit;
+  font-size: 13px;             /* bigger */
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 14px 22px;          /* more padding */
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s;
 }
-.tab-btn.active { color: #ffaa00; border-bottom-color: #ffaa00; }
-.tab-btn:hover { color: #aaa; }
+.tab-btn.active {
+  color: #ffaa00;
+  border-bottom-color: #ffaa00;
+}
+.tab-btn:hover { color: #c8c8d0; }
 
 /* ── Tag ── */
 .tag {
@@ -127,6 +143,15 @@ body {
 .app-tabs::-webkit-scrollbar { display: none; }
 .app-content { padding: 24px; }
 
+/* ── Section headers (card titles) ── */
+.section-label {
+  font-size: 11px;
+  color: #6677aa;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
 /* ── Grids ── */
 .scanner-grid      { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .options-layout    { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
@@ -169,17 +194,21 @@ body {
 
 /* ── 768px ── */
 @media (max-width: 768px) {
-  body                   { font-size: 15px; }
+  body                   { font-size: 15px; color: #d8d8e8; }
   .app-header            { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; flex-wrap: wrap; }
-  .app-tabs              { padding: 0 8px; }
+  .app-tabs              { padding: 0 4px; }
   .app-content           { padding: 14px; }
-  .tab-btn               { font-size: 12px; padding: 12px 10px; letter-spacing: 0.05em; }
+
+  /* Bigger, brighter tab buttons on mobile */
+  .tab-btn               { font-size: 12px; padding: 13px 12px; letter-spacing: 0.08em; color: #8899aa; }
+  .tab-btn.active        { color: #ffaa00; }
+
   .app-header-subtitle   { display: none; }
   .card                  { padding: 14px; font-size: 14px; }
   .kv                    { font-size: 14px; padding: 8px 0; }
-  .kv-key                { font-size: 13px; }
+  .kv-key                { font-size: 13px; color: #8899aa; }
   .btn                   { font-size: 13px; padding: 12px 18px; }
-  .btn-sm                { font-size: 12px; padding: 7px 12px; }
+  .btn-sm                { font-size: 12px; padding: 7px 12px; color: #aab; }
   .input                 { font-size: 15px; padding: 11px 14px; }
   .tag                   { font-size: 12px; padding: 3px 10px; }
 
@@ -210,9 +239,10 @@ body {
 @media (max-width: 375px) {
   body                   { font-size: 15px; }
   .app-content           { padding: 10px; }
-  .tab-btn               { font-size: 11px; padding: 10px 8px; }
+  .tab-btn               { font-size: 11px; padding: 12px 8px; letter-spacing: 0.05em; }
   .card                  { padding: 12px; font-size: 14px; }
   .kv                    { font-size: 13px; }
+  .kv-key                { font-size: 12px; }
   .btn                   { font-size: 12px; padding: 11px 14px; }
   .btn-sm                { font-size: 11px; padding: 6px 10px; }
   .markets-summary       { grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -232,7 +262,5 @@ body {
   align-items: start;
 }
 @media (max-width: 768px) {
-  .scanner-results-grid {
-    grid-template-columns: 1fr;
-  }
+  .scanner-results-grid { grid-template-columns: 1fr; }
 }
