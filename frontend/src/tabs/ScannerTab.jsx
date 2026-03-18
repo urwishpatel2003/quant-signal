@@ -27,12 +27,25 @@ const TABS = [
   { key: 'volume',  label: '◉ VOLUME',  color: '#4488ff' },
 ];
 
+const MARKET_TYPES = [
+  { key: 'stocks', label: '📈 STOCKS' },
+  { key: 'crypto', label: '₿ CRYPTO'  },
+];
+
 function fmtVol(v) {
   if (!v) return '—';
   if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
   if (v >= 1_000_000)     return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000)         return `${(v / 1_000).toFixed(0)}K`;
   return v.toString();
+}
+
+function fmtPrice(p) {
+  if (!p) return '—';
+  if (p >= 1000) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (p >= 1)    return `$${p.toFixed(2)}`;
+  if (p >= 0.01) return `$${p.toFixed(4)}`;
+  return `$${p.toFixed(6)}`;
 }
 
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
@@ -42,10 +55,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [activeIdx,    setActiveIdx]    = useState(-1);
   const [showUpgrade,  setShowUpgrade]  = useState(false);
   const [isWide,       setIsWide]       = useState(window.innerWidth > 768);
+  const [marketType,   setMarketType]   = useState('stocks');
   const [moversTab,    setMoversTab]    = useState('gainers');
   const [moversOpen,   setMoversOpen]   = useState(true);
   const [movers,       setMovers]       = useState({ gainers: [], losers: [], volume: [] });
+  const [crypto,       setCrypto]       = useState({ gainers: [], losers: [], volume: [] });
   const [moversLoad,   setMoversLoad]   = useState(true);
+  const [cryptoLoad,   setCryptoLoad]   = useState(true);
 
   const dropdownRef = useRef(null);
   const skipSearch  = useRef(false);
@@ -65,6 +81,14 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       .then(data => { setMovers(data); setMoversLoad(false); })
       .catch(() => setMoversLoad(false));
   }, []);
+
+  useEffect(() => {
+    if (marketType !== 'crypto' || !cryptoLoad) return;
+    fetch(`${BASE}/crypto`)
+      .then(r => r.json())
+      .then(data => { setCrypto(data); setCryptoLoad(false); })
+      .catch(() => setCryptoLoad(false));
+  }, [marketType]);
 
   useEffect(() => {
     if (scan.loading) setMoversOpen(false);
@@ -146,8 +170,9 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (e.key === 'Escape') setShowDropdown(false);
   };
 
-  const activeTab = TABS.find(t => t.key === moversTab) || TABS[0];
-  const list = movers[moversTab] || [];
+  const activeData = marketType === 'crypto' ? crypto  : movers;
+  const isLoading  = marketType === 'crypto' ? cryptoLoad : moversLoad;
+  const list       = activeData[moversTab] || [];
 
   return (
     <div style={{ position: 'relative' }}>
@@ -178,7 +203,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               const active = i === currentIdx;
               return (
                 <div key={s} style={{
-                  width:      active ? 12 : 8, height: active ? 12 : 8,
+                  width: active ? 12 : 8, height: active ? 12 : 8,
                   borderRadius: '50%',
                   background: done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
                   transition: 'all 0.3s',
@@ -225,10 +250,10 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                       borderBottom: '1px solid #12121e', transition: 'background 0.08s',
                     }}>
                     <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17,
-                      color: '#ffaa00', minWidth: 64, letterSpacing: '0.05em' }}>{s.ticker}</span>
-                    <span style={{ fontSize: 11, color: '#aabbcc', overflow: 'hidden',
+                      color: '#ffaa00', minWidth: 64 }}>{s.ticker}</span>
+                    <span style={{ fontSize: 11, color: '#b0c0dd', overflow: 'hidden',
                       textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{s.name}</span>
-                    <span style={{ fontSize: 9, color: '#2a2a3e', flexShrink: 0,
+                    <span style={{ fontSize: 9, color: '#7788aa', flexShrink: 0,
                       background: '#1a1a2e', padding: '1px 6px', borderRadius: 2 }}>{s.type}</span>
                   </div>
                 ))}
@@ -252,7 +277,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 }}>⚡ OPTIONS</button>
             )}
             {scan.analysis && !scan.loading && (
-              <button className="btn-sm" style={{ color: '#99aacc', borderColor: '#2a2a3e' }}
+              <button className="btn-sm" style={{ color: '#b0c0dd', borderColor: '#3a3a5e' }}
                 onClick={() => { scan.reset(); setInputVal(''); }}>
                 ← NEW SCAN
               </button>
@@ -265,7 +290,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
       {/* ── Timeframe selector ── */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 8 }}>TIMEFRAME:</div>
+        <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, marginBottom: 8, letterSpacing: '0.1em' }}>TIMEFRAME:</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {TF_KEYS.map(key => {
             const tf     = TIMEFRAMES[key];
@@ -275,51 +300,72 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 disabled={scan.loading}
                 onClick={() => scan.setTimeframe(key)}
                 style={{
-                  color:       active ? '#ffaa00' : '#99aacc',
-                  borderColor: active ? '#ffaa00' : '#2a2a3e',
+                  color:       active ? '#ffaa00' : '#b0c0dd',
+                  borderColor: active ? '#ffaa00' : '#3a3a5e',
                   background:  active ? '#ffaa0011' : '#1a1a2e',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
                   padding: '8px 12px', lineHeight: 1.3,
                 }}>
-                <span style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}>{tf.label}</span>
-                <span style={{ fontSize: 9, color: active ? '#ffaa0088' : '#7788aa' }}>{tf.sublabel}</span>
+                <span style={{ fontSize: 12, fontWeight: active ? 700 : 500 }}>{tf.label}</span>
+                <span style={{ fontSize: 10, color: active ? '#ffaa0088' : '#7788aa' }}>{tf.sublabel}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* ── Movers: Gainers / Losers / Volume — collapsible ── */}
+      {/* ── Movers card ── */}
       <div className="card" style={{ marginBottom: 16 }}>
-        {/* Tab header */}
+
+        {/* Market type toggle */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10,
+          borderBottom: '1px solid #1e1e30', paddingBottom: 8 }}>
+          {MARKET_TYPES.map(m => (
+            <button key={m.key}
+              onClick={() => { setMarketType(m.key); setMoversTab('gainers'); setMoversOpen(true); }}
+              style={{
+                background:  marketType === m.key ? '#ffaa0011' : 'none',
+                border:      marketType === m.key ? '1px solid #ffaa0033' : '1px solid transparent',
+                cursor:      'pointer', padding: '4px 12px',
+                fontSize:    11, letterSpacing: '0.1em',
+                fontFamily:  'inherit', borderRadius: 2,
+                color:       marketType === m.key ? '#ffaa00' : '#b0c0dd',
+                fontWeight:  marketType === m.key ? 700 : 500,
+              }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Sub-tabs */}
         <div style={{
           display: 'flex', gap: 0,
-          borderBottom: moversOpen ? '1px solid #1e1e2e' : 'none',
-          marginBottom: moversOpen ? 16 : 0,
+          borderBottom: moversOpen ? '1px solid #1e1e30' : 'none',
+          marginBottom: moversOpen ? 12 : 0,
         }}>
           {TABS.map(t => (
             <button key={t.key}
               onClick={() => { setMoversTab(t.key); setMoversOpen(true); }}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                padding: '8px 14px', fontSize: 11, letterSpacing: '0.1em',
-                textTransform: 'uppercase', fontFamily: 'inherit',
-                color:        moversTab === t.key ? t.color : '#8899bb',
+                padding: '8px 14px', fontSize: 12, letterSpacing: '0.1em',
+                textTransform: 'uppercase', fontFamily: 'inherit', fontWeight: 700,
+                color:        moversTab === t.key ? t.color : '#b0c0dd',
                 borderBottom: moversTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
                 marginBottom: -1,
               }}>
               {t.label}
             </button>
           ))}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, paddingRight: 4 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4 }}>
             {scan.ticker && !moversOpen && (
-              <span style={{ fontSize: 10, color: '#8899bb' }}>
+              <span style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 600 }}>
                 {scan.ticker} · {TIMEFRAMES[scan.timeframe]?.label}
               </span>
             )}
             <button onClick={() => setMoversOpen(o => !o)}
               style={{ background: 'none', border: 'none', cursor: 'pointer',
-                color: '#8899bb', fontSize: 12, padding: '4px 8px', fontFamily: 'inherit' }}>
+                color: '#b0c0dd', fontSize: 13, padding: '4px 8px', fontFamily: 'inherit' }}>
               {moversOpen ? '▲' : '▼'}
             </button>
           </div>
@@ -327,97 +373,141 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
         {/* List */}
         {moversOpen && (
-          moversLoad ? (
-            <div className="pulse" style={{ fontSize: 11, color: '#8899bb', textAlign: 'center', padding: '20px 0' }}>
-              LOADING MARKET MOVERS...
+          isLoading ? (
+            <div className="pulse" style={{ fontSize: 12, color: '#b0c0dd', textAlign: 'center', padding: '20px 0' }}>
+              LOADING {marketType === 'crypto' ? 'CRYPTO' : 'MARKET'} MOVERS...
             </div>
           ) : list.length === 0 ? (
-            <div style={{ fontSize: 11, color: '#7788aa', textAlign: 'center', padding: '20px 0' }}>
-              Market data unavailable — market may be closed
+            <div style={{ fontSize: 12, color: '#7788aa', textAlign: 'center', padding: '20px 0' }}>
+              {marketType === 'crypto' ? 'Crypto data unavailable' : 'Market data unavailable — market may be closed'}
             </div>
           ) : moversTab === 'volume' ? (
-            // ── Volume tab layout ──
+
+            // ── Volume layout ──
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {list.map((m, i) => {
-                const isGainer = m.changePct >= 0;
-                const pctColor = isGainer ? '#00ff88' : '#ff4444';
-                const isActive = scan.ticker === m.ticker;
+                const isGainer  = m.changePct >= 0;
+                const pctColor  = isGainer ? '#00ff88' : '#ff4444';
+                const isActive  = scan.ticker === m.ticker;
                 const isUnusual = m.volVsAvg && m.volVsAvg >= 2;
+                const isCrypto  = m.type === 'crypto';
                 return (
                   <div key={m.ticker}
                     onClick={() => handleScan(m.ticker, 'swing')}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '9px 12px', cursor: 'pointer', borderRadius: 2,
+                      display: 'flex', alignItems: 'center',
+                      padding: '9px 10px', cursor: 'pointer', borderRadius: 2,
                       background:   isActive ? '#4488ff08' : 'transparent',
                       borderLeft:   `2px solid ${isActive ? '#4488ff' : 'transparent'}`,
                       borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
-                      transition:   'background 0.1s',
+                      transition:   'background 0.1s', gap: 8,
                     }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <div style={{ fontSize: 10, color: '#7788aa', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{m.ticker}</div>
-                    <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 66 }}>${m.price?.toFixed(2)}</div>
+                    {/* Rank */}
+                    <div style={{ fontSize: 11, color: '#7788aa', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+
+                    {/* Ticker */}
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
+                      color: isCrypto ? '#aa88ff' : '#ffaa00', width: 52, flexShrink: 0 }}>{m.ticker}</div>
+
+                    {/* Price */}
+                    <div style={{ fontSize: 12, color: '#e8e8f0', width: 62, flexShrink: 0, fontWeight: 600 }}>
+                      {isCrypto ? fmtPrice(m.price) : `$${m.price?.toFixed(2)}`}
+                    </div>
+
                     {/* Volume */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#4488ff' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#4488ff',
+                        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         {fmtVol(m.volume)}
                         {isUnusual && (
-                          <span style={{ fontSize: 9, color: '#ffaa00', marginLeft: 6,
+                          <span style={{ fontSize: 9, color: '#ffaa00',
                             background: '#ffaa0011', border: '1px solid #ffaa0033',
-                            padding: '1px 5px', borderRadius: 2 }}>
-                            {m.volVsAvg}x AVG
+                            padding: '1px 5px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                            {m.volVsAvg}x
                           </span>
                         )}
                       </div>
                       {m.avgVolume > 0 && (
-                        <div style={{ fontSize: 9, color: '#7788aa' }}>avg {fmtVol(m.avgVolume)}</div>
+                        <div style={{ fontSize: 10, color: '#7788aa' }}>avg {fmtVol(m.avgVolume)}</div>
                       )}
                     </div>
+
                     {/* Change % */}
-                    <div style={{ fontSize: 12, fontWeight: 600, color: pctColor, minWidth: 64, textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: pctColor,
+                      flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
                       {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                     </div>
-                    <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#7788aa' }}>
+
+                    <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>
                       {isActive ? '●' : '→'}
                     </div>
                   </div>
                 );
               })}
             </div>
+
           ) : (
+
             // ── Gainers / Losers layout ──
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {list.map((m, i) => {
                 const isGainer = m.changePct >= 0;
                 const color    = isGainer ? '#00ff88' : '#ff4444';
                 const isActive = scan.ticker === m.ticker;
+                const isCrypto = m.type === 'crypto';
                 return (
                   <div key={m.ticker}
                     onClick={() => handleScan(m.ticker, 'longterm')}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '9px 12px', cursor: 'pointer', borderRadius: 2,
+                      display: 'flex', alignItems: 'center',
+                      padding: '9px 10px', cursor: 'pointer', borderRadius: 2,
                       background:   isActive ? '#ffaa0008' : 'transparent',
                       borderLeft:   `2px solid ${isActive ? '#ffaa00' : 'transparent'}`,
                       borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
-                      transition:   'background 0.1s',
+                      transition:   'background 0.1s', gap: 8,
                     }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <div style={{ fontSize: 10, color: '#7788aa', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{m.ticker}</div>
-                    <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 70 }}>${m.price?.toFixed(2)}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color, marginLeft: 'auto', minWidth: 70, textAlign: 'right' }}>
+                    {/* Rank */}
+                    <div style={{ fontSize: 11, color: '#7788aa', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+
+                    {/* Ticker */}
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
+                      color: isCrypto ? '#aa88ff' : '#ffaa00', width: 52, flexShrink: 0 }}>{m.ticker}</div>
+
+                    {/* Price */}
+                    <div style={{ fontSize: 12, color: '#e8e8f0', width: 70, flexShrink: 0, fontWeight: 600 }}>
+                      {isCrypto ? fmtPrice(m.price) : `$${m.price?.toFixed(2)}`}
+                    </div>
+
+                    {/* Name for crypto */}
+                    {isCrypto && (
+                      <div style={{ fontSize: 11, color: '#b0c0dd', flex: 1, overflow: 'hidden',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{m.name}</div>
+                    )}
+
+                    {/* Spacer for stocks */}
+                    {!isCrypto && <div style={{ flex: 1 }} />}
+
+                    {/* Change $ — stocks only */}
+                    {!isCrypto && (
+                      <div style={{ fontSize: 11, color: color + '99', flexShrink: 0,
+                        textAlign: 'right', minWidth: 52, fontWeight: 600 }}>
+                        {isGainer ? '+' : ''}${m.change?.toFixed(2)}
+                      </div>
+                    )}
+
+                    {/* Change % */}
+                    <div style={{ fontSize: 13, fontWeight: 700, color,
+                      flexShrink: 0, textAlign: 'right', minWidth: 66 }}>
                       {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                     </div>
-                    <div style={{ fontSize: 11, color: color + '88', minWidth: 60, textAlign: 'right' }}>
-                      {isGainer ? '+' : ''}${m.change?.toFixed(2)}
-                    </div>
-                    <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#7788aa' }}>
+
+                    <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>
                       {isActive ? '●' : '→'}
                     </div>
                   </div>
@@ -432,20 +522,20 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       {scan.ohlcv && (
         <div className="fade-in" style={{
           display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-          background: '#0f0f18', border: '1px solid #1e1e2e',
+          background: '#0f0f1a', border: '1px solid #2a2a40',
           padding: '14px 16px', marginBottom: 16,
         }}>
           <div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
               {scan.ticker}
             </div>
-            <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: '#b0c0dd', letterSpacing: '0.1em', marginTop: 2, fontWeight: 600 }}>
               {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
               {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
             </div>
           </div>
@@ -461,7 +551,9 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 <div style={{ fontSize: 20, fontWeight: 700, color: SC[scan.analysis.signal], lineHeight: 1 }}>
                   {scan.analysis.signal}
                 </div>
-                <div style={{ fontSize: 10, color: '#99aacc', marginTop: 2 }}>{scan.analysis.confidence}%</div>
+                <div style={{ fontSize: 11, color: '#b0c0dd', marginTop: 2, fontWeight: 600 }}>
+                  {scan.analysis.confidence}%
+                </div>
               </div>
             )}
           </div>
@@ -471,10 +563,10 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       {/* ── Signal Overview Card ── */}
       {scan.analysis && (
         <div className="card fade-in" style={{ marginBottom: 16, borderColor: SC[scan.analysis.signal] + '33' }}>
-          <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 12 }}>
             SIGNAL OVERVIEW
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8, marginBottom: 12 }}>
             {[
               ['TARGET',   `$${scan.analysis.priceTarget?.toFixed(2)}`,  '#00ff88'],
               ['STOP',     `$${scan.analysis.stopLoss?.toFixed(2)}`,      '#ff4444'],
@@ -484,13 +576,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               ['GEO RISK', scan.analysis.geopoliticalRisk,                 scan.analysis.geopoliticalRisk === 'LOW' ? '#00ff88' : scan.analysis.geopoliticalRisk === 'HIGH' ? '#ff4444' : '#ffaa00'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#070710', padding: '8px 10px', textAlign: 'center' }}>
-                <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4, letterSpacing: '0.1em' }}>{l}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: c }}>{v}</div>
+                <div style={{ fontSize: 10, color: '#b0c0dd', marginBottom: 4, letterSpacing: '0.1em', fontWeight: 600 }}>{l}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{v}</div>
               </div>
             ))}
           </div>
           {scan.analysis.thesis && (
-            <div style={{ fontSize: 12, color: '#8899aa', lineHeight: 1.7,
+            <div style={{ fontSize: 12, color: '#d0d8f0', lineHeight: 1.7,
               borderLeft: `2px solid ${SC[scan.analysis.signal]}44`, paddingLeft: 12 }}>
               {scan.analysis.thesis}
             </div>
@@ -508,17 +600,17 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="card">
-                <div style={{ fontSize: 10, color: '#00ff8866', marginBottom: 10 }}>BULL FACTORS</div>
+                <div style={{ fontSize: 11, color: '#00ff88', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>BULL FACTORS</div>
                 {scan.analysis.bullFactors?.map((f, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #0f1a14', display: 'flex', gap: 6 }}>
+                  <div key={i} style={{ fontSize: 12, color: '#d0d8f0', padding: '5px 0', borderBottom: '1px solid #0f1a14', display: 'flex', gap: 6 }}>
                     <span style={{ color: '#00ff88', flexShrink: 0 }}>▲</span>{f}
                   </div>
                 ))}
               </div>
               <div className="card">
-                <div style={{ fontSize: 10, color: '#ff444466', marginBottom: 10 }}>BEAR FACTORS</div>
+                <div style={{ fontSize: 11, color: '#ff4444', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>BEAR FACTORS</div>
                 {scan.analysis.bearFactors?.map((f, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
+                  <div key={i} style={{ fontSize: 12, color: '#d0d8f0', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
                     <span style={{ color: '#ff4444', flexShrink: 0 }}>▼</span>{f}
                   </div>
                 ))}
@@ -527,16 +619,16 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
             {scan.news?.length > 0 && (
               <div className="card">
-                <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 12 }}>RECENT NEWS</div>
+                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, marginBottom: 12, letterSpacing: '0.1em' }}>RECENT NEWS</div>
                 {scan.news.slice(0, 5).map((n, i) => (
-                  <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 11 }}>
+                  <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 12 }}>
                     <a href={n.url} target="_blank" rel="noopener noreferrer"
-                      style={{ color: '#aab', lineHeight: 1.4, marginBottom: 2, display: 'block', textDecoration: 'none' }}
+                      style={{ color: '#c8d8f0', lineHeight: 1.4, marginBottom: 2, display: 'block', textDecoration: 'none' }}
                       onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}>
+                      onMouseLeave={e => { e.currentTarget.style.color = '#c8d8f0'; }}>
                       {n.title}
                     </a>
-                    <div style={{ color: '#8899bb', fontSize: 10 }}>
+                    <div style={{ color: '#7788aa', fontSize: 11 }}>
                       {n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}
                     </div>
                   </div>
@@ -548,7 +640,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {scan.fundamentals && (
               <div className="card fade-in">
-                <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
+                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
                 {[
                   ['P/E',          scan.fundamentals.pe?.toFixed(1)],
                   ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
@@ -563,7 +655,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 ].filter(([, v]) => v != null).map(([k, v]) => (
                   <div className="kv" key={k}>
                     <span className="kv-key">{k}</span>
-                    <span style={{ color: '#c8c8d0', fontWeight: 500, fontSize: 11 }}>{v}</span>
+                    <span style={{ color: '#e8e8f0', fontWeight: 600, fontSize: 12 }}>{v}</span>
                   </div>
                 ))}
               </div>
@@ -572,10 +664,23 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <BondPanel bonds={macro?.bonds} />
             {scan.options && (
               <div className="card fade-in">
-                <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 12 }}>OPTIONS FLOW <span style={{ color: '#00ff8844', fontSize: 9 }}>⚡ LIVE</span></div>
-                <div className="kv"><span className="kv-key">Put/Call</span><span style={{ color: scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88', fontWeight: 500, fontSize: 11 }}>{scan.options.putCallRatio?.toFixed(2)}</span></div>
-                <div className="kv"><span className="kv-key">Call IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgCallIV}%</span></div>
-                <div className="kv"><span className="kv-key">Put IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgPutIV}%</span></div>
+                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.2em', marginBottom: 12 }}>
+                  OPTIONS FLOW <span style={{ color: '#00ff8866', fontSize: 10 }}>⚡ LIVE</span>
+                </div>
+                <div className="kv">
+                  <span className="kv-key">Put/Call</span>
+                  <span style={{ color: scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88', fontWeight: 700, fontSize: 12 }}>
+                    {scan.options.putCallRatio?.toFixed(2)}
+                  </span>
+                </div>
+                <div className="kv">
+                  <span className="kv-key">Call IV</span>
+                  <span style={{ color: '#ffaa00', fontWeight: 700, fontSize: 12 }}>{scan.options.avgCallIV}%</span>
+                </div>
+                <div className="kv">
+                  <span className="kv-key">Put IV</span>
+                  <span style={{ color: '#ffaa00', fontWeight: 700, fontSize: 12 }}>{scan.options.avgPutIV}%</span>
+                </div>
                 <div style={{ marginTop: 10 }}>
                   <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044', width: '100%' }}
                     onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS PLAYS →</button>
