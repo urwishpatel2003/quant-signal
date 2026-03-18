@@ -298,35 +298,39 @@ app.get('/search', async (req, res) => {
 app.get('/movers', async (req, res) => {
   try {
     const TICKERS = [
-      // Mega cap tech
-      'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
-      // Semiconductors
-      'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
-      // AI / Cloud
-      'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
-      // Fintech / Crypto
-      'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
-      // EV / Clean Energy
-      'RIVN','LCID','NIO','XPEV','LI','FSR','CHPT','BLNK','OKLO','SMR',
-      // Biotech / Healthcare
-      'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','RXRX','SANA','BLUE',
-      // Nuclear / Energy
-      'CCJ','UEC','DNN','UUUU','LEU','NNE','BWXT','GEV','VST','CEG',
-      // Defense / Space
-      'LMT','RTX','NOC','GD','BA','RKLB','ASTS','LUNR','PL','SPCE',
-      // Consumer / Retail
-      'DIS','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT','RBLX',
-      // Banks / Finance
-      'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
-      // Big pharma
-      'PFE','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN','JNJ','MRK',
-      // Emerging AI / Tech
-      'NBIS','ACHR','JOBY','GRAB','SE','DKNG','PENN','HIMS','SHOP','MELI',
-      // Commodities / Materials
-      'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
-      // ETFs
-      'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
-    ];
+  // Mega cap tech
+  'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
+  // Semiconductors
+  'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
+  // AI / Cloud
+  'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
+  // Fintech / Crypto exchanges
+  'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
+  // Bitcoin miners & crypto infrastructure
+  'MARA','RIOT','CLSK','CIFR','BTBT','HUT','CORZ','CRWV','CRCL','SMLR',
+  // Quantum computing
+  'RGTI','IONQ','QUBT','QBTS','ARQQ',
+  // EV / Clean Energy
+  'RIVN','LCID','NIO','XPEV','LI','CHPT','BLNK','OKLO','SMR','CEG',
+  // Biotech / Healthcare
+  'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','SANA','BLUE','HIMS',
+  // Nuclear / Energy
+  'CCJ','UEC','DNN','UUUU','LEU','NNE','BWXT','GEV','VST','RKLB',
+  // Defense / Space
+  'LMT','RTX','NOC','GD','BA','ASTS','LUNR','PL','SPCE','ACHR',
+  // Consumer / Retail
+  'DIS','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT','RBLX',
+  // Banks / Finance
+  'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
+  // Big pharma
+  'PFE','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN','JNJ','MRK',
+  // Emerging tech
+  'NBIS','GRAB','SE','DKNG','PENN','SHOP','MELI','JOBY','ACMR','KULR',
+  // Commodities / Materials
+  'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
+  // ETFs
+  'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
+];
 
     const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
     const raw  = data?.quotes?.quote || [];
