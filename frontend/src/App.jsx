@@ -24,7 +24,6 @@ export default function App() {
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
 
-  // Wait for Clerk to initialise
   if (!isLoaded) {
     return (
       <div style={{ minHeight: '100vh', background: '#07070e',
@@ -37,10 +36,7 @@ export default function App() {
     );
   }
 
-  // Show welcome if not signed in and hasn't clicked Enter App
-  const showWelcome = !isSignedIn && !enteredApp;
-
-  if (showWelcome) {
+  if (!isSignedIn && !enteredApp) {
     return (
       <WelcomePage
         onEnter={() => setEnteredApp(true)}
@@ -50,17 +46,18 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#07070e', color: '#c8c8d0', fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{ minHeight: '100vh', background: '#07070e', color: '#e8e8f0', fontFamily: "'IBM Plex Mono', monospace" }}>
 
       {/* ── Header ── */}
       <div className="app-header">
         <div className="app-header-logo">
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: '0.05em' }}>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: '0.05em', lineHeight: 1 }}>
             <span style={{ color: '#ffaa00' }}>Qu</span>
             <span style={{ color: '#00ff88' }}>AI</span>
             <span style={{ color: '#ffaa00' }}>nt Signal</span>
           </div>
-          <div className="app-header-subtitle" style={{ fontSize: 10, color: '#333', letterSpacing: '0.2em' }}>
+          <div className="app-header-subtitle hide-mobile"
+            style={{ fontSize: 10, color: '#6677aa', letterSpacing: '0.2em', fontWeight: 600 }}>
             AI-POWERED MARKET INTELLIGENCE
           </div>
         </div>
@@ -72,7 +69,7 @@ export default function App() {
           loading={macro.loading}
         />
 
-        {/* ── Auth controls ── */}
+        {/* ── Auth ── */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <SignedOut>
             <SignInButton mode="modal">
@@ -84,15 +81,11 @@ export default function App() {
           <SignedIn>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {user?.firstName && (
-                <span style={{ fontSize: 10, color: '#8899bb' }}>
+                <span style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 600, letterSpacing: '0.05em' }}>
                   {user.firstName.toUpperCase()}
                 </span>
               )}
-              <UserButton
-                appearance={{
-                  elements: { avatarBox: { width: 28, height: 28 } }
-                }}
-              />
+              <UserButton appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} />
             </div>
           </SignedIn>
         </div>
@@ -103,14 +96,16 @@ export default function App() {
         {TABS.map(tab => {
           const id    = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
           const label = typeof tab === 'string' ? tab : tab.label;
+          const isActive = activeTab === id;
           return (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className="tab-btn"
               style={{
-                borderBottom: activeTab === id ? '2px solid #ffaa00' : '2px solid transparent',
-                color: activeTab === id ? '#ffaa00' : '#8899bb',
+                borderBottom: isActive ? '2px solid #ffaa00' : '2px solid transparent',
+                color:        isActive ? '#ffaa00' : '#b0c0dd',
+                fontWeight:   isActive ? 700 : 600,
               }}
             >
               {label}
@@ -121,8 +116,6 @@ export default function App() {
 
       {/* ── Content ── */}
       <div className="app-content">
-
-        {/* Help is always public — no login required */}
         {activeTab === 'help' && <HelpTab />}
 
         <SignedIn>
@@ -138,7 +131,7 @@ export default function App() {
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
                 SIGN IN TO ACCESS
               </div>
-              <div style={{ fontSize: 13, color: '#99aacc', marginBottom: 8 }}>
+              <div style={{ fontSize: 14, color: '#b0c0dd', marginBottom: 8 }}>
                 Create a free account to use QuAInt Signal
               </div>
               <SignInButton mode="modal">
