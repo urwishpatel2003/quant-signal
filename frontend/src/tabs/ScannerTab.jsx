@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SC, MC, GC, RC } from '../utils/constants';
 import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
@@ -21,6 +21,20 @@ const STAGE_LABELS = {
 };
 const STAGES = ['price', 'fundamentals', 'options', 'news', 'claude'];
 
+const TABS = [
+  { key: 'gainers', label: '▲ GAINERS', color: '#00ff88' },
+  { key: 'losers',  label: '▼ LOSERS',  color: '#ff4444' },
+  { key: 'volume',  label: '◉ VOLUME',  color: '#4488ff' },
+];
+
+function fmtVol(v) {
+  if (!v) return '—';
+  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
+  if (v >= 1_000_000)     return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)         return `${(v / 1_000).toFixed(0)}K`;
+  return v.toString();
+}
+
 export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [inputVal,     setInputVal]     = useState('');
   const [suggestions,  setSuggestions]  = useState([]);
@@ -30,12 +44,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [isWide,       setIsWide]       = useState(window.innerWidth > 768);
   const [moversTab,    setMoversTab]    = useState('gainers');
   const [moversOpen,   setMoversOpen]   = useState(true);
-  const [movers,       setMovers]       = useState({ gainers: [], losers: [] });
+  const [movers,       setMovers]       = useState({ gainers: [], losers: [], volume: [] });
   const [moversLoad,   setMoversLoad]   = useState(true);
 
-  const dropdownRef  = useRef(null);
-  const skipSearch   = useRef(false); // blocks search when selecting from movers/keyboard
-  const searchCache  = useRef({});    // simple in-memory cache per query
+  const dropdownRef = useRef(null);
+  const skipSearch  = useRef(false);
+  const searchCache = useRef({});
 
   const scan = useScan(macro);
   const { usage, limits, canScan, canOptions, trackScan } = useUsage();
@@ -45,7 +59,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
     : null;
 
-  // Fetch movers on mount
   useEffect(() => {
     fetch(`${BASE}/movers`)
       .then(r => r.json())
@@ -53,12 +66,10 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
       .catch(() => setMoversLoad(false));
   }, []);
 
-  // Auto-collapse movers when scan starts
   useEffect(() => {
     if (scan.loading) setMoversOpen(false);
   }, [scan.loading]);
 
-  // Auto-expand movers when scan is reset
   useEffect(() => {
     if (!scan.analysis && !scan.loading) setMoversOpen(true);
   }, [scan.analysis, scan.loading]);
@@ -69,33 +80,28 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  // Search with cache + skip flag
   useEffect(() => {
     if (skipSearch.current) { skipSearch.current = false; return; }
     if (inputVal.length < 1) { setSuggestions([]); setShowDropdown(false); return; }
-
-    // Return cached result instantly
     if (searchCache.current[inputVal]) {
       setSuggestions(searchCache.current[inputVal]);
       setShowDropdown(searchCache.current[inputVal].length > 0);
       setActiveIdx(-1);
       return;
     }
-
     const timer = setTimeout(async () => {
       try {
         const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(inputVal)}`);
         const data = await res.json();
-        searchCache.current[inputVal] = data; // cache result
+        searchCache.current[inputVal] = data;
         setSuggestions(data);
         setShowDropdown(data.length > 0);
         setActiveIdx(-1);
       } catch { setSuggestions([]); }
-    }, 150); // reduced from 250ms to 150ms
+    }, 150);
     return () => clearTimeout(timer);
   }, [inputVal]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -108,19 +114,15 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const handleScan = (ticker, tf = null) => {
     if (!canScan()) { setShowUpgrade(true); return; }
     trackScan();
-    skipSearch.current = true; // prevent search from firing on setInputVal
+    skipSearch.current = true;
     setShowDropdown(false);
     setSuggestions([]);
     setInputVal(ticker);
-    if (tf) {
-      scan.setTimeframe(tf);
-      scan.runScan(ticker, tf);
-    } else {
-      scan.runScan(ticker);
-    }
+    if (tf) { scan.setTimeframe(tf); scan.runScan(ticker, tf); }
+    else    { scan.runScan(ticker); }
   };
 
-  const selectTicker = (ticker) => {
+  const selectTicker = ticker => {
     skipSearch.current = true;
     setShowDropdown(false);
     setSuggestions([]);
@@ -144,13 +146,14 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (e.key === 'Escape') setShowDropdown(false);
   };
 
-  const list = moversTab === 'gainers' ? movers.gainers : movers.losers;
+  const activeTab = TABS.find(t => t.key === moversTab) || TABS[0];
+  const list = movers[moversTab] || [];
 
   return (
     <div style={{ position: 'relative' }}>
       {showUpgrade && <UpgradeModal type="scan" onClose={() => setShowUpgrade(false)} />}
 
-      {/* ── Full screen loading overlay ── */}
+      {/* ── Loading overlay ── */}
       {scan.loading && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -158,16 +161,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           zIndex: 999, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 20,
         }}>
-          <div style={{
-            width: 60, height: 60, borderRadius: '50%',
+          <div style={{ width: 60, height: 60, borderRadius: '50%',
             border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00',
-            animation: 'spin 0.8s linear infinite',
-          }} />
+            animation: 'spin 0.8s linear infinite' }} />
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
-              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>
-              ANALYZING
-            </div>
+              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>ANALYZING</div>
             <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
               {STAGE_LABELS[scan.stage] || 'LOADING...'}
             </div>
@@ -179,12 +178,11 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               const active = i === currentIdx;
               return (
                 <div key={s} style={{
-                  width:        active ? 12 : 8,
-                  height:       active ? 12 : 8,
+                  width:      active ? 12 : 8, height: active ? 12 : 8,
                   borderRadius: '50%',
-                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
-                  transition:   'all 0.3s',
-                  boxShadow:    active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
+                  background: done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition: 'all 0.3s',
+                  boxShadow:  active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
                 }} />
               );
             })}
@@ -202,7 +200,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12, zIndex: 1 }}>$</span>
             <input
               value={inputVal}
-              onChange={e => { setInputVal(e.target.value.toUpperCase()); }}
+              onChange={e => setInputVal(e.target.value.toUpperCase())}
               onKeyDown={handleKeyDown}
               placeholder="SEARCH TICKER..."
               className="input"
@@ -224,8 +222,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '10px 14px', cursor: 'pointer',
                       background: i === activeIdx ? '#ffaa0015' : 'transparent',
-                      borderBottom: '1px solid #12121e',
-                      transition: 'background 0.08s',
+                      borderBottom: '1px solid #12121e', transition: 'background 0.08s',
                     }}>
                     <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17,
                       color: '#ffaa00', minWidth: 64, letterSpacing: '0.05em' }}>{s.ticker}</span>
@@ -292,25 +289,26 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         </div>
       </div>
 
-      {/* ── Gainers / Losers — collapsible accordion ── */}
+      {/* ── Movers: Gainers / Losers / Volume — collapsible ── */}
       <div className="card" style={{ marginBottom: 16 }}>
+        {/* Tab header */}
         <div style={{
           display: 'flex', gap: 0,
           borderBottom: moversOpen ? '1px solid #1e1e2e' : 'none',
           marginBottom: moversOpen ? 16 : 0,
         }}>
-          {['gainers', 'losers'].map(t => (
-            <button key={t}
-              onClick={() => { setMoversTab(t); setMoversOpen(true); }}
+          {TABS.map(t => (
+            <button key={t.key}
+              onClick={() => { setMoversTab(t.key); setMoversOpen(true); }}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                padding: '8px 16px', fontSize: 11, letterSpacing: '0.12em',
+                padding: '8px 14px', fontSize: 11, letterSpacing: '0.1em',
                 textTransform: 'uppercase', fontFamily: 'inherit',
-                color:        moversTab === t ? (t === 'gainers' ? '#00ff88' : '#ff4444') : '#445',
-                borderBottom: moversTab === t ? `2px solid ${t === 'gainers' ? '#00ff88' : '#ff4444'}` : '2px solid transparent',
+                color:        moversTab === t.key ? t.color : '#445',
+                borderBottom: moversTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
                 marginBottom: -1,
               }}>
-              {t === 'gainers' ? '▲ GAINERS' : '▼ LOSERS'}
+              {t.label}
             </button>
           ))}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, paddingRight: 4 }}>
@@ -327,6 +325,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           </div>
         </div>
 
+        {/* List */}
         {moversOpen && (
           moversLoad ? (
             <div className="pulse" style={{ fontSize: 11, color: '#445', textAlign: 'center', padding: '20px 0' }}>
@@ -336,7 +335,60 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <div style={{ fontSize: 11, color: '#334', textAlign: 'center', padding: '20px 0' }}>
               Market data unavailable — market may be closed
             </div>
+          ) : moversTab === 'volume' ? (
+            // ── Volume tab layout ──
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {list.map((m, i) => {
+                const isGainer = m.changePct >= 0;
+                const pctColor = isGainer ? '#00ff88' : '#ff4444';
+                const isActive = scan.ticker === m.ticker;
+                const isUnusual = m.volVsAvg && m.volVsAvg >= 2;
+                return (
+                  <div key={m.ticker}
+                    onClick={() => handleScan(m.ticker, 'swing')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '9px 12px', cursor: 'pointer', borderRadius: 2,
+                      background:   isActive ? '#4488ff08' : 'transparent',
+                      borderLeft:   `2px solid ${isActive ? '#4488ff' : 'transparent'}`,
+                      borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
+                      transition:   'background 0.1s',
+                    }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <div style={{ fontSize: 10, color: '#334', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{m.ticker}</div>
+                    <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 66 }}>${m.price?.toFixed(2)}</div>
+                    {/* Volume */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#4488ff' }}>
+                        {fmtVol(m.volume)}
+                        {isUnusual && (
+                          <span style={{ fontSize: 9, color: '#ffaa00', marginLeft: 6,
+                            background: '#ffaa0011', border: '1px solid #ffaa0033',
+                            padding: '1px 5px', borderRadius: 2 }}>
+                            {m.volVsAvg}x AVG
+                          </span>
+                        )}
+                      </div>
+                      {m.avgVolume > 0 && (
+                        <div style={{ fontSize: 9, color: '#334' }}>avg {fmtVol(m.avgVolume)}</div>
+                      )}
+                    </div>
+                    {/* Change % */}
+                    <div style={{ fontSize: 12, fontWeight: 600, color: pctColor, minWidth: 64, textAlign: 'right' }}>
+                      {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
+                    </div>
+                    <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#334' }}>
+                      {isActive ? '●' : '→'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
+            // ── Gainers / Losers layout ──
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {list.map((m, i) => {
                 const isGainer = m.changePct >= 0;

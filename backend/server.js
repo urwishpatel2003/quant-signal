@@ -84,8 +84,6 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const polygonGet = path =>
   httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
 
@@ -147,8 +145,6 @@ async function polygonAggs(ticker, days = 10) {
   }
 }
 
-// ─── Sequential Polygon batch ─────────────────────────────────────────────────
-
 async function polygonBatch(symbols, days = 10) {
   const results = [];
   for (const { poly, yahoo } of symbols) {
@@ -165,7 +161,7 @@ async function polygonBatch(symbols, days = 10) {
   return results;
 }
 
-// ─── Stock history — Tradier ──────────────────────────────────────────────────
+// ─── Stock history ────────────────────────────────────────────────────────────
 
 app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   const { ticker } = req.params;
@@ -185,7 +181,7 @@ app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Fundamentals — Polygon + Tradier ────────────────────────────────────────
+// ─── Fundamentals ─────────────────────────────────────────────────────────────
 
 app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   const { ticker } = req.params;
@@ -209,21 +205,15 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
     const eps         = income.basic_earnings_per_share?.value;
     const grossProfit = income.gross_profit?.value;
 
-    const pe         = q.pe_ratio       || null;
-    const beta       = q.beta           || null;
-    const week52High = q.week_52_high   || null;
-    const week52Low  = q.week_52_low    || null;
-    const avgVolume  = q.average_volume || null;
-
     res.json({
       quoteSummary: {
         result: [{
           summaryDetail: {
-            trailingPE:       { raw: pe   },
-            beta:             { raw: beta },
-            fiftyTwoWeekHigh: { raw: week52High },
-            fiftyTwoWeekLow:  { raw: week52Low  },
-            averageVolume:    { raw: avgVolume   },
+            trailingPE:       { raw: q.pe_ratio     || null },
+            beta:             { raw: q.beta         || null },
+            fiftyTwoWeekHigh: { raw: q.week_52_high || null },
+            fiftyTwoWeekLow:  { raw: q.week_52_low  || null },
+            averageVolume:    { raw: q.average_volume || null },
           },
           defaultKeyStatistics: {
             trailingEps: { raw: eps || null },
@@ -243,7 +233,7 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Stock news — Polygon ─────────────────────────────────────────────────────
+// ─── Stock news ───────────────────────────────────────────────────────────────
 
 app.get('/yahoo/v1/finance/search', async (req, res) => {
   const q = req.query.q || '';
@@ -259,7 +249,7 @@ app.get('/yahoo/v1/finance/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Ticker Search — Polygon ──────────────────────────────────────────────────
+// ─── Ticker search ────────────────────────────────────────────────────────────
 
 app.get('/search', async (req, res) => {
   const q = req.query.q || '';
@@ -303,39 +293,40 @@ app.get('/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Top Gainers & Losers — Tradier quotes ────────────────────────────────────
+// ─── Top Gainers, Losers & Volume Leaders — Tradier bulk quotes ───────────────
+
 app.get('/movers', async (req, res) => {
   try {
     const TICKERS = [
-  // Mega cap tech
-  'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
-  // Semiconductors
-  'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
-  // AI / Cloud
-  'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
-  // Fintech / Crypto
-  'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
-  // EV / Clean Energy
-  'RIVN','LCID','NIO','XPEV','LI','FSR','CHPT','BLNK','OKLO','SMR',
-  // Biotech / Healthcare
-  'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','RXRX','SANA','BLUE',
-  // Nuclear / Energy
-  'CCJ','UEC','DNN','UUUU','LEU','NNE','OKLO','BWXT','GEV','VST',
-  // Defense / Space
-  'LMT','RTX','NOC','GD','BA','RKLB','ASTS','LUNR','PL','SPCE',
-  // Consumer / Retail
-  'DIS','NFLX','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT',
-  // Banks / Finance
-  'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
-  // Big pharma
-  'PFE','MRNA','JNJ','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN',
-  // Emerging AI / Tech
-  'NBIS','ACHR','JOBY','LILM','EVTL','ARCHER','GRAB','SE','DKNG','PENN',
-  // Commodities / Materials
-  'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
-  // ETFs for reference
-  'SPY','QQQ','IWM','ARKK','SOXS','SOXL','TQQQ','SQQQ','UVXY','VIX',
-];
+      // Mega cap tech
+      'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
+      // Semiconductors
+      'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
+      // AI / Cloud
+      'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
+      // Fintech / Crypto
+      'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
+      // EV / Clean Energy
+      'RIVN','LCID','NIO','XPEV','LI','FSR','CHPT','BLNK','OKLO','SMR',
+      // Biotech / Healthcare
+      'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','RXRX','SANA','BLUE',
+      // Nuclear / Energy
+      'CCJ','UEC','DNN','UUUU','LEU','NNE','BWXT','GEV','VST','CEG',
+      // Defense / Space
+      'LMT','RTX','NOC','GD','BA','RKLB','ASTS','LUNR','PL','SPCE',
+      // Consumer / Retail
+      'DIS','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT','RBLX',
+      // Banks / Finance
+      'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
+      // Big pharma
+      'PFE','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN','JNJ','MRK',
+      // Emerging AI / Tech
+      'NBIS','ACHR','JOBY','GRAB','SE','DKNG','PENN','HIMS','SHOP','MELI',
+      // Commodities / Materials
+      'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
+      // ETFs
+      'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
+    ];
 
     const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
     const raw  = data?.quotes?.quote || [];
@@ -343,17 +334,31 @@ app.get('/movers', async (req, res) => {
       .filter(q => q.last && q.change_percentage != null)
       .map(q => ({
         ticker:    q.symbol,
-        price:     parseFloat(q.last            || 0),
-        change:    parseFloat(q.change          || 0),
+        price:     parseFloat(q.last              || 0),
+        change:    parseFloat(q.change            || 0),
         changePct: parseFloat(q.change_percentage || 0),
-        volume:    parseInt(q.volume            || 0),
+        volume:    parseInt(q.volume              || 0),
+        avgVolume: parseInt(q.average_volume      || 0),
       }));
 
-    const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
-    const gainers = sorted.filter(s => s.changePct > 0).slice(0, 10);
-    const losers  = sorted.filter(s => s.changePct < 0).reverse().slice(0, 10);
+    const sorted   = [...list].sort((a, b) => b.changePct - a.changePct);
+    const gainers  = sorted.filter(s => s.changePct > 0).slice(0, 10);
+    const losers   = [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10);
 
-    res.json({ gainers, losers });
+    // Volume leaders — sort by volume, filter out low-price noise
+    const volume   = [...list]
+      .filter(s => s.price >= 5 && s.volume > 0)
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 10)
+      .map(s => ({
+        ...s,
+        // Volume vs average — how unusual is today's volume
+        volVsAvg: s.avgVolume > 0
+          ? parseFloat((s.volume / s.avgVolume).toFixed(1))
+          : null,
+      }));
+
+    res.json({ gainers, losers, volume });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -380,23 +385,23 @@ app.get('/tradier/quote/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Bonds — Polygon ETF proxies ──────────────────────────────────────────────
+// ─── Bonds ────────────────────────────────────────────────────────────────────
 
 app.get('/bonds', async (req, res) => {
   try {
     const symbols = [
-      { poly: 'IEF',  yahoo: '^TNX' },
-      { poly: 'SHY',  yahoo: '^IRX' },
-      { poly: 'TLT',  yahoo: '^TYX' },
-      { poly: 'TLT',  yahoo: 'TLT'  },
-      { poly: 'IEF',  yahoo: 'IEF'  },
+      { poly: 'IEF', yahoo: '^TNX' },
+      { poly: 'SHY', yahoo: '^IRX' },
+      { poly: 'TLT', yahoo: '^TYX' },
+      { poly: 'TLT', yahoo: 'TLT'  },
+      { poly: 'IEF', yahoo: 'IEF'  },
     ];
     const results = await polygonBatch(symbols, 10);
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── International — Polygon ETF proxies ─────────────────────────────────────
+// ─── International ────────────────────────────────────────────────────────────
 
 app.get('/international', async (req, res) => {
   try {
@@ -419,7 +424,7 @@ app.get('/international', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Economic Calendar — Polygon news ────────────────────────────────────────
+// ─── Calendar ─────────────────────────────────────────────────────────────────
 
 app.get('/calendar', async (req, res) => {
   const topics = [
