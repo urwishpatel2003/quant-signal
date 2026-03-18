@@ -18,6 +18,14 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* ── Global inline style overrides ── */
+/* These ensure small labels are always readable */
+[style*="font-size: 9px"],
+[style*="font-size:9px"] { font-size: 11px !important; }
+
+[style*="font-size: 10px"],
+[style*="font-size:10px"] { font-size: 12px !important; }
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #111; }
 ::-webkit-scrollbar-thumb { background: #444; }
@@ -261,3 +269,4 @@ body {
 @media (max-width: 768px) {
   .scanner-results-grid { grid-template-columns: 1fr; }
 }
+

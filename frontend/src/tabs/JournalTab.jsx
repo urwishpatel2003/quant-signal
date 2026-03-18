@@ -65,7 +65,7 @@ export default function JournalTab() {
             ['AVG LOSS', avgLoss ? `$${avgLoss.toFixed(0)}`  : '—',             '#ff4444'],
           ].map(([l, v, c]) => (
             <div key={l} className="card" style={{ textAlign: 'center', padding: 12 }}>
-              <div style={{ fontSize: 9, color: '#445', marginBottom: 4 }}>{l}</div>
+              <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4 }}>{l}</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: c }}>{v}</div>
             </div>
           ))}
@@ -87,18 +87,18 @@ export default function JournalTab() {
               ['Contracts', 'contracts', 'number', '1'],
             ].map(([label, key, type, placeholder]) => (
               <div key={key}>
-                <div style={{ fontSize: 9, color: '#445', marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4 }}>{label}</div>
                 <input type={type} value={form[key]} placeholder={placeholder}
                   onChange={e => set(key, e.target.value)} className="input"
                   style={{ width: '100%', padding: '8px 10px', fontSize: 12 }} />
               </div>
             ))}
             <div>
-              <div style={{ fontSize: 9, color: '#445', marginBottom: 4 }}>Type</div>
+              <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4 }}>Type</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {['CALL', 'PUT'].map(t => (
                   <button key={t} className="btn-sm" style={{ flex: 1,
-                    color: form.type === t ? (t === 'CALL' ? '#00ff88' : '#ff4444') : '#556',
+                    color: form.type === t ? (t === 'CALL' ? '#00ff88' : '#ff4444') : '#99aacc',
                     borderColor: form.type === t ? (t === 'CALL' ? '#00ff88' : '#ff4444') : '#2a2a3e',
                     background: form.type === t ? (t === 'CALL' ? '#00ff8811' : '#ff444411') : '#1a1a2e' }}
                     onClick={() => set('type', t)}>{t}</button>
@@ -107,7 +107,7 @@ export default function JournalTab() {
             </div>
           </div>
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 9, color: '#445', marginBottom: 4 }}>NOTES</div>
+            <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4 }}>NOTES</div>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
               placeholder="Why did you take this trade?" className="input"
               style={{ width: '100%', padding: '8px 10px', fontSize: 12, minHeight: 60, resize: 'vertical' }} />
@@ -126,10 +126,10 @@ export default function JournalTab() {
 
       {trades.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>TRADE HISTORY</div>
+          <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 4 }}>TRADE HISTORY</div>
           {trades.map(t => {
             const typeColor = t.type === 'CALL' ? '#00ff88' : '#ff4444';
-            const plColor   = t.pl === null ? '#556' : t.pl >= 0 ? '#00ff88' : '#ff4444';
+            const plColor   = t.pl === null ? '#99aacc' : t.pl >= 0 ? '#00ff88' : '#ff4444';
             return (
               <div key={t.id} className="card" style={{ borderColor: t.pl === null ? '#1e1e2e' : (t.pl >= 0 ? '#00ff8822' : '#ff444422') }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -138,12 +138,12 @@ export default function JournalTab() {
                     <div style={{ fontSize: 11, color: typeColor, fontWeight: 600 }}>${t.strike} {t.type}</div>
                   </div>
                   <div style={{ minWidth: 80 }}>
-                    <div style={{ fontSize: 9, color: '#445' }}>EXPIRY</div>
+                    <div style={{ fontSize: 9, color: '#8899bb' }}>EXPIRY</div>
                     <div style={{ fontSize: 11, color: '#aaa' }}>{t.expiry || '—'}</div>
-                    <div style={{ fontSize: 9, color: '#334' }}>{t.date}</div>
+                    <div style={{ fontSize: 9, color: '#7788aa' }}>{t.date}</div>
                   </div>
                   <div style={{ minWidth: 120 }}>
-                    <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>ENTRY → EXIT</div>
+                    <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 2 }}>ENTRY → EXIT</div>
                     <div style={{ fontSize: 12, color: '#c8c8d0' }}>
                       ${t.entry?.toFixed(2)} →{' '}
                       {t.exit
@@ -153,10 +153,10 @@ export default function JournalTab() {
                             className="input" style={{ width: 70, padding: '2px 6px', fontSize: 11, display: 'inline-block' }} />
                       }
                     </div>
-                    <div style={{ fontSize: 9, color: '#445' }}>{t.contracts} contract{t.contracts > 1 ? 's' : ''}</div>
+                    <div style={{ fontSize: 9, color: '#8899bb' }}>{t.contracts} contract{t.contracts > 1 ? 's' : ''}</div>
                   </div>
                   <div style={{ minWidth: 90, textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>P&L</div>
+                    <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 2 }}>P&L</div>
                     <div style={{ fontSize: 18, fontWeight: 700, color: plColor }}>
                       {t.pl !== null ? `${t.pl >= 0 ? '+' : ''}$${t.pl.toFixed(0)}` : 'OPEN'}
                     </div>
@@ -170,7 +170,7 @@ export default function JournalTab() {
                       {t.win ? '✓ WIN' : '✗ LOSS'}
                     </div>
                   )}
-                  {t.notes && <div style={{ flex: 1, fontSize: 11, color: '#667', fontStyle: 'italic', minWidth: 120 }}>"{t.notes}"</div>}
+                  {t.notes && <div style={{ flex: 1, fontSize: 11, color: '#aabbcc', fontStyle: 'italic', minWidth: 120 }}>"{t.notes}"</div>}
                   <button onClick={() => deleteTrade(t.id)}
                     style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: 16, padding: '4px 8px' }}>×</button>
                 </div>

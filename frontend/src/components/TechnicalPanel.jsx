@@ -3,7 +3,7 @@ export default function TechnicalPanel({ ta }) {
 
   const rsiColor  = ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00';
   const trendColor = ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444';
-  const volColor   = ta.volumeSignal === 'HIGH' ? '#ffaa00' : ta.volumeSignal === 'LOW' ? '#445' : '#c8c8d0';
+  const volColor   = ta.volumeSignal === 'HIGH' ? '#ffaa00' : ta.volumeSignal === 'LOW' ? '#8899bb' : '#c8c8d0';
 
   const RsiBar = () => {
     const pct = ta.rsi14 || 50;
@@ -22,7 +22,7 @@ export default function TechnicalPanel({ ta }) {
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span style={{ fontSize: 10, color: '#556' }}>RSI (14)</span>
+          <span style={{ fontSize: 10, color: '#99aacc' }}>RSI (14)</span>
           <span style={{ fontSize: 11, fontWeight: 600, color: rsiColor }}>{ta.rsi14} — {ta.rsiSignal}</span>
         </div>
         <RsiBar />
@@ -33,7 +33,7 @@ export default function TechnicalPanel({ ta }) {
       </div>
 
       <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 10, color: '#556', marginBottom: 6 }}>MOVING AVERAGES</div>
+        <div style={{ fontSize: 10, color: '#99aacc', marginBottom: 6 }}>MOVING AVERAGES</div>
         {[
           ['SMA 20', ta.sma20, ta.priceVsSma20],
           ['SMA 50', ta.sma50, ta.priceVsSma50],
@@ -57,14 +57,14 @@ export default function TechnicalPanel({ ta }) {
       </div>
 
       <div>
-        <div style={{ fontSize: 10, color: '#556', marginBottom: 6 }}>VOLUME</div>
+        <div style={{ fontSize: 10, color: '#99aacc', marginBottom: 6 }}>VOLUME</div>
         <div className="kv">
           <span className="kv-key">TODAY</span>
           <span style={{ color: volColor, fontSize: 11 }}>{ta.currentVolume?.toLocaleString()}</span>
         </div>
         <div className="kv">
           <span className="kv-key">20D AVG</span>
-          <span style={{ color: '#667', fontSize: 11 }}>{ta.avgVolume?.toLocaleString()}</span>
+          <span style={{ color: '#aabbcc', fontSize: 11 }}>{ta.avgVolume?.toLocaleString()}</span>
         </div>
         <div className="kv">
           <span className="kv-key">RATIO</span>

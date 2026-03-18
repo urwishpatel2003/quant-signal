@@ -10,7 +10,7 @@ export default function SignalCard({ analysis, news }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 52, color: SC[analysis.signal], lineHeight: 1 }}>{analysis.signal}</div>
-            <div style={{ fontSize: 11, color: '#556', marginTop: 2 }}>{analysis.timeframe}</div>
+            <div style={{ fontSize: 11, color: '#99aacc', marginTop: 2 }}>{analysis.timeframe}</div>
             <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
               {analysis.macroImpact       && <span style={{ fontSize: 10, color: MC[analysis.macroImpact]       }}>MACRO: {analysis.macroImpact}</span>}
               {analysis.globalMarketTrend && <span style={{ fontSize: 10, color: GC[analysis.globalMarketTrend] }}>GLOBAL: {analysis.globalMarketTrend}</span>}
@@ -18,7 +18,7 @@ export default function SignalCard({ analysis, news }) {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: '#556' }}>CONFIDENCE</div>
+            <div style={{ fontSize: 11, color: '#99aacc' }}>CONFIDENCE</div>
             <div style={{ fontSize: 32, fontWeight: 600 }}>{analysis.confidence}%</div>
             <div className="bar-bg"><div className="bar-fill" style={{ width: `${analysis.confidence}%`, background: SC[analysis.signal] }} /></div>
           </div>
@@ -31,7 +31,7 @@ export default function SignalCard({ analysis, news }) {
             ['RISK',      analysis.riskLevel,                      RC[analysis.riskLevel]],
           ].map(([l, v, c]) => (
             <div key={l} style={{ background: '#070710', padding: 10, textAlign: 'center' }}>
-              <div style={{ fontSize: 9, color: '#445', marginBottom: 4 }}>{l}</div>
+              <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4 }}>{l}</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: c }}>{v}</div>
             </div>
           ))}
@@ -67,7 +67,7 @@ export default function SignalCard({ analysis, news }) {
       {/* ── News ── */}
       {news?.length > 0 && (
         <div className="card">
-          <div style={{ fontSize: 10, color: '#444', marginBottom: 12 }}>RECENT NEWS</div>
+          <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 12 }}>RECENT NEWS</div>
           {news.slice(0, 5).map((n, i) => (
             <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 11 }}>
               <a href={n.url} target="_blank" rel="noopener noreferrer"
@@ -76,7 +76,7 @@ export default function SignalCard({ analysis, news }) {
                 onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}>
                 {n.title}
               </a>
-              <div style={{ color: '#445', fontSize: 10 }}>
+              <div style={{ color: '#8899bb', fontSize: 10 }}>
                 {n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}
               </div>
             </div>

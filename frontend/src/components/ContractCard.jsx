@@ -33,18 +33,18 @@ export default function ContractCard({ data, type, selected, onClick }) {
       <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color, marginBottom: 4 }}>
         ${data.strike} {type}
       </div>
-      <div style={{ fontSize: 11, color: '#667', marginBottom: 12, display: 'flex', gap: 12 }}>
+      <div style={{ fontSize: 11, color: '#aabbcc', marginBottom: 12, display: 'flex', gap: 12 }}>
         <span>Exp: <span style={{ color: '#aaa' }}>{data.expiry}</span></span>
         {data.delta && <span>Δ <span style={{ color: '#aaa' }}>{data.delta}</span></span>}
         {data.iv    && <span>IV: <span style={{ color: '#ffaa00' }}>{data.iv}</span></span>}
       </div>
 
       <div style={{ background: '#070710', padding: 10, marginBottom: 10, border: `1px solid ${colorDim}` }}>
-        <div style={{ fontSize: 9, color: '#445', marginBottom: 6 }}>LIVE CONTRACT PRICING</div>
+        <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 6 }}>LIVE CONTRACT PRICING</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
           {[['BID', `$${data.bid?.toFixed(2)}`, '#ff6666'], ['MID', `$${data.mid?.toFixed(2)}`, color], ['ASK', `$${data.ask?.toFixed(2)}`, '#66ff88']].map(([l, v, c]) => (
             <div key={l}>
-              <div style={{ fontSize: 9, color: '#445' }}>{l}</div>
+              <div style={{ fontSize: 9, color: '#8899bb' }}>{l}</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: c }}>{v}</div>
             </div>
           ))}

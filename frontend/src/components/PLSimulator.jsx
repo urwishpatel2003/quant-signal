@@ -43,7 +43,7 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: '#667' }}>
+          <span style={{ fontSize: 11, color: '#aabbcc' }}>
             If {optionsSignal.ticker || 'stock'} moves to{' '}
             <span style={{ color: '#ffaa00', fontWeight: 700 }}>${simPrice?.toFixed(2)}</span>
           </span>
@@ -62,7 +62,7 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
           style={{ width: '100%', accentColor: '#ffaa00', cursor: 'pointer' }}
         />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#334', marginTop: 2 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#7788aa', marginTop: 2 }}>
           <span>${minPrice?.toFixed(2)}</span>
           <span style={{ color: '#ffaa0066' }}>${price?.toFixed(2)} now</span>
           <span>${maxPrice?.toFixed(2)}</span>
@@ -73,7 +73,7 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
         background: '#0a0a15', border: `1px solid ${plColor}33`,
         padding: '12px 16px', borderRadius: 4, textAlign: 'center', marginBottom: 12
       }}>
-        <div style={{ fontSize: 10, color: '#445', marginBottom: 4 }}>ESTIMATED P&L</div>
+        <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 4 }}>ESTIMATED P&L</div>
         <div style={{ fontSize: 32, fontWeight: 700, color: plColor }}>
           {totalPL >= 0 ? '+' : ''}${totalPL?.toFixed(0)}
         </div>
@@ -84,16 +84,16 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
         <div style={{ background: '#070710', padding: 8, textAlign: 'center' }}>
-          <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>BREAK-EVEN</div>
+          <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 2 }}>BREAK-EVEN</div>
           <div style={{ color: '#ffaa00', fontSize: 12, fontWeight: 600 }}>${breakeven}</div>
         </div>
         <div style={{ background: '#070710', padding: 8, textAlign: 'center' }}>
-          <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>EST. CONTRACT VALUE</div>
+          <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 2 }}>EST. CONTRACT VALUE</div>
           <div style={{ color: '#c8c8d0', fontSize: 12, fontWeight: 600 }}>${estValue?.toFixed(2)}</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 10, color: '#445' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 10, color: '#8899bb' }}>
         <div style={{ background: '#070710', padding: 8, textAlign: 'center' }}>
           <div style={{ marginBottom: 2 }}>CONTRACTS</div>
           <div style={{ color: '#c8c8d0', fontSize: 12, fontWeight: 600 }}>{contracts} × 100</div>
@@ -108,7 +108,7 @@ export default function PLSimulator({ optionsSignal, livePrice }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 9, color: '#334', marginTop: 10, textAlign: 'center' }}>
+      <div style={{ fontSize: 9, color: '#7788aa', marginTop: 10, textAlign: 'center' }}>
         ⚠ Simplified intrinsic value estimate. Actual P&L depends on IV, theta decay, and time to expiry.
       </div>
     </div>

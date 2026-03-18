@@ -50,7 +50,7 @@ export default function UpgradeModal({ type, onClose }) {
           </button>
         </div>
 
-        <div style={{ fontSize: 10, color: '#334', marginTop: 16 }}>
+        <div style={{ fontSize: 10, color: '#7788aa', marginTop: 16 }}>
           Free plan resets daily at midnight · No credit card required to start
         </div>
       </div>

@@ -46,7 +46,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
         <div style={{ fontSize: 'clamp(14px, 2vw, 20px)', color: '#8899aa', marginBottom: 12, fontWeight: 300 }}>
           Your AI investing buddy — stocks, options & global markets
         </div>
-        <div style={{ fontSize: 13, color: '#556', maxWidth: 560, margin: '0 auto 32px', lineHeight: 1.8 }}>
+        <div style={{ fontSize: 13, color: '#99aacc', maxWidth: 560, margin: '0 auto 32px', lineHeight: 1.8 }}>
           Real-time AI signals · Global macro context · Exact entry & exit prices · Options analysis · Risk management
         </div>
 
@@ -67,7 +67,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
           {STATS.map((s, i) => (
             <div key={i} style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00', lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginTop: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 4 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -86,7 +86,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             <div key={i} style={{ background: '#0f0f18', border: '1px solid #1e1e2e', padding: '20px 16px', borderRadius: 4 }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{v.icon}</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#ffaa00', marginBottom: 6 }}>{v.title}</div>
-              <div style={{ fontSize: 11, color: '#556', lineHeight: 1.6 }}>{v.desc}</div>
+              <div style={{ fontSize: 11, color: '#99aacc', lineHeight: 1.6 }}>{v.desc}</div>
             </div>
           ))}
         </div>
@@ -104,7 +104,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               onMouseLeave={e => e.currentTarget.style.background = '#0f0f18'}>
               <div style={{ fontSize: 24, marginBottom: 10 }}>{f.icon}</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: f.color, marginBottom: 6 }}>{f.title}</div>
-              <div style={{ fontSize: 11, color: '#556', lineHeight: 1.6, marginBottom: 12 }}>{f.desc}</div>
+              <div style={{ fontSize: 11, color: '#99aacc', lineHeight: 1.6, marginBottom: 12 }}>{f.desc}</div>
               <div style={{ fontSize: 10, color: f.color + '88' }}>OPEN {f.title.toUpperCase()} →</div>
             </div>
           ))}
@@ -125,7 +125,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 36, color: '#ffaa0033', flexShrink: 0, lineHeight: 1 }}>{s.step}</div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#c8c8d0', marginBottom: 6 }}>{s.title}</div>
-                <div style={{ fontSize: 11, color: '#556', lineHeight: 1.6 }}>{s.desc}</div>
+                <div style={{ fontSize: 11, color: '#99aacc', lineHeight: 1.6 }}>{s.desc}</div>
               </div>
             </div>
           ))}
@@ -180,7 +180,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                   padding: '12px 16px', borderRadius: 4, borderLeft: `3px solid ${item.color}` }}>
                   <span style={{ fontSize: 20 }}>{item.icon}</span>
                   <div>
-                    <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 2 }}>{item.label}</div>
+                    <div style={{ fontSize: 9, color: '#8899bb', letterSpacing: '0.1em', marginBottom: 2 }}>{item.label}</div>
                     <div style={{ fontSize: 12, color: '#c8c8d0', fontWeight: 500 }}>{item.value}</div>
                   </div>
                 </div>

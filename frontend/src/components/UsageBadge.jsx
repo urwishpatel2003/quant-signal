@@ -5,7 +5,7 @@ export default function UsageBadge({ used, limit, label }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-      <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em' }}>{label}</div>
+      <div style={{ fontSize: 9, color: '#8899bb', letterSpacing: '0.1em' }}>{label}</div>
       <div style={{ display: 'flex', gap: 3 }}>
         {Array.from({ length: limit }).map((_, i) => (
           <div key={i} style={{

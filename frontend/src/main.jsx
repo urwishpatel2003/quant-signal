@@ -48,13 +48,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             color: '#c8c8d0',
           },
           socialButtonsBlockButtonArrow: {
-            color: '#556',
+            color: '#99aacc',
           },
           dividerLine: {
             background: '#1e1e2e',
           },
           dividerText: {
-            color: '#445',
+            color: '#8899bb',
           },
           formFieldLabel: {
             color:     '#8899aa',
@@ -69,7 +69,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             fontSize:   '14px',
           },
           formFieldInputShowPasswordButton: {
-            color: '#556',
+            color: '#99aacc',
           },
           formButtonPrimary: {
             background:  '#ffaa00',
@@ -83,7 +83,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             color: '#ffaa00',
           },
           footerActionText: {
-            color: '#556',
+            color: '#99aacc',
           },
           identityPreviewText: {
             color: '#c8c8d0',

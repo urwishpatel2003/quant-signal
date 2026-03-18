@@ -48,7 +48,7 @@ export default function RiskRewardBar({ optionsSignal }) {
 
       {/* Ratio */}
       <div style={{ textAlign: 'center', marginBottom: 14 }}>
-        <span style={{ fontSize: 10, color: '#445' }}>RISK/REWARD RATIO  </span>
+        <span style={{ fontSize: 10, color: '#8899bb' }}>RISK/REWARD RATIO  </span>
         <span style={{ fontSize: 20, fontWeight: 700, color: parseFloat(ratio) >= 1.5 ? '#00ff88' : parseFloat(ratio) >= 1 ? '#ffaa00' : '#ff4444' }}>
           1 : {ratio}
         </span>
@@ -57,18 +57,18 @@ export default function RiskRewardBar({ optionsSignal }) {
       {/* Stats grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div style={{ background: '#070710', padding: 10, textAlign: 'center', borderLeft: '3px solid #ff444466' }}>
-          <div style={{ fontSize: 9, color: '#445', marginBottom: 3 }}>MAX LOSS</div>
+          <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 3 }}>MAX LOSS</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#ff4444' }}>-${maxLoss?.toFixed(0)}</div>
-          <div style={{ fontSize: 9, color: '#334', marginTop: 2 }}>100% of premium</div>
+          <div style={{ fontSize: 9, color: '#7788aa', marginTop: 2 }}>100% of premium</div>
         </div>
         <div style={{ background: '#070710', padding: 10, textAlign: 'center', borderLeft: `3px solid ${typeColor}66` }}>
-          <div style={{ fontSize: 9, color: '#445', marginBottom: 3 }}>TARGET PROFIT</div>
+          <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 3 }}>TARGET PROFIT</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: typeColor }}>+${targetProfit?.toFixed(0)}</div>
-          <div style={{ fontSize: 9, color: '#334', marginTop: 2 }}>100% gain on premium</div>
+          <div style={{ fontSize: 9, color: '#7788aa', marginTop: 2 }}>100% gain on premium</div>
         </div>
       </div>
 
-      <div style={{ marginTop: 10, padding: '8px 12px', background: '#070710', fontSize: 11, color: '#667', textAlign: 'center' }}>
+      <div style={{ marginTop: 10, padding: '8px 12px', background: '#070710', fontSize: 11, color: '#aabbcc', textAlign: 'center' }}>
         Risking <span style={{ color: '#ff4444' }}>${maxLoss?.toFixed(0)}</span> to make{' '}
         <span style={{ color: typeColor }}>${targetProfit?.toFixed(0)}</span> —{' '}
         {parseFloat(ratio) >= 1.5

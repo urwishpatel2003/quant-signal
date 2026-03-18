@@ -46,7 +46,7 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
 
   const Stat = ({ label, val, color, alert }) => (
     <div style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-      <span style={{ color: '#445' }}>{label} </span>
+      <span style={{ color: '#8899bb' }}>{label} </span>
       <span style={{ color: alert ? '#ff4444' : color, fontWeight: 600 }}>{val}</span>
       {alert && <span style={{ color: '#ff444466', fontSize: 9 }}> ⚠</span>}
     </div>
@@ -56,7 +56,7 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
     const d = find(sym);
     return d?.current ? (
       <div style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-        <span style={{ color: '#445' }}>{label} </span>
+        <span style={{ color: '#8899bb' }}>{label} </span>
         <span style={{ color: d.changePct >= 0 ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
           {d.changePct >= 0 ? '▲' : '▼'}{Math.abs(d.changePct)?.toFixed(2)}%
         </span>

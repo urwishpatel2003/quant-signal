@@ -85,10 +85,10 @@ export default function TradeChecklist({ ta, priceSignal, optionsSignal, calenda
         }}>
           <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }}>{c.pass ? '✅' : '❌'}</span>
           <div>
-            <div style={{ fontSize: 12, color: c.pass ? '#c8c8d0' : '#667', fontWeight: c.pass ? 500 : 400 }}>
+            <div style={{ fontSize: 12, color: c.pass ? '#c8c8d0' : '#aabbcc', fontWeight: c.pass ? 500 : 400 }}>
               {c.label}
             </div>
-            <div style={{ fontSize: 11, color: '#445', marginTop: 2 }}>{c.note}</div>
+            <div style={{ fontSize: 11, color: '#8899bb', marginTop: 2 }}>{c.note}</div>
           </div>
         </div>
       ))}

@@ -187,7 +187,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               );
             })}
           </div>
-          <div style={{ fontSize: 11, color: '#334' }}>
+          <div style={{ fontSize: 11, color: '#7788aa' }}>
             {scan.ticker && `${scan.ticker} · `}This may take 10–20 seconds
           </div>
         </div>
@@ -226,7 +226,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                     }}>
                     <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17,
                       color: '#ffaa00', minWidth: 64, letterSpacing: '0.05em' }}>{s.ticker}</span>
-                    <span style={{ fontSize: 11, color: '#667', overflow: 'hidden',
+                    <span style={{ fontSize: 11, color: '#aabbcc', overflow: 'hidden',
                       textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{s.name}</span>
                     <span style={{ fontSize: 9, color: '#2a2a3e', flexShrink: 0,
                       background: '#1a1a2e', padding: '1px 6px', borderRadius: 2 }}>{s.type}</span>
@@ -252,7 +252,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 }}>⚡ OPTIONS</button>
             )}
             {scan.analysis && !scan.loading && (
-              <button className="btn-sm" style={{ color: '#556', borderColor: '#2a2a3e' }}
+              <button className="btn-sm" style={{ color: '#99aacc', borderColor: '#2a2a3e' }}
                 onClick={() => { scan.reset(); setInputVal(''); }}>
                 ← NEW SCAN
               </button>
@@ -265,7 +265,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
       {/* ── Timeframe selector ── */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 10, color: '#444', marginBottom: 8 }}>TIMEFRAME:</div>
+        <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 8 }}>TIMEFRAME:</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {TF_KEYS.map(key => {
             const tf     = TIMEFRAMES[key];
@@ -275,14 +275,14 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 disabled={scan.loading}
                 onClick={() => scan.setTimeframe(key)}
                 style={{
-                  color:       active ? '#ffaa00' : '#556',
+                  color:       active ? '#ffaa00' : '#99aacc',
                   borderColor: active ? '#ffaa00' : '#2a2a3e',
                   background:  active ? '#ffaa0011' : '#1a1a2e',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
                   padding: '8px 12px', lineHeight: 1.3,
                 }}>
                 <span style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}>{tf.label}</span>
-                <span style={{ fontSize: 9, color: active ? '#ffaa0088' : '#334' }}>{tf.sublabel}</span>
+                <span style={{ fontSize: 9, color: active ? '#ffaa0088' : '#7788aa' }}>{tf.sublabel}</span>
               </button>
             );
           })}
@@ -304,7 +304,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 background: 'none', border: 'none', cursor: 'pointer',
                 padding: '8px 14px', fontSize: 11, letterSpacing: '0.1em',
                 textTransform: 'uppercase', fontFamily: 'inherit',
-                color:        moversTab === t.key ? t.color : '#445',
+                color:        moversTab === t.key ? t.color : '#8899bb',
                 borderBottom: moversTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
                 marginBottom: -1,
               }}>
@@ -313,13 +313,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           ))}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, paddingRight: 4 }}>
             {scan.ticker && !moversOpen && (
-              <span style={{ fontSize: 10, color: '#445' }}>
+              <span style={{ fontSize: 10, color: '#8899bb' }}>
                 {scan.ticker} · {TIMEFRAMES[scan.timeframe]?.label}
               </span>
             )}
             <button onClick={() => setMoversOpen(o => !o)}
               style={{ background: 'none', border: 'none', cursor: 'pointer',
-                color: '#445', fontSize: 12, padding: '4px 8px', fontFamily: 'inherit' }}>
+                color: '#8899bb', fontSize: 12, padding: '4px 8px', fontFamily: 'inherit' }}>
               {moversOpen ? '▲' : '▼'}
             </button>
           </div>
@@ -328,11 +328,11 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         {/* List */}
         {moversOpen && (
           moversLoad ? (
-            <div className="pulse" style={{ fontSize: 11, color: '#445', textAlign: 'center', padding: '20px 0' }}>
+            <div className="pulse" style={{ fontSize: 11, color: '#8899bb', textAlign: 'center', padding: '20px 0' }}>
               LOADING MARKET MOVERS...
             </div>
           ) : list.length === 0 ? (
-            <div style={{ fontSize: 11, color: '#334', textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: 11, color: '#7788aa', textAlign: 'center', padding: '20px 0' }}>
               Market data unavailable — market may be closed
             </div>
           ) : moversTab === 'volume' ? (
@@ -357,7 +357,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <div style={{ fontSize: 10, color: '#334', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
+                    <div style={{ fontSize: 10, color: '#7788aa', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
                     <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{m.ticker}</div>
                     <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 66 }}>${m.price?.toFixed(2)}</div>
                     {/* Volume */}
@@ -373,14 +373,14 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                         )}
                       </div>
                       {m.avgVolume > 0 && (
-                        <div style={{ fontSize: 9, color: '#334' }}>avg {fmtVol(m.avgVolume)}</div>
+                        <div style={{ fontSize: 9, color: '#7788aa' }}>avg {fmtVol(m.avgVolume)}</div>
                       )}
                     </div>
                     {/* Change % */}
                     <div style={{ fontSize: 12, fontWeight: 600, color: pctColor, minWidth: 64, textAlign: 'right' }}>
                       {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                     </div>
-                    <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#334' }}>
+                    <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#7788aa' }}>
                       {isActive ? '●' : '→'}
                     </div>
                   </div>
@@ -408,7 +408,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <div style={{ fontSize: 10, color: '#334', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
+                    <div style={{ fontSize: 10, color: '#7788aa', minWidth: 18, textAlign: 'right' }}>{i + 1}</div>
                     <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', minWidth: 60 }}>{m.ticker}</div>
                     <div style={{ fontSize: 13, color: '#c8c8d0', minWidth: 70 }}>${m.price?.toFixed(2)}</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color, marginLeft: 'auto', minWidth: 70, textAlign: 'right' }}>
@@ -417,7 +417,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                     <div style={{ fontSize: 11, color: color + '88', minWidth: 60, textAlign: 'right' }}>
                       {isGainer ? '+' : ''}${m.change?.toFixed(2)}
                     </div>
-                    <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#334' }}>
+                    <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#7788aa' }}>
                       {isActive ? '●' : '→'}
                     </div>
                   </div>
@@ -439,7 +439,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
               {scan.ticker}
             </div>
-            <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
               {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
             </div>
           </div>
@@ -461,7 +461,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 <div style={{ fontSize: 20, fontWeight: 700, color: SC[scan.analysis.signal], lineHeight: 1 }}>
                   {scan.analysis.signal}
                 </div>
-                <div style={{ fontSize: 10, color: '#556', marginTop: 2 }}>{scan.analysis.confidence}%</div>
+                <div style={{ fontSize: 10, color: '#99aacc', marginTop: 2 }}>{scan.analysis.confidence}%</div>
               </div>
             )}
           </div>
@@ -484,7 +484,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
               ['GEO RISK', scan.analysis.geopoliticalRisk,                 scan.analysis.geopoliticalRisk === 'LOW' ? '#00ff88' : scan.analysis.geopoliticalRisk === 'HIGH' ? '#ff4444' : '#ffaa00'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#070710', padding: '8px 10px', textAlign: 'center' }}>
-                <div style={{ fontSize: 9, color: '#445', marginBottom: 4, letterSpacing: '0.1em' }}>{l}</div>
+                <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4, letterSpacing: '0.1em' }}>{l}</div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: c }}>{v}</div>
               </div>
             ))}
@@ -527,7 +527,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
             {scan.news?.length > 0 && (
               <div className="card">
-                <div style={{ fontSize: 10, color: '#444', marginBottom: 12 }}>RECENT NEWS</div>
+                <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 12 }}>RECENT NEWS</div>
                 {scan.news.slice(0, 5).map((n, i) => (
                   <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 11 }}>
                     <a href={n.url} target="_blank" rel="noopener noreferrer"
@@ -536,7 +536,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                       onMouseLeave={e => { e.currentTarget.style.color = '#aab'; }}>
                       {n.title}
                     </a>
-                    <div style={{ color: '#445', fontSize: 10 }}>
+                    <div style={{ color: '#8899bb', fontSize: 10 }}>
                       {n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}
                     </div>
                   </div>
@@ -548,7 +548,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {scan.fundamentals && (
               <div className="card fade-in">
-                <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
+                <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
                 {[
                   ['P/E',          scan.fundamentals.pe?.toFixed(1)],
                   ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
@@ -572,7 +572,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             <BondPanel bonds={macro?.bonds} />
             {scan.options && (
               <div className="card fade-in">
-                <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>OPTIONS FLOW <span style={{ color: '#00ff8844', fontSize: 9 }}>⚡ LIVE</span></div>
+                <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 12 }}>OPTIONS FLOW <span style={{ color: '#00ff8844', fontSize: 9 }}>⚡ LIVE</span></div>
                 <div className="kv"><span className="kv-key">Put/Call</span><span style={{ color: scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88', fontWeight: 500, fontSize: 11 }}>{scan.options.putCallRatio?.toFixed(2)}</span></div>
                 <div className="kv"><span className="kv-key">Call IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgCallIV}%</span></div>
                 <div className="kv"><span className="kv-key">Put IV</span><span style={{ color: '#ffaa00', fontWeight: 500, fontSize: 11 }}>{scan.options.avgPutIV}%</span></div>

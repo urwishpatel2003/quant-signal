@@ -184,7 +184,7 @@ export default function OptionsTab({ macro, initialTicker }) {
               );
             })}
           </div>
-          <div style={{ fontSize: 11, color: '#334' }}>
+          <div style={{ fontSize: 11, color: '#7788aa' }}>
             {ticker && `${ticker} · `}This may take 10–20 seconds
           </div>
         </div>
@@ -230,7 +230,7 @@ export default function OptionsTab({ macro, initialTicker }) {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
               {ticker}
             </div>
-            <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
               {isMarketClosed() ? 'MARKET CLOSED' : 'LIVE'}
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function OptionsTab({ macro, initialTicker }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: recColor, lineHeight: 1 }}>
                   {optionsSignal.recommendation === 'NEUTRAL' ? 'NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
                 </div>
-                <div style={{ fontSize: 10, color: '#556', marginTop: 2 }}>{optionsSignal.confidence}%</div>
+                <div style={{ fontSize: 10, color: '#99aacc', marginTop: 2 }}>{optionsSignal.confidence}%</div>
               </div>
             )}
           </div>
@@ -271,7 +271,7 @@ export default function OptionsTab({ macro, initialTicker }) {
             marginBottom: expiryOpen ? 12 : 0,
           }}>
             <div>
-              <div style={{ fontSize: 10, color: expiryOpen && !optionsSignal ? '#ffaa00' : '#445', letterSpacing: '0.15em' }}>
+              <div style={{ fontSize: 10, color: expiryOpen && !optionsSignal ? '#ffaa00' : '#8899bb', letterSpacing: '0.15em' }}>
                 EXPIRY DATE
               </div>
               {!expiryOpen && (
@@ -289,7 +289,7 @@ export default function OptionsTab({ macro, initialTicker }) {
               )}
               <button onClick={() => setExpiryOpen(o => !o)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#445', fontSize: 12, padding: '2px 6px', fontFamily: 'inherit' }}>
+                  color: '#8899bb', fontSize: 12, padding: '2px 6px', fontFamily: 'inherit' }}>
                 {expiryOpen ? '▲' : '▼'}
               </button>
             </div>
@@ -307,7 +307,7 @@ export default function OptionsTab({ macro, initialTicker }) {
                     style={{
                       background:    isSelected ? '#ffaa0011' : '#0a0a14',
                       border:        `1px solid ${isSelected ? '#ffaa00' : '#2a2a3e'}`,
-                      color:         isSelected ? '#ffaa00' : '#556',
+                      color:         isSelected ? '#ffaa00' : '#99aacc',
                       cursor:        'pointer',
                       padding:       '7px 10px',
                       borderRadius:  2,
@@ -320,7 +320,7 @@ export default function OptionsTab({ macro, initialTicker }) {
                       minWidth:      70,
                     }}>
                     <span style={{ fontSize: 11, fontWeight: isSelected ? 600 : 400 }}>{exp}</span>
-                    <span style={{ fontSize: 9, color: isSelected ? '#ffaa0088' : '#334' }}>{daysOut}d</span>
+                    <span style={{ fontSize: 9, color: isSelected ? '#ffaa0088' : '#7788aa' }}>{daysOut}d</span>
                   </button>
                 );
               })}
@@ -343,10 +343,10 @@ export default function OptionsTab({ macro, initialTicker }) {
       {!priceLoaded && !error && (
         <div className="card" style={{ textAlign: 'center', padding: 48, color: '#333' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
-          <div style={{ fontSize: 14, color: '#556', marginBottom: 8 }}>
+          <div style={{ fontSize: 14, color: '#99aacc', marginBottom: 8 }}>
             Enter a ticker above to get started
           </div>
-          <div style={{ fontSize: 11, color: '#334', lineHeight: 1.8 }}>
+          <div style={{ fontSize: 11, color: '#7788aa', lineHeight: 1.8 }}>
             Step 1: Enter ticker &amp; press LOAD<br />
             Step 2: Select expiry date<br />
             Step 3: Click FIND OPTIONS PLAYS
@@ -364,7 +364,7 @@ export default function OptionsTab({ macro, initialTicker }) {
             <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 4 }}>
+                  <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 4 }}>
                     AI OPTIONS RECOMMENDATION · {selectedExpiry}
                   </div>
                   <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>
@@ -377,13 +377,13 @@ export default function OptionsTab({ macro, initialTicker }) {
                   {optionsSignal.calendarWarning && <div style={{ fontSize: 11, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {optionsSignal.calendarWarning}</div>}
                 </div>
                 <div style={{ textAlign: 'right', minWidth: 120 }}>
-                  <div style={{ fontSize: 11, color: '#556' }}>CONFIDENCE</div>
+                  <div style={{ fontSize: 11, color: '#99aacc' }}>CONFIDENCE</div>
                   <div style={{ fontSize: 28, fontWeight: 600 }}>{optionsSignal.confidence}%</div>
                   <div className="bar-bg"><div className="bar-fill" style={{ width: `${optionsSignal.confidence}%`, background: recColor }} /></div>
                   <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 9, color: '#445' }}>IV ENVIRONMENT</div>
+                    <div style={{ fontSize: 9, color: '#8899bb' }}>IV ENVIRONMENT</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: ivColor }}>{optionsSignal.ivRank} IV</div>
-                    <div style={{ fontSize: 11, color: '#667' }}>{optionsSignal.ivComment}</div>
+                    <div style={{ fontSize: 11, color: '#aabbcc' }}>{optionsSignal.ivComment}</div>
                   </div>
                 </div>
               </div>
@@ -410,7 +410,7 @@ export default function OptionsTab({ macro, initialTicker }) {
               {ta && <TechnicalPanel ta={ta} />}
               {priceSignal && (
                 <div className="card" style={{ borderColor: SC[priceSignal.signal] + '33' }}>
-                  <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
+                  <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {[
                       ['SIGNAL',   priceSignal.signal,                        SC[priceSignal.signal]],
@@ -421,7 +421,7 @@ export default function OptionsTab({ macro, initialTicker }) {
                       ['GEO RISK', priceSignal.geopoliticalRisk,              RC[priceSignal.geopoliticalRisk]],
                     ].map(([l, v, c]) => (
                       <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
+                        <div style={{ fontSize: 8, color: '#8899bb', marginBottom: 2 }}>{l}</div>
                         <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
                       </div>
                     ))}
@@ -435,13 +435,13 @@ export default function OptionsTab({ macro, initialTicker }) {
                         ['GLOBAL', priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
                       ].map(([l, v, c]) => (
                         <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 8, color: '#445', marginBottom: 2 }}>{l}</div>
+                          <div style={{ fontSize: 8, color: '#8899bb', marginBottom: 2 }}>{l}</div>
                           <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
                         </div>
                       ))}
                     </div>
                   )}
-                  <div style={{ fontSize: 10, color: '#667', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 10, color: '#aabbcc', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
                     {priceSignal.thesis}
                   </div>
                   {priceSignal.bondSignal && (

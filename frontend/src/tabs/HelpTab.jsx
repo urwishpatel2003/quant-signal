@@ -87,7 +87,7 @@ export default function HelpTab() {
       {/* ── Header ── */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, marginBottom: 4 }}>HELP & GUIDE</div>
-        <div style={{ fontSize: 12, color: '#556' }}>Learn how to use QuAInt Signal step by step</div>
+        <div style={{ fontSize: 12, color: '#99aacc' }}>Learn how to use QuAInt Signal step by step</div>
       </div>
 
       {/* ── Section tabs — horizontal scrollable ── */}
@@ -100,7 +100,7 @@ export default function HelpTab() {
           <button key={s.id} onClick={() => setActiveStep(i)}
             className="btn-sm"
             style={{
-              color:       activeStep === i ? '#ffaa00' : '#556',
+              color:       activeStep === i ? '#ffaa00' : '#99aacc',
               borderColor: activeStep === i ? '#ffaa00' : '#2a2a3e',
               background:  activeStep === i ? '#ffaa0011' : '#1a1a2e',
               whiteSpace: 'nowrap', flexShrink: 0,
@@ -118,7 +118,7 @@ export default function HelpTab() {
         <div className="bar-bg">
           <div className="bar-fill" style={{ width: `${((activeStep + 1) / STEPS.length) * 100}%`, background: '#ffaa00', transition: 'width 0.3s' }} />
         </div>
-        <div style={{ fontSize: 10, color: '#445', marginTop: 4 }}>
+        <div style={{ fontSize: 10, color: '#8899bb', marginTop: 4 }}>
           {activeStep + 1} of {STEPS.length} — {step.label}
         </div>
       </div>
@@ -163,7 +163,7 @@ export default function HelpTab() {
             style={{ opacity: activeStep === 0 ? 0.3 : 1 }}>
             ← PREV
           </button>
-          <div style={{ fontSize: 11, color: '#334', textAlign: 'center' }}>{step.label}</div>
+          <div style={{ fontSize: 11, color: '#7788aa', textAlign: 'center' }}>{step.label}</div>
           <button className="btn" disabled={activeStep === STEPS.length - 1}
             onClick={() => setActiveStep(a => a + 1)}
             style={{ opacity: activeStep === STEPS.length - 1 ? 0.3 : 1 }}>
@@ -177,10 +177,10 @@ export default function HelpTab() {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#00ff88', marginBottom: 8 }}>
               YOU'RE READY TO TRADE
             </div>
-            <div style={{ fontSize: 12, color: '#667' }}>
+            <div style={{ fontSize: 12, color: '#aabbcc' }}>
               You've completed the guide. Head to the SCANNER or OPTIONS tab to find your first trade.
             </div>
-            <div style={{ fontSize: 10, color: '#334', marginTop: 8 }}>
+            <div style={{ fontSize: 10, color: '#7788aa', marginTop: 8 }}>
               ⚠ Remember: this is not financial advice. Always trade with money you can afford to lose.
             </div>
           </div>

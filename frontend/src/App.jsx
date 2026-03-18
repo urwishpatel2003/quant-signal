@@ -84,7 +84,7 @@ export default function App() {
           <SignedIn>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {user?.firstName && (
-                <span style={{ fontSize: 10, color: '#445' }}>
+                <span style={{ fontSize: 10, color: '#8899bb' }}>
                   {user.firstName.toUpperCase()}
                 </span>
               )}
@@ -110,7 +110,7 @@ export default function App() {
               className="tab-btn"
               style={{
                 borderBottom: activeTab === id ? '2px solid #ffaa00' : '2px solid transparent',
-                color: activeTab === id ? '#ffaa00' : '#445',
+                color: activeTab === id ? '#ffaa00' : '#8899bb',
               }}
             >
               {label}
@@ -138,7 +138,7 @@ export default function App() {
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
                 SIGN IN TO ACCESS
               </div>
-              <div style={{ fontSize: 13, color: '#556', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, color: '#99aacc', marginBottom: 8 }}>
                 Create a free account to use QuAInt Signal
               </div>
               <SignInButton mode="modal">

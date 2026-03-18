@@ -61,7 +61,7 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
     <div>
       {/* ── Add form ── */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>ADD TO WATCHLIST</div>
+        <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 12 }}>ADD TO WATCHLIST</div>
         <div className="watchlist-form">
           {[
             { label: 'TICKER *', val: watchInput, set: e => setWatchInput(e.target.value.toUpperCase()), ph: 'AAPL' },
@@ -71,7 +71,7 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
             { label: 'NOTES',    val: watchNote,  set: e => setWatchNote(e.target.value),                ph: 'Why watching...' },
           ].map(({ label, val, set, ph }) => (
             <div key={label}>
-              <div style={{ fontSize: 9, color: '#556', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontSize: 9, color: '#99aacc', marginBottom: 4 }}>{label}</div>
               <input className="input" value={val} onChange={set} placeholder={ph}
                 onKeyDown={e => e.key === 'Enter' && addFromForm()} />
             </div>
@@ -101,7 +101,7 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
                 <div className="watchlist-item">
                   <div>
                     <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22 }}>{item.ticker}</div>
-                    {item.price && <div style={{ fontSize: 10, color: '#556' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
+                    {item.price && <div style={{ fontSize: 10, color: '#99aacc' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
                   </div>
                   <div>
                     {item.signal
@@ -110,18 +110,18 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
                   </div>
                   <div>
                     {item.macroImpact && <>
-                      <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>MACRO</div>
+                      <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 2 }}>MACRO</div>
                       <span style={{ fontSize: 10, color: { BULLISH: '#00ff88', BEARISH: '#ff4444', NEUTRAL: '#ffaa00' }[item.macroImpact] }}>{item.macroImpact}</span>
                     </>}
                   </div>
-                  <div><div style={{ fontSize: 9, color: '#445' }}>ENTRY</div><div style={{ fontSize: 12, color: '#00ff88' }}>{item.entry || '—'}</div></div>
-                  <div><div style={{ fontSize: 9, color: '#445' }}>EXIT</div><div style={{ fontSize: 12, color: '#ffaa00' }}>{item.exit || '—'}</div></div>
+                  <div><div style={{ fontSize: 9, color: '#8899bb' }}>ENTRY</div><div style={{ fontSize: 12, color: '#00ff88' }}>{item.entry || '—'}</div></div>
+                  <div><div style={{ fontSize: 9, color: '#8899bb' }}>EXIT</div><div style={{ fontSize: 12, color: '#ffaa00' }}>{item.exit || '—'}</div></div>
                   <div>
-                    <div style={{ fontSize: 9, color: '#445' }}>TARGETS</div>
-                    {item.priceTarget && <div style={{ fontSize: 10, color: '#556' }}>T: <span style={{ color: '#00ff88' }}>${typeof item.priceTarget === 'number' ? item.priceTarget.toFixed(2) : item.priceTarget}</span></div>}
-                    {item.stopLoss    && <div style={{ fontSize: 10, color: '#556' }}>S: <span style={{ color: '#ff4444' }}>${typeof item.stopLoss === 'number' ? item.stopLoss.toFixed(2) : item.stopLoss}</span></div>}
+                    <div style={{ fontSize: 9, color: '#8899bb' }}>TARGETS</div>
+                    {item.priceTarget && <div style={{ fontSize: 10, color: '#99aacc' }}>T: <span style={{ color: '#00ff88' }}>${typeof item.priceTarget === 'number' ? item.priceTarget.toFixed(2) : item.priceTarget}</span></div>}
+                    {item.stopLoss    && <div style={{ fontSize: 10, color: '#99aacc' }}>S: <span style={{ color: '#ff4444' }}>${typeof item.stopLoss === 'number' ? item.stopLoss.toFixed(2) : item.stopLoss}</span></div>}
                   </div>
-                  <div style={{ fontSize: 11, color: '#667', fontStyle: 'italic' }}>{item.note || ''}</div>
+                  <div style={{ fontSize: 11, color: '#aabbcc', fontStyle: 'italic' }}>{item.note || ''}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn-sm" onClick={() => onOpenScanner(item.ticker)}>SCAN</button>
                     <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }} onClick={() => onOpenOptions(item.ticker)}>OPTS</button>
@@ -135,7 +135,7 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div>
                     <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22 }}>{item.ticker}</div>
-                    {item.price && <div style={{ fontSize: 10, color: '#556' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
+                    {item.price && <div style={{ fontSize: 10, color: '#99aacc' }}>${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn-sm" onClick={() => onOpenScanner(item.ticker)}>SCAN</button>
@@ -150,7 +150,7 @@ export default function WatchlistTab({ macro, onOpenScanner, onOpenOptions, exte
                   {item.priceTarget && <span style={{ fontSize: 10, color: '#00ff88' }}>T: ${typeof item.priceTarget === 'number' ? item.priceTarget.toFixed(2) : item.priceTarget}</span>}
                   {item.stopLoss    && <span style={{ fontSize: 10, color: '#ff4444' }}>S: ${typeof item.stopLoss === 'number' ? item.stopLoss.toFixed(2) : item.stopLoss}</span>}
                 </div>
-                {item.note && <div style={{ fontSize: 11, color: '#667', fontStyle: 'italic' }}>{item.note}</div>}
+                {item.note && <div style={{ fontSize: 11, color: '#aabbcc', fontStyle: 'italic' }}>{item.note}</div>}
               </div>
             </div>
           ))}

@@ -13,7 +13,7 @@ export default function BondPanel({ bonds }) {
     <div className="card">
       <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>
         📊 BOND MARKET
-        <span style={{ fontSize: 8, color: '#334', marginLeft: 6 }}>
+        <span style={{ fontSize: 8, color: '#7788aa', marginLeft: 6 }}>
           {isYahoo ? '(LIVE YIELDS)' : '(ETF PRICES)'}
         </span>
       </div>
@@ -35,7 +35,7 @@ export default function BondPanel({ bonds }) {
                   {fmt(d?.current, isYield)}
                 </span>
                 {d?.changePct != null && (
-                  <span style={{ fontSize: 9, marginLeft: 4, color: '#667' }}>{pct(d.changePct)}</span>
+                  <span style={{ fontSize: 9, marginLeft: 4, color: '#aabbcc' }}>{pct(d.changePct)}</span>
                 )}
               </span>
             </div>
@@ -62,7 +62,7 @@ export default function BondPanel({ bonds }) {
                   {fmt(d?.current, false)}
                 </span>
                 {d?.changePct != null && (
-                  <span style={{ fontSize: 9, marginLeft: 4, color: '#667' }}>{pct(d.changePct)}</span>
+                  <span style={{ fontSize: 9, marginLeft: 4, color: '#aabbcc' }}>{pct(d.changePct)}</span>
                 )}
               </span>
             </div>

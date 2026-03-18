@@ -80,7 +80,7 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
             gold?.changePct != null ? `${gold.changePct > 0 ? '▲' : '▼'} ${Math.abs(gold.changePct).toFixed(2)}%` : ''],
         ].map(([l, v, c, sub]) => (
           <div key={l} className="card" style={{ textAlign: 'center', borderColor: c + '33' }}>
-            <div style={{ fontSize: 10, color: '#445', marginBottom: 4 }}>{l}</div>
+            <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 4 }}>{l}</div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(20px, 4vw, 28px)', color: c }}>{v}</div>
             <div style={{ fontSize: 10, color: c }}>{sub}</div>
           </div>
@@ -88,7 +88,7 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
       </div>
 
       {/* ── ETF proxy notice ── */}
-      <div style={{ fontSize: 10, color: '#334', textAlign: 'center' }}>
+      <div style={{ fontSize: 10, color: '#7788aa', textAlign: 'center' }}>
         * International markets shown as ETF proxy prices (EWJ, EWH, FXI, INDA, EWG, EWU, EWQ, FEZ, VIXY, UUP, GLD, USO)
       </div>
 
@@ -103,7 +103,7 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
 
         {bonds && (
           <div className="card">
-            <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>📊 US BONDS <span style={{ fontSize: 8, color: '#334' }}>(ETF PRICES)</span></div>
+            <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>📊 US BONDS <span style={{ fontSize: 8, color: '#7788aa' }}>(ETF PRICES)</span></div>
             {[
               ['TLT (20Y)',    bonds.tlt, bonds.tlt?.changePct > 0 ? '#00ff88' : '#ff4444'],
               ['IEF (7-10Y)',  bonds.ief, bonds.ief?.changePct > 0 ? '#00ff88' : '#ff4444'],

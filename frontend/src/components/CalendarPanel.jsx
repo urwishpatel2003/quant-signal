@@ -37,7 +37,7 @@ export default function CalendarPanel({ calendar }) {
           ) : (
             <div style={{ color: '#aab', fontSize: 12, lineHeight: 1.5 }}>{e.title}</div>
           )}
-          {e.publisher && <div style={{ fontSize: 10, color: '#445', marginTop: 3 }}>{e.publisher}</div>}
+          {e.publisher && <div style={{ fontSize: 10, color: '#8899bb', marginTop: 3 }}>{e.publisher}</div>}
         </div>
       ))}
     </div>

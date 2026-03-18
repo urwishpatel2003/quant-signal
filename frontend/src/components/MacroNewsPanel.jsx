@@ -30,7 +30,7 @@ export default function MacroNewsPanel({ macroNews, calendar }) {
               ) : (
                 <div style={{ color: '#aab', fontSize: 12, lineHeight: 1.5 }}>{n.title}</div>
               )}
-              {n.publisher && <div style={{ fontSize: 10, color: '#445', marginTop: 3 }}>{n.publisher}</div>}
+              {n.publisher && <div style={{ fontSize: 10, color: '#8899bb', marginTop: 3 }}>{n.publisher}</div>}
             </div>
           ))}
         </div>
