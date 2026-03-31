@@ -11,11 +11,13 @@ import OptionsTab  from './tabs/OptionsTab';
 import MarketsTab  from './tabs/MarketsTab';
 import HelpTab     from './tabs/HelpTab';
 import WelcomePage from './components/WelcomePage';
+import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
 
 export default function App() {
   const [enteredApp,    setEnteredApp]    = useState(false);
   const [activeTab,     setActiveTab]     = useState('scanner');
   const [optionsTicker, setOptionsTicker] = useState('');
+  const [modal,         setModal]         = useState(null);
 
   const macro                    = useMacroData();
   const { user }                 = useUser();
@@ -46,12 +48,22 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#07070e', color: '#e8e8f0', fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{ minHeight: '100vh', background: '#07070e', color: '#e8e8f0',
+      fontFamily: "'IBM Plex Mono', monospace", display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Modals ── */}
+      {modal === 'terms'   && <TermsModal   onClose={() => setModal(null)} />}
+      {modal === 'privacy' && <PrivacyModal onClose={() => setModal(null)} />}
+      {modal === 'about'   && <AboutModal   onClose={() => setModal(null)} />}
+      {modal === 'contact' && <ContactModal onClose={() => setModal(null)} />}
 
       {/* ── Header ── */}
       <div className="app-header">
         <div className="app-header-logo">
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: '0.05em', lineHeight: 1 }}>
+          <div
+            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
+              letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer' }}
+            onClick={() => setModal('about')}>
             <span style={{ color: '#ffaa00' }}>Qu</span>
             <span style={{ color: '#00ff88' }}>AI</span>
             <span style={{ color: '#ffaa00' }}>nt Signal</span>
@@ -73,7 +85,8 @@ export default function App() {
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap' }}>
+              <button className="btn-sm"
+                style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap' }}>
                 SIGN IN
               </button>
             </SignInButton>
@@ -91,11 +104,11 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Tabs ── */}
+      {/* ── Nav Tabs ── */}
       <div className="app-tabs">
         {TABS.map(tab => {
-          const id    = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
-          const label = typeof tab === 'string' ? tab : tab.label;
+          const id       = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
+          const label    = typeof tab === 'string' ? tab : tab.label;
           const isActive = activeTab === id;
           return (
             <button
@@ -106,8 +119,7 @@ export default function App() {
                 borderBottom: isActive ? '2px solid #ffaa00' : '2px solid transparent',
                 color:        isActive ? '#ffaa00' : '#b0c0dd',
                 fontWeight:   isActive ? 700 : 600,
-              }}
-            >
+              }}>
               {label}
             </button>
           );
@@ -115,19 +127,35 @@ export default function App() {
       </div>
 
       {/* ── Content ── */}
-      <div className="app-content">
+      <div className="app-content" style={{ flex: 1 }}>
+
+        {/* Help is always public */}
         {activeTab === 'help' && <HelpTab />}
 
         <SignedIn>
-          {activeTab === 'scanner' && <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />}
-          {activeTab === 'options' && <OptionsTab macro={macro} initialTicker={optionsTicker} />}
-          {activeTab === 'markets' && <MarketsTab intlMarkets={macro.intlMarkets} bonds={macro.bonds} macroNews={macro.macroNews} calendar={macro.calendar} />}
+          {activeTab === 'scanner' && (
+            <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
+          )}
+          {activeTab === 'options' && (
+            <OptionsTab macro={macro} initialTicker={optionsTicker} />
+          )}
+          {activeTab === 'markets' && (
+            <MarketsTab
+              intlMarkets={macro.intlMarkets}
+              bonds={macro.bonds}
+              macroNews={macro.macroNews}
+              calendar={macro.calendar}
+            />
+          )}
         </SignedIn>
 
         {activeTab !== 'help' && (
           <SignedOut>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', minHeight: '60vh', gap: 20 }}>
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              minHeight: '60vh', gap: 20,
+            }}>
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
                 SIGN IN TO ACCESS
               </div>
@@ -142,6 +170,45 @@ export default function App() {
             </div>
           </SignedOut>
         )}
+      </div>
+
+      {/* ── Footer ── */}
+      <div style={{
+        borderTop: '1px solid #1e1e30',
+        padding: '16px 24px',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ fontSize: 11, color: '#7788aa' }}>
+          © {new Date().getFullYear()} QuAInt Signal · Built with Claude AI
+        </div>
+
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+          {[
+            { label: 'About',   key: 'about'   },
+            { label: 'Contact', key: 'contact' },
+            { label: 'Terms',   key: 'terms'   },
+            { label: 'Privacy', key: 'privacy' },
+          ].map(item => (
+            <button
+              key={item.key}
+              onClick={() => setModal(item.key)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: '#7788aa', fontSize: 11, fontFamily: 'inherit',
+                padding: 0, letterSpacing: '0.05em', transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#ffaa00'}
+              onMouseLeave={e => e.currentTarget.style.color = '#7788aa'}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 10, color: '#445' }}>
+          ⚠ Not financial advice · Trading involves risk
+        </div>
       </div>
     </div>
   );
