@@ -88,25 +88,25 @@ async function trackUsage(userId, type) {
   const today = new Date().toISOString().split('T')[0];
   const col   = type === 'scan' ? 'scans' : 'options';
 
-  // Upsert — insert or increment
-  const { data, error } = await supabase.rpc('increment_usage', {
-    p_user_id: userId,
-    p_date:    today,
-    p_column:  col,
-  });
+  // Get current usage
+  const current = await getUsage(userId);
+  const updated = {
+    user_id: userId,
+    date:    today,
+    scans:   col === 'scans'   ? (current.scans   || 0) + 1 : (current.scans   || 0),
+    options: col === 'options' ? (current.options || 0) + 1 : (current.options || 0),
+  };
+
+  const { error } = await supabase
+    .from('usage')
+    .upsert(updated, { onConflict: 'user_id,date' });
 
   if (error) {
-    // Fallback: manual upsert
-    const current = await getUsage(userId);
-    const updated = { ...current, [col]: (current[col] || 0) + 1 };
-    await supabase
-      .from('usage')
-      .upsert({ user_id: userId, date: today, ...updated });
-    return updated;
+    console.error('[trackUsage] upsert error:', error.message);
+    throw error;
   }
-  return await getUsage(userId);
+  return { scans: updated.scans, options: updated.options };
 }
-
 // ─── Usage SQL function — run this in Supabase SQL editor ─────────────────────
 // create or replace function increment_usage(p_user_id text, p_date date, p_column text)
 // returns void as $$
@@ -652,6 +652,21 @@ app.post('/api/analyze', (req, res) => {
   request.on('error', e => res.status(500).json({ error: e.message }));
   request.write(body);
   request.end();
+});
+
+app.post('/usage/:userId/track', async (req, res) => {
+  try {
+    const user  = await getOrCreateUser(req.params.userId);
+    const { type } = req.body;
+    console.log(`[track] userId=${req.params.userId} type=${type} plan=${user.plan}`);
+
+    const updated = await trackUsage(req.params.userId, type);
+    console.log(`[track] result:`, updated);
+    res.json({ ...updated, plan: user.plan });
+  } catch (e) {
+    console.error('[usage POST]', e.message);
+    res.json({ scans: 0, options: 0, plan: 'free' });
+  }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
