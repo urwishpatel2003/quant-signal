@@ -38,7 +38,7 @@ export default function OptionsTab({ macro, initialTicker }) {
   const [priceLoaded,    setPriceLoaded]    = useState(false);
   const [expiryOpen,     setExpiryOpen]     = useState(true);
 
-  const { usage, limits, canOptions, trackOptions, refreshUsage } = useUsage();
+  const { usage, limits, plan, canOptions, trackOptions, refreshUsage } = useUsage();
 
   useEffect(() => {
     if (initialTicker) { setInputVal(initialTicker); fetchTickerPrice(initialTicker); }
@@ -215,7 +215,7 @@ export default function OptionsTab({ macro, initialTicker }) {
             </div>
             {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
           </div>
-          <UsageBadge used={usage.options} limit={limits.options} label="ANALYSES" />
+          <UsageBadge used={usage.options} limit={limits.options} label="ANALYSES" plan={plan} />
         </div>
       </div>
 

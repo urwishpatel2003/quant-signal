@@ -68,7 +68,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const searchCache = useRef({});
 
   const scan = useScan(macro);
-  const { usage, limits, canScan, canOptions, trackScan } = useUsage();
+  const { usage, limits, plan, canScan, canOptions, trackScan } = useUsage();
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
   const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
@@ -284,7 +284,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             )}
             {scan.error && <div style={{ fontSize: 11, color: '#ff4444' }}>{scan.error}</div>}
           </div>
-          <UsageBadge used={usage.scans} limit={limits.scans} label="SCANS" />
+          <UsageBadge used={usage.scans} limit={limits.scans} label="SCANS" plan={plan} />
         </div>
       </div>
 
