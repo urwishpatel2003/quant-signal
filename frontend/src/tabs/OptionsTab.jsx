@@ -6,16 +6,11 @@ import { runCombinedAnalysis, runOptionsAnalysis } from '../api/claude';
 import { calcIndicators } from '../utils/indicators';
 import { useUsage } from '../hooks/useUsage';
 import MiniChart      from '../components/MiniChart';
-import ContractCard   from '../components/ContractCard';
 import BondPanel      from '../components/BondPanel';
 import TechnicalPanel from '../components/TechnicalPanel';
-import TradeSetupCard  from '../components/TradeSetupCard';
-import RiskRewardBar   from '../components/RiskRewardBar';
-import PLSimulator     from '../components/PLSimulator';
-import TradeChecklist  from '../components/TradeChecklist';
-import EarningsWarning from '../components/EarningsWarning';
-import UsageBadge      from '../components/UsageBadge';
-import UpgradeModal    from '../components/UpgradeModal';
+import UsageBadge     from '../components/UsageBadge';
+import UpgradeModal   from '../components/UpgradeModal';
+import OptionsModal   from '../components/OptionsModal';
 
 export default function OptionsTab({ macro, initialTicker }) {
   const [inputVal,       setInputVal]       = useState(initialTicker || '');
@@ -33,10 +28,10 @@ export default function OptionsTab({ macro, initialTicker }) {
   const [news,           setNews]           = useState([]);
   const [priceSignal,    setPriceSignal]    = useState(null);
   const [optionsSignal,  setOptionsSignal]  = useState(null);
-  const [selectedSide,   setSelectedSide]   = useState(null);
   const [showUpgrade,    setShowUpgrade]    = useState(false);
   const [priceLoaded,    setPriceLoaded]    = useState(false);
   const [expiryOpen,     setExpiryOpen]     = useState(true);
+  const [showModal,      setShowModal]      = useState(false);
 
   const { usage, limits, plan, canOptions, trackOptions, refreshUsage } = useUsage();
 
@@ -44,15 +39,20 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (initialTicker) { setInputVal(initialTicker); fetchTickerPrice(initialTicker); }
   }, [initialTicker]);
 
-  // Auto-collapse expiry when analysis runs
   useEffect(() => {
     if (loading) setExpiryOpen(false);
   }, [loading]);
 
-  // Auto-expand expiry when reset
   useEffect(() => {
     if (!optionsSignal && !loading) setExpiryOpen(true);
   }, [optionsSignal, loading]);
+
+  // Auto-open modal when analysis completes
+  useEffect(() => {
+    if (optionsSignal && !loading && !reanalyzing) {
+      setShowModal(true);
+    }
+  }, [optionsSignal, loading, reanalyzing]);
 
   const fetchTickerPrice = async t => {
     const sym = t.toUpperCase();
@@ -60,6 +60,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     setQuote(null); setOhlcv(null); setTa(null);
     setExpirations([]); setSelectedExpiry('');
     setOptionsSignal(null); setPriceSignal(null);
+    setShowModal(false);
     setExpiryOpen(true);
     try {
       const [q, p, exps] = await Promise.all([
@@ -87,10 +88,9 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (!canOptions()) { setShowUpgrade(true); return; }
     trackOptions();
     setLoading(true); setError(''); setOptionsSignal(null); setPriceSignal(null);
-    setSelectedSide(null);
+    setShowModal(false);
     try {
       const livePrice = quote?.last || ohlcv?.current;
-
       setStage('chain');
       const [c, f, n] = await Promise.all([
         fetchTradierChain(ticker, selectedExpiry, livePrice),
@@ -98,7 +98,6 @@ export default function OptionsTab({ macro, initialTicker }) {
         fetchStockNews(ticker),
       ]);
       setFundamentals(f); setNews(n);
-
       setStage('options-signal');
       const { priceSignal: ps, optionsSignal: os } = await runCombinedAnalysis(
         ticker, livePrice, ohlcv, f, c, n,
@@ -116,7 +115,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (!ticker || reanalyzing) return;
     setSelectedExpiry(expiry);
     if (!optionsSignal) return;
-    setReanalyzing(true); setOptionsSignal(null);
+    setReanalyzing(true); setOptionsSignal(null); setShowModal(false);
     try {
       const livePrice = quote?.last || ohlcv?.current;
       const c  = await fetchTradierChain(ticker, expiry, livePrice);
@@ -129,13 +128,10 @@ export default function OptionsTab({ macro, initialTicker }) {
     finally { setReanalyzing(false); }
   };
 
-  const livePrice    = quote?.last || ohlcv?.current;
-  const changePct    = quote?.change_percentage ||
+  const livePrice  = quote?.last || ohlcv?.current;
+  const changePct  = quote?.change_percentage ||
     (ohlcv?.current && ohlcv?.prev ? ((ohlcv.current - ohlcv.prev) / ohlcv.prev * 100) : null);
-  const recColor     = optionsSignal?.recommendation === 'CALL' ? '#00ff88' : optionsSignal?.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
-  const ivColor      = optionsSignal?.ivRank === 'LOW' ? '#00ff88' : optionsSignal?.ivRank === 'HIGH' ? '#ff4444' : '#ffaa00';
-  const activeSide   = selectedSide || optionsSignal?.recommendation || 'CALL';
-  const activeSignal = { ...optionsSignal, recommendation: activeSide };
+  const recColor   = optionsSignal?.recommendation === 'CALL' ? '#00ff88' : optionsSignal?.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
 
   const STAGES = ['chain', 'options-signal'];
   const stageLabels = {
@@ -146,6 +142,22 @@ export default function OptionsTab({ macro, initialTicker }) {
   return (
     <div style={{ position: 'relative' }}>
       {showUpgrade && <UpgradeModal type="options" onClose={() => setShowUpgrade(false)} />}
+
+      {/* Options Results Modal */}
+      {showModal && optionsSignal && (
+        <OptionsModal
+          ticker={ticker}
+          livePrice={livePrice}
+          changePct={changePct}
+          ohlcv={ohlcv}
+          priceSignal={priceSignal}
+          optionsSignal={optionsSignal}
+          ta={ta}
+          macro={macro}
+          selectedExpiry={selectedExpiry}
+          onClose={() => setShowModal(false)}
+        />
+      )}
 
       {/* ── Full screen loading overlay ── */}
       {(loading || reanalyzing) && (
@@ -174,12 +186,11 @@ export default function OptionsTab({ macro, initialTicker }) {
               const active = i === currentIdx;
               return (
                 <div key={s} style={{
-                  width:        active ? 12 : 8,
-                  height:       active ? 12 : 8,
+                  width: active ? 12 : 8, height: active ? 12 : 8,
                   borderRadius: '50%',
-                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
-                  transition:   'all 0.3s',
-                  boxShadow:    active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
+                  background: done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition: 'all 0.3s',
+                  boxShadow: active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
                 }} />
               );
             })}
@@ -219,7 +230,7 @@ export default function OptionsTab({ macro, initialTicker }) {
         </div>
       </div>
 
-      {/* ── Clean Price Bar — ticker, price, change, chart only ── */}
+      {/* ── Price Bar ── */}
       {priceLoaded && (quote || ohlcv) && (
         <div className="fade-in" style={{
           display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
@@ -244,23 +255,27 @@ export default function OptionsTab({ macro, initialTicker }) {
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
             <MiniChart data={ohlcv} />
             {optionsSignal && !reanalyzing && (
-              <div style={{
-                textAlign: 'center',
-                background: recColor + '11',
-                border: `1px solid ${recColor}44`,
-                padding: '8px 16px', borderRadius: 2, minWidth: 90,
-              }}>
+              <div
+                style={{
+                  textAlign: 'center', cursor: 'pointer',
+                  background: recColor + '11',
+                  border: `1px solid ${recColor}44`,
+                  padding: '8px 16px', borderRadius: 2, minWidth: 90,
+                }}
+                onClick={() => setShowModal(true)}
+              >
                 <div style={{ fontSize: 13, fontWeight: 700, color: recColor, lineHeight: 1 }}>
                   {optionsSignal.recommendation === 'NEUTRAL' ? 'NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
                 </div>
                 <div style={{ fontSize: 10, color: '#99aacc', marginTop: 2 }}>{optionsSignal.confidence}%</div>
+                <div style={{ fontSize: 9, color: recColor + '88', marginTop: 2 }}>TAP TO EXPAND</div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── Expiry selector — collapsible ── */}
+      {/* ── Expiry selector ── */}
       {priceLoaded && expirations.length > 0 && (
         <div className="card fade-in" style={{
           marginBottom: 16,
@@ -286,6 +301,15 @@ export default function OptionsTab({ macro, initialTicker }) {
                   border: '1px solid #ffaa0033', padding: '2px 8px', borderRadius: 2 }}>
                   SELECT BEFORE SCANNING
                 </span>
+              )}
+              {optionsSignal && (
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="btn-sm"
+                  style={{ color: recColor, borderColor: recColor + '44', fontSize: 10 }}
+                >
+                  ◉ VIEW RESULTS
+                </button>
               )}
               <button onClick={() => setExpiryOpen(o => !o)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
@@ -354,146 +378,26 @@ export default function OptionsTab({ macro, initialTicker }) {
         </div>
       )}
 
-      {/* ── Results ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {optionsSignal && !reanalyzing && (
-          <>
-            <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
-
-            {/* AI Recommendation */}
-            <div className="card fade-in" style={{ borderColor: recColor + '44' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.2em', marginBottom: 4 }}>
-                    AI OPTIONS RECOMMENDATION · {selectedExpiry}
-                  </div>
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px, 5vw, 48px)', color: recColor, lineHeight: 1 }}>
-                    {optionsSignal.recommendation === 'NEUTRAL' ? 'STAY NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#8899aa', marginTop: 8, lineHeight: 1.6 }}>
-                    {optionsSignal.reasoning}
-                  </div>
-                  {optionsSignal.macroSetup      && <div style={{ fontSize: 11, color: '#ffaa0088', marginTop: 6, fontStyle: 'italic', borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>📊 {optionsSignal.macroSetup}</div>}
-                  {optionsSignal.calendarWarning && <div style={{ fontSize: 11, color: '#ff884477', marginTop: 6, borderLeft: '2px solid #ff884433', paddingLeft: 8 }}>📅 {optionsSignal.calendarWarning}</div>}
-                </div>
-                <div style={{ textAlign: 'right', minWidth: 120 }}>
-                  <div style={{ fontSize: 11, color: '#99aacc' }}>CONFIDENCE</div>
-                  <div style={{ fontSize: 28, fontWeight: 600 }}>{optionsSignal.confidence}%</div>
-                  <div className="bar-bg"><div className="bar-fill" style={{ width: `${optionsSignal.confidence}%`, background: recColor }} /></div>
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 9, color: '#8899bb' }}>IV ENVIRONMENT</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: ivColor }}>{optionsSignal.ivRank} IV</div>
-                    <div style={{ fontSize: 11, color: '#aabbcc' }}>{optionsSignal.ivComment}</div>
-                  </div>
-                </div>
-              </div>
-              {optionsSignal.positionSizing && (
-                <div style={{ background: '#070710', padding: 10, fontSize: 12, color: '#8899aa', borderLeft: '2px solid #ffaa0044' }}>
-                  💰 {optionsSignal.positionSizing}
-                </div>
-              )}
-            </div>
-
-            {/* Contract cards */}
-            <div className="options-contracts">
-              <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
-              <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
-            </div>
-
-            <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={activeSignal} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
-            <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
-            <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
-            <RiskRewardBar optionsSignal={activeSignal} />
-
-            {/* Technical + Underlying */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-              {ta && <TechnicalPanel ta={ta} />}
-              {priceSignal && (
-                <div className="card" style={{ borderColor: SC[priceSignal.signal] + '33' }}>
-                  <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                    {[
-                      ['SIGNAL',   priceSignal.signal,                        SC[priceSignal.signal]],
-                      ['CONF',     `${priceSignal.confidence}%`,              '#fff'],
-                      ['TARGET',   `$${priceSignal.priceTarget?.toFixed(2)}`, '#00ff88'],
-                      ['STOP',     `$${priceSignal.stopLoss?.toFixed(2)}`,    '#ff4444'],
-                      ['MACRO',    priceSignal.macroImpact,                   MC[priceSignal.macroImpact]],
-                      ['GEO RISK', priceSignal.geopoliticalRisk,              RC[priceSignal.geopoliticalRisk]],
-                    ].map(([l, v, c]) => (
-                      <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 8, color: '#8899bb', marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {ta && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
-                      {[
-                        ['RSI 14', ta.rsi14,            ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
-                        ['TREND',  ta.trendSignal,       ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
-                        ['VOLUME', `${ta.volumeRatio}x`, ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0'],
-                        ['GLOBAL', priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
-                      ].map(([l, v, c]) => (
-                        <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 8, color: '#8899bb', marginBottom: 2 }}>{l}</div>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 10, color: '#aabbcc', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
-                    {priceSignal.thesis}
-                  </div>
-                  {priceSignal.bondSignal && (
-                    <div style={{ fontSize: 10, color: '#ffaa0077', marginTop: 6, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>
-                      📊 {priceSignal.bondSignal}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <BondPanel bonds={macro?.bonds} />
-
-            {/* Catalysts / Risks / Macro */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-              <div className="card">
-                <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8 }}>⚡ CATALYSTS</div>
-                {optionsSignal.catalysts?.map((c, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a1a26', display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#ffaa00' }}>→</span>{c}
-                  </div>
-                ))}
-              </div>
-              <div className="card">
-                <div style={{ fontSize: 10, color: '#ff444466', marginBottom: 8 }}>⚠ KEY RISKS</div>
-                {optionsSignal.keyRisks?.map((r, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#ff4444' }}>!</span>{r}
-                  </div>
-                ))}
-              </div>
-              <div className="card">
-                <div style={{ fontSize: 10, color: '#ff884466', marginBottom: 8 }}>🌍 MACRO RISKS</div>
-                {optionsSignal.macroRisks?.map((r, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: '1px solid #1a1008', display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#ff8844' }}>⊕</span>{r}
-                  </div>
-                ))}
-                {optionsSignal.globalMarketRisk && (
-                  <div style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#ff8844' }}>🌍</span>{optionsSignal.globalMarketRisk}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ fontSize: 11, color: '#333', textAlign: 'center' }}>
-              ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.
-            </div>
-          </>
-        )}
-      </div>
+      {/* ── Re-analyze / New Analysis buttons when results exist ── */}
+      {optionsSignal && !loading && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button className="btn" style={{ flex: 1, fontSize: 13, padding: '12px' }}
+            onClick={() => setShowModal(true)}>
+            ◉ VIEW RESULTS — {ticker} · {selectedExpiry}
+          </button>
+          <button className="btn-sm"
+            style={{ color: '#b0c0dd', borderColor: '#3a3a5e' }}
+            onClick={() => {
+              setOptionsSignal(null); setPriceSignal(null);
+              setShowModal(false); setInputVal('');
+              setTicker(''); setPriceLoaded(false);
+              setExpirations([]); setSelectedExpiry('');
+              setExpiryOpen(true);
+            }}>
+            ← NEW
+          </button>
+        </div>
+      )}
     </div>
   );
 }

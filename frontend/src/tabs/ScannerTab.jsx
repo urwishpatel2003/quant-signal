@@ -8,6 +8,7 @@ import BondPanel      from '../components/BondPanel';
 import TechnicalPanel from '../components/TechnicalPanel';
 import UsageBadge     from '../components/UsageBadge';
 import UpgradeModal   from '../components/UpgradeModal';
+import StockModal     from '../components/StockModal';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
 const BASE = import.meta.env.VITE_API_BASE;
@@ -62,6 +63,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const [crypto,       setCrypto]       = useState({ gainers: [], losers: [], volume: [] });
   const [moversLoad,   setMoversLoad]   = useState(true);
   const [cryptoLoad,   setCryptoLoad]   = useState(true);
+  const [showModal,    setShowModal]    = useState(false);
 
   const dropdownRef = useRef(null);
   const skipSearch  = useRef(false);
@@ -94,9 +96,17 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (scan.loading) setMoversOpen(false);
   }, [scan.loading]);
 
+  // Auto-open modal when scan completes with results
   useEffect(() => {
-    if (!scan.analysis && !scan.loading) setMoversOpen(true);
+    if (scan.analysis && !scan.loading) {
+      setShowModal(true);
+    }
   }, [scan.analysis, scan.loading]);
+
+  // Re-open movers when modal is closed and no active scan
+  useEffect(() => {
+    if (!showModal && !scan.analysis) setMoversOpen(true);
+  }, [showModal, scan.analysis]);
 
   useEffect(() => {
     const handler = () => setIsWide(window.innerWidth > 768);
@@ -142,6 +152,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     setShowDropdown(false);
     setSuggestions([]);
     setInputVal(ticker);
+    setShowModal(false);
     if (tf) { scan.setTimeframe(tf); scan.runScan(ticker, tf); }
     else    { scan.runScan(ticker); }
   };
@@ -170,6 +181,18 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (e.key === 'Escape') setShowDropdown(false);
   };
 
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setMoversOpen(true);
+  };
+
+  const handleNewScan = () => {
+    setShowModal(false);
+    scan.reset();
+    setInputVal('');
+    setMoversOpen(true);
+  };
+
   const activeData = marketType === 'crypto' ? crypto  : movers;
   const isLoading  = marketType === 'crypto' ? cryptoLoad : moversLoad;
   const list       = activeData[moversTab] || [];
@@ -177,6 +200,20 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   return (
     <div style={{ position: 'relative' }}>
       {showUpgrade && <UpgradeModal type="scan" onClose={() => setShowUpgrade(false)} />}
+
+      {/* Stock Results Modal */}
+      {showModal && scan.analysis && (
+        <StockModal
+          scan={scan}
+          macro={macro}
+          onClose={handleCloseModal}
+          onOpenOptions={(ticker) => {
+            handleCloseModal();
+            if (!canOptions()) { setShowUpgrade(true); return; }
+            onOpenOptions(ticker);
+          }}
+        />
+      )}
 
       {/* ── Loading overlay ── */}
       {scan.loading && (
@@ -269,6 +306,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {scan.ticker && !scan.loading && scan.analysis && (
+              <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
+                onClick={() => setShowModal(true)}>
+                ◉ VIEW RESULTS
+              </button>
+            )}
             {scan.ticker && !scan.loading && (
               <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
                 onClick={() => {
@@ -278,7 +321,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
             )}
             {scan.analysis && !scan.loading && (
               <button className="btn-sm" style={{ color: '#b0c0dd', borderColor: '#3a3a5e' }}
-                onClick={() => { scan.reset(); setInputVal(''); }}>
+                onClick={handleNewScan}>
                 ← NEW SCAN
               </button>
             )}
@@ -405,19 +448,12 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    {/* Rank */}
                     <div style={{ fontSize: 11, color: '#7788aa', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
-
-                    {/* Ticker */}
                     <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
                       color: isCrypto ? '#aa88ff' : '#ffaa00', width: 52, flexShrink: 0 }}>{m.ticker}</div>
-
-                    {/* Price */}
                     <div style={{ fontSize: 12, color: '#e8e8f0', width: 62, flexShrink: 0, fontWeight: 600 }}>
                       {isCrypto ? fmtPrice(m.price) : `$${m.price?.toFixed(2)}`}
                     </div>
-
-                    {/* Volume */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#4488ff',
                         display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -434,13 +470,10 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                         <div style={{ fontSize: 10, color: '#7788aa' }}>avg {fmtVol(m.avgVolume)}</div>
                       )}
                     </div>
-
-                    {/* Change % */}
                     <div style={{ fontSize: 12, fontWeight: 700, color: pctColor,
                       flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
                       {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                     </div>
-
                     <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>
                       {isActive ? '●' : '→'}
                     </div>
@@ -472,41 +505,27 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    {/* Rank */}
                     <div style={{ fontSize: 11, color: '#7788aa', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
-
-                    {/* Ticker */}
                     <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
                       color: isCrypto ? '#aa88ff' : '#ffaa00', width: 52, flexShrink: 0 }}>{m.ticker}</div>
-
-                    {/* Price */}
                     <div style={{ fontSize: 12, color: '#e8e8f0', width: 70, flexShrink: 0, fontWeight: 600 }}>
                       {isCrypto ? fmtPrice(m.price) : `$${m.price?.toFixed(2)}`}
                     </div>
-
-                    {/* Name for crypto */}
                     {isCrypto && (
                       <div style={{ fontSize: 11, color: '#b0c0dd', flex: 1, overflow: 'hidden',
                         textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{m.name}</div>
                     )}
-
-                    {/* Spacer for stocks */}
                     {!isCrypto && <div style={{ flex: 1 }} />}
-
-                    {/* Change $ — stocks only */}
                     {!isCrypto && (
                       <div style={{ fontSize: 11, color: color + '99', flexShrink: 0,
                         textAlign: 'right', minWidth: 52, fontWeight: 600 }}>
                         {isGainer ? '+' : ''}${m.change?.toFixed(2)}
                       </div>
                     )}
-
-                    {/* Change % */}
                     <div style={{ fontSize: 13, fontWeight: 700, color,
                       flexShrink: 0, textAlign: 'right', minWidth: 66 }}>
                       {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                     </div>
-
                     <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>
                       {isActive ? '●' : '→'}
                     </div>
@@ -518,175 +537,37 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         )}
       </div>
 
-      {/* ── Clean Price Bar ── */}
-      {scan.ohlcv && (
+      {/* ── Last scan summary bar (when modal is closed) ── */}
+      {scan.analysis && !scan.loading && !showModal && (
         <div className="fade-in" style={{
-          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-          background: '#0f0f1a', border: '1px solid #2a2a40',
-          padding: '14px 16px', marginBottom: 16,
-        }}>
-          <div>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
-              {scan.ticker}
-            </div>
-            <div style={{ fontSize: 11, color: '#b0c0dd', letterSpacing: '0.1em', marginTop: 2, fontWeight: 600 }}>
-              {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
-            </div>
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          background: '#0f0f1a', border: `1px solid ${SC[scan.analysis.signal]}33`,
+          padding: '12px 16px', marginBottom: 16, cursor: 'pointer',
+          borderRadius: 4,
+        }}
+          onClick={() => setShowModal(true)}
+        >
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#fff' }}>
+            {scan.ticker}
           </div>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
-              {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
-            </div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
+            {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <MiniChart data={scan.ohlcv} />
-            {scan.analysis && (
-              <div style={{
-                textAlign: 'center',
-                background: SC[scan.analysis.signal] + '11',
-                border: `1px solid ${SC[scan.analysis.signal]}44`,
-                padding: '8px 16px', borderRadius: 2, minWidth: 80,
-              }}>
-                <div style={{ fontSize: 20, fontWeight: 700, color: SC[scan.analysis.signal], lineHeight: 1 }}>
-                  {scan.analysis.signal}
-                </div>
-                <div style={{ fontSize: 11, color: '#b0c0dd', marginTop: 2, fontWeight: 600 }}>
-                  {scan.analysis.confidence}%
-                </div>
-              </div>
-            )}
+          <div style={{
+            background: SC[scan.analysis.signal] + '11',
+            border: `1px solid ${SC[scan.analysis.signal]}44`,
+            padding: '6px 14px', borderRadius: 2,
+          }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: SC[scan.analysis.signal] }}>
+              {scan.analysis.signal}
+            </span>
+            <span style={{ fontSize: 11, color: '#b0c0dd', marginLeft: 8 }}>
+              {scan.analysis.confidence}%
+            </span>
           </div>
-        </div>
-      )}
-
-      {/* ── Signal Overview Card ── */}
-      {scan.analysis && (
-        <div className="card fade-in" style={{ marginBottom: 16, borderColor: SC[scan.analysis.signal] + '33' }}>
-          <div style={{ fontSize: 11, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 12 }}>
-            SIGNAL OVERVIEW
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8, marginBottom: 12 }}>
-            {[
-              ['TARGET',   `$${scan.analysis.priceTarget?.toFixed(2)}`,  '#00ff88'],
-              ['STOP',     `$${scan.analysis.stopLoss?.toFixed(2)}`,      '#ff4444'],
-              ['RISK',     scan.analysis.riskLevel,                        scan.analysis.riskLevel === 'LOW' ? '#00ff88' : scan.analysis.riskLevel === 'HIGH' ? '#ff4444' : '#ffaa00'],
-              ['MACRO',    scan.analysis.macroImpact,                      MC[scan.analysis.macroImpact]],
-              ['GLOBAL',   scan.analysis.globalMarketTrend,                GC[scan.analysis.globalMarketTrend]],
-              ['GEO RISK', scan.analysis.geopoliticalRisk,                 scan.analysis.geopoliticalRisk === 'LOW' ? '#00ff88' : scan.analysis.geopoliticalRisk === 'HIGH' ? '#ff4444' : '#ffaa00'],
-            ].map(([l, v, c]) => (
-              <div key={l} style={{ background: '#070710', padding: '8px 10px', textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#b0c0dd', marginBottom: 4, letterSpacing: '0.1em', fontWeight: 600 }}>{l}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{v}</div>
-              </div>
-            ))}
-          </div>
-          {scan.analysis.thesis && (
-            <div style={{ fontSize: 12, color: '#d0d8f0', lineHeight: 1.7,
-              borderLeft: `2px solid ${SC[scan.analysis.signal]}44`, paddingLeft: 12 }}>
-              {scan.analysis.thesis}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Results: Bull/Bear/News left, Details right ── */}
-      {scan.analysis && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isWide ? 'minmax(0, 1.6fr) minmax(0, 1fr)' : '1fr',
-          gap: 16, alignItems: 'start',
-        }}>
-          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div className="card">
-                <div style={{ fontSize: 11, color: '#00ff88', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>BULL FACTORS</div>
-                {scan.analysis.bullFactors?.map((f, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#d0d8f0', padding: '5px 0', borderBottom: '1px solid #0f1a14', display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#00ff88', flexShrink: 0 }}>▲</span>{f}
-                  </div>
-                ))}
-              </div>
-              <div className="card">
-                <div style={{ fontSize: 11, color: '#ff4444', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>BEAR FACTORS</div>
-                {scan.analysis.bearFactors?.map((f, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#d0d8f0', padding: '5px 0', borderBottom: '1px solid #1a0f0f', display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#ff4444', flexShrink: 0 }}>▼</span>{f}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {scan.news?.length > 0 && (
-              <div className="card">
-                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, marginBottom: 12, letterSpacing: '0.1em' }}>RECENT NEWS</div>
-                {scan.news.slice(0, 5).map((n, i) => (
-                  <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid #1a1a26', fontSize: 12 }}>
-                    <a href={n.url} target="_blank" rel="noopener noreferrer"
-                      style={{ color: '#c8d8f0', lineHeight: 1.4, marginBottom: 2, display: 'block', textDecoration: 'none' }}
-                      onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = '#c8d8f0'; }}>
-                      {n.title}
-                    </a>
-                    <div style={{ color: '#7788aa', fontSize: 11 }}>
-                      {n.publisher} · {new Date(n.time * 1000).toLocaleDateString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {scan.fundamentals && (
-              <div className="card fade-in">
-                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.2em', marginBottom: 12 }}>FUNDAMENTALS</div>
-                {[
-                  ['P/E',          scan.fundamentals.pe?.toFixed(1)],
-                  ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
-                  ['Beta',         scan.fundamentals.beta?.toFixed(2)],
-                  ['52W High',     scan.fundamentals.fiftyTwoWeekHigh ? `$${scan.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
-                  ['52W Low',      scan.fundamentals.fiftyTwoWeekLow  ? `$${scan.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
-                  ['ROE',          scan.fundamentals.roe ? `${(scan.fundamentals.roe * 100).toFixed(1)}%` : null],
-                  ['Gross Margin', scan.fundamentals.grossMargins ? `${(scan.fundamentals.grossMargins * 100).toFixed(1)}%` : null],
-                  ['Rev Growth',   scan.fundamentals.revenueGrowth ? `${(scan.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
-                  ['D/E',          scan.fundamentals.debtToEquity?.toFixed(2)],
-                  ['Target',       scan.fundamentals.targetMeanPrice ? `$${scan.fundamentals.targetMeanPrice.toFixed(2)}` : null],
-                ].filter(([, v]) => v != null).map(([k, v]) => (
-                  <div className="kv" key={k}>
-                    <span className="kv-key">{k}</span>
-                    <span style={{ color: '#e8e8f0', fontWeight: 600, fontSize: 12 }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {scan.ta && <TechnicalPanel ta={scan.ta} />}
-            <BondPanel bonds={macro?.bonds} />
-            {scan.options && (
-              <div className="card fade-in">
-                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.2em', marginBottom: 12 }}>
-                  OPTIONS FLOW <span style={{ color: '#00ff8866', fontSize: 10 }}>⚡ LIVE</span>
-                </div>
-                <div className="kv">
-                  <span className="kv-key">Put/Call</span>
-                  <span style={{ color: scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88', fontWeight: 700, fontSize: 12 }}>
-                    {scan.options.putCallRatio?.toFixed(2)}
-                  </span>
-                </div>
-                <div className="kv">
-                  <span className="kv-key">Call IV</span>
-                  <span style={{ color: '#ffaa00', fontWeight: 700, fontSize: 12 }}>{scan.options.avgCallIV}%</span>
-                </div>
-                <div className="kv">
-                  <span className="kv-key">Put IV</span>
-                  <span style={{ color: '#ffaa00', fontWeight: 700, fontSize: 12 }}>{scan.options.avgPutIV}%</span>
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044', width: '100%' }}
-                    onClick={() => onOpenOptions(scan.ticker)}>⚡ OPTIONS PLAYS →</button>
-                </div>
-              </div>
-            )}
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: '#ffaa00', letterSpacing: '0.1em' }}>
+            TAP TO EXPAND →
           </div>
         </div>
       )}
