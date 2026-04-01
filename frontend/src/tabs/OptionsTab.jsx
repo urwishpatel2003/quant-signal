@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
-import { SC, RC, MC, GC } from '../utils/constants';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain, isMarketClosed } from '../api/tradier';
 import { runCombinedAnalysis, runOptionsAnalysis } from '../api/claude';
 import { calcIndicators } from '../utils/indicators';
 import { useUsage } from '../hooks/useUsage';
 import MiniChart      from '../components/MiniChart';
-import BondPanel      from '../components/BondPanel';
-import TechnicalPanel from '../components/TechnicalPanel';
 import UsageBadge     from '../components/UsageBadge';
 import UpgradeModal   from '../components/UpgradeModal';
-import OptionsModal   from '../components/OptionsModal';
+import EarningsWarning from '../components/EarningsWarning';
+import { AIRecModal, ContractModal, TechnicalModal } from '../components/OptionsModals';
 
 export default function OptionsTab({ macro, initialTicker }) {
   const [inputVal,       setInputVal]       = useState(initialTicker || '');
@@ -31,7 +29,7 @@ export default function OptionsTab({ macro, initialTicker }) {
   const [showUpgrade,    setShowUpgrade]    = useState(false);
   const [priceLoaded,    setPriceLoaded]    = useState(false);
   const [expiryOpen,     setExpiryOpen]     = useState(true);
-  const [showModal,      setShowModal]      = useState(false);
+  const [activeModal,    setActiveModal]    = useState(null); // 'ai' | 'contract' | 'technical'
 
   const { usage, limits, plan, canOptions, trackOptions, refreshUsage } = useUsage();
 
@@ -47,10 +45,10 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (!optionsSignal && !loading) setExpiryOpen(true);
   }, [optionsSignal, loading]);
 
-  // Auto-open modal when analysis completes
+  // Auto-open AI rec modal when analysis completes
   useEffect(() => {
     if (optionsSignal && !loading && !reanalyzing) {
-      setShowModal(true);
+      setActiveModal('ai');
     }
   }, [optionsSignal, loading, reanalyzing]);
 
@@ -60,7 +58,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     setQuote(null); setOhlcv(null); setTa(null);
     setExpirations([]); setSelectedExpiry('');
     setOptionsSignal(null); setPriceSignal(null);
-    setShowModal(false);
+    setActiveModal(null);
     setExpiryOpen(true);
     try {
       const [q, p, exps] = await Promise.all([
@@ -88,7 +86,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (!canOptions()) { setShowUpgrade(true); return; }
     trackOptions();
     setLoading(true); setError(''); setOptionsSignal(null); setPriceSignal(null);
-    setShowModal(false);
+    setActiveModal(null);
     try {
       const livePrice = quote?.last || ohlcv?.current;
       setStage('chain');
@@ -115,7 +113,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (!ticker || reanalyzing) return;
     setSelectedExpiry(expiry);
     if (!optionsSignal) return;
-    setReanalyzing(true); setOptionsSignal(null); setShowModal(false);
+    setReanalyzing(true); setOptionsSignal(null); setActiveModal(null);
     try {
       const livePrice = quote?.last || ohlcv?.current;
       const c  = await fetchTradierChain(ticker, expiry, livePrice);
@@ -128,10 +126,11 @@ export default function OptionsTab({ macro, initialTicker }) {
     finally { setReanalyzing(false); }
   };
 
-  const livePrice  = quote?.last || ohlcv?.current;
-  const changePct  = quote?.change_percentage ||
+  const livePrice = quote?.last || ohlcv?.current;
+  const changePct = quote?.change_percentage ||
     (ohlcv?.current && ohlcv?.prev ? ((ohlcv.current - ohlcv.prev) / ohlcv.prev * 100) : null);
-  const recColor   = optionsSignal?.recommendation === 'CALL' ? '#00ff88' : optionsSignal?.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
+  const recColor  = optionsSignal?.recommendation === 'CALL' ? '#00ff88'
+    : optionsSignal?.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
 
   const STAGES = ['chain', 'options-signal'];
   const stageLabels = {
@@ -143,23 +142,38 @@ export default function OptionsTab({ macro, initialTicker }) {
     <div style={{ position: 'relative' }}>
       {showUpgrade && <UpgradeModal type="options" onClose={() => setShowUpgrade(false)} />}
 
-      {/* Options Results Modal */}
-      {showModal && optionsSignal && (
-        <OptionsModal
+      {/* ── Modals ── */}
+      {activeModal === 'ai' && optionsSignal && (
+        <AIRecModal
+          ticker={ticker}
+          optionsSignal={optionsSignal}
+          selectedExpiry={selectedExpiry}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      {activeModal === 'contract' && optionsSignal && (
+        <ContractModal
           ticker={ticker}
           livePrice={livePrice}
-          changePct={changePct}
-          ohlcv={ohlcv}
-          priceSignal={priceSignal}
           optionsSignal={optionsSignal}
+          priceSignal={priceSignal}
           ta={ta}
           macro={macro}
           selectedExpiry={selectedExpiry}
-          onClose={() => setShowModal(false)}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      {activeModal === 'technical' && optionsSignal && (
+        <TechnicalModal
+          ticker={ticker}
+          optionsSignal={optionsSignal}
+          priceSignal={priceSignal}
+          ta={ta}
+          onClose={() => setActiveModal(null)}
         />
       )}
 
-      {/* ── Full screen loading overlay ── */}
+      {/* ── Loading overlay ── */}
       {(loading || reanalyzing) && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -252,25 +266,8 @@ export default function OptionsTab({ macro, initialTicker }) {
               {changePct !== null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : '—'}
             </div>
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ marginLeft: 'auto' }}>
             <MiniChart data={ohlcv} />
-            {optionsSignal && !reanalyzing && (
-              <div
-                style={{
-                  textAlign: 'center', cursor: 'pointer',
-                  background: recColor + '11',
-                  border: `1px solid ${recColor}44`,
-                  padding: '8px 16px', borderRadius: 2, minWidth: 90,
-                }}
-                onClick={() => setShowModal(true)}
-              >
-                <div style={{ fontSize: 13, fontWeight: 700, color: recColor, lineHeight: 1 }}>
-                  {optionsSignal.recommendation === 'NEUTRAL' ? 'NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
-                </div>
-                <div style={{ fontSize: 10, color: '#99aacc', marginTop: 2 }}>{optionsSignal.confidence}%</div>
-                <div style={{ fontSize: 9, color: recColor + '88', marginTop: 2 }}>TAP TO EXPAND</div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -302,15 +299,6 @@ export default function OptionsTab({ macro, initialTicker }) {
                   SELECT BEFORE SCANNING
                 </span>
               )}
-              {optionsSignal && (
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="btn-sm"
-                  style={{ color: recColor, borderColor: recColor + '44', fontSize: 10 }}
-                >
-                  ◉ VIEW RESULTS
-                </button>
-              )}
               <button onClick={() => setExpiryOpen(o => !o)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
                   color: '#8899bb', fontSize: 12, padding: '2px 6px', fontFamily: 'inherit' }}>
@@ -332,16 +320,9 @@ export default function OptionsTab({ macro, initialTicker }) {
                       background:    isSelected ? '#ffaa0011' : '#0a0a14',
                       border:        `1px solid ${isSelected ? '#ffaa00' : '#2a2a3e'}`,
                       color:         isSelected ? '#ffaa00' : '#99aacc',
-                      cursor:        'pointer',
-                      padding:       '7px 10px',
-                      borderRadius:  2,
-                      display:       'flex',
-                      flexDirection: 'column',
-                      alignItems:    'center',
-                      gap:           2,
-                      transition:    'all 0.15s',
-                      fontFamily:    'inherit',
-                      minWidth:      70,
+                      cursor:        'pointer', padding: '7px 10px', borderRadius: 2,
+                      display:       'flex', flexDirection: 'column', alignItems: 'center',
+                      gap: 2, transition: 'all 0.15s', fontFamily: 'inherit', minWidth: 70,
                     }}>
                     <span style={{ fontSize: 11, fontWeight: isSelected ? 600 : 400 }}>{exp}</span>
                     <span style={{ fontSize: 9, color: isSelected ? '#ffaa0088' : '#7788aa' }}>{daysOut}d</span>
@@ -378,23 +359,160 @@ export default function OptionsTab({ macro, initialTicker }) {
         </div>
       )}
 
-      {/* ── Re-analyze / New Analysis buttons when results exist ── */}
+      {/* ── 3 Result Cards ── */}
       {optionsSignal && !loading && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button className="btn" style={{ flex: 1, fontSize: 13, padding: '12px' }}
-            onClick={() => setShowModal(true)}>
-            ◉ VIEW RESULTS — {ticker} · {selectedExpiry}
-          </button>
-          <button className="btn-sm"
-            style={{ color: '#b0c0dd', borderColor: '#3a3a5e' }}
+        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
+
+          {/* Card 1: AI Recommendation */}
+          <div
+            className="card"
+            onClick={() => setActiveModal('ai')}
+            style={{
+              cursor: 'pointer', borderColor: recColor + '44',
+              padding: '14px 16px', transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#141420'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#0f0f1a'; }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#8899bb', letterSpacing: '0.2em' }}>AI RECOMMENDATION</div>
+              <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.1em' }}>VIEW →</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: recColor, lineHeight: 1 }}>
+                {optionsSignal.recommendation === 'NEUTRAL' ? 'NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: recColor }}>{optionsSignal.confidence}%</div>
+                <div style={{ background: '#1a1a2e', borderRadius: 2, height: 4, width: 80, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${optionsSignal.confidence}%`, background: recColor, borderRadius: 2 }} />
+                </div>
+              </div>
+              <div style={{
+                fontSize: 10,
+                color: optionsSignal.ivRank === 'LOW' ? '#00ff88' : optionsSignal.ivRank === 'HIGH' ? '#ff4444' : '#ffaa00',
+                background: '#0a0a14', padding: '3px 8px', borderRadius: 2,
+              }}>
+                {optionsSignal.ivRank} IV
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: '#7788aa', marginTop: 8, lineHeight: 1.5,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {optionsSignal.reasoning}
+            </div>
+          </div>
+
+          {/* Card 2: Contract Plays */}
+          <div
+            className="card"
+            onClick={() => setActiveModal('contract')}
+            style={{
+              cursor: 'pointer', borderColor: '#2a2a40',
+              padding: '14px 16px', transition: 'border-color 0.15s, background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#141420'; e.currentTarget.style.borderColor = '#ffaa0033'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#0f0f1a'; e.currentTarget.style.borderColor = '#2a2a40'; }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em' }}>CONTRACT PLAYS</div>
+              <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.1em' }}>VIEW →</div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {optionsSignal.bestCall && (
+                <div style={{ flex: 1, minWidth: 120, background: '#00ff8808', border: '1px solid #00ff8822', borderRadius: 4, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 9, color: '#00ff88', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>CALL</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8f0' }}>
+                    ${optionsSignal.bestCall.strike} {optionsSignal.bestCall.expiry}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#00ff8888' }}>~${optionsSignal.bestCall.premium}</div>
+                </div>
+              )}
+              {optionsSignal.bestPut && (
+                <div style={{ flex: 1, minWidth: 120, background: '#ff444408', border: '1px solid #ff444422', borderRadius: 4, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 9, color: '#ff4444', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>PUT</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8f0' }}>
+                    ${optionsSignal.bestPut.strike} {optionsSignal.bestPut.expiry}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#ff444488' }}>~${optionsSignal.bestPut.premium}</div>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 10, color: '#7788aa', marginTop: 8 }}>
+              Includes checklist · P&L simulator · trade setup · risk/reward
+            </div>
+          </div>
+
+          {/* Card 3: Technical & Risk */}
+          <div
+            className="card"
+            onClick={() => setActiveModal('technical')}
+            style={{
+              cursor: 'pointer', borderColor: '#2a2a40',
+              padding: '14px 16px', transition: 'border-color 0.15s, background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#141420'; e.currentTarget.style.borderColor = '#ffaa0033'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#0f0f1a'; e.currentTarget.style.borderColor = '#2a2a40'; }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em' }}>TECHNICAL & RISK</div>
+              <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.1em' }}>VIEW →</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {ta && (
+                <>
+                  <div style={{ background: '#070710', padding: '5px 10px', borderRadius: 2 }}>
+                    <span style={{ fontSize: 9, color: '#7788aa' }}>RSI </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00' }}>
+                      {ta.rsi14?.toFixed(1)}
+                    </span>
+                  </div>
+                  <div style={{ background: '#070710', padding: '5px 10px', borderRadius: 2 }}>
+                    <span style={{ fontSize: 9, color: '#7788aa' }}>TREND </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444' }}>
+                      {ta.trendSignal}
+                    </span>
+                  </div>
+                  <div style={{ background: '#070710', padding: '5px 10px', borderRadius: 2 }}>
+                    <span style={{ fontSize: 9, color: '#7788aa' }}>VOL </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0' }}>
+                      {ta.volumeRatio}x
+                    </span>
+                  </div>
+                </>
+              )}
+              {optionsSignal.catalysts?.length > 0 && (
+                <div style={{ background: '#070710', padding: '5px 10px', borderRadius: 2 }}>
+                  <span style={{ fontSize: 9, color: '#7788aa' }}>CATALYSTS </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#ffaa00' }}>{optionsSignal.catalysts.length}</span>
+                </div>
+              )}
+              {optionsSignal.keyRisks?.length > 0 && (
+                <div style={{ background: '#070710', padding: '5px 10px', borderRadius: 2 }}>
+                  <span style={{ fontSize: 9, color: '#7788aa' }}>RISKS </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#ff4444' }}>{optionsSignal.keyRisks.length}</span>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 10, color: '#7788aa', marginTop: 8 }}>
+              Technical indicators · underlying signal · catalysts · key risks · macro risks
+            </div>
+          </div>
+
+          {/* New Analysis */}
+          <button
+            className="btn-sm"
+            style={{ color: '#b0c0dd', borderColor: '#3a3a5e', marginTop: 4 }}
             onClick={() => {
               setOptionsSignal(null); setPriceSignal(null);
-              setShowModal(false); setInputVal('');
+              setActiveModal(null); setInputVal('');
               setTicker(''); setPriceLoaded(false);
               setExpirations([]); setSelectedExpiry('');
               setExpiryOpen(true);
-            }}>
-            ← NEW
+            }}
+          >
+            ← NEW ANALYSIS
           </button>
         </div>
       )}
