@@ -12,6 +12,7 @@ import MarketsTab  from './tabs/MarketsTab';
 import HelpTab     from './tabs/HelpTab';
 import WelcomePage from './components/WelcomePage';
 import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [enteredApp,    setEnteredApp]    = useState(false);
@@ -127,50 +128,52 @@ export default function App() {
       </div>
 
       {/* ── Content ── */}
-      <div className="app-content" style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <div className="app-content" style={{ flex: 1 }}>
 
-        {/* Help is always public */}
-        {activeTab === 'help' && <HelpTab />}
+          {/* Help is always public */}
+          {activeTab === 'help' && <HelpTab />}
 
-        <SignedIn>
-          {activeTab === 'scanner' && (
-            <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
-          )}
-          {activeTab === 'options' && (
-            <OptionsTab macro={macro} initialTicker={optionsTicker} />
-          )}
-          {activeTab === 'markets' && (
-            <MarketsTab
-              intlMarkets={macro.intlMarkets}
-              bonds={macro.bonds}
-              macroNews={macro.macroNews}
-              calendar={macro.calendar}
-            />
-          )}
-        </SignedIn>
+          <SignedIn>
+            {activeTab === 'scanner' && (
+              <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
+            )}
+            {activeTab === 'options' && (
+              <OptionsTab macro={macro} initialTicker={optionsTicker} />
+            )}
+            {activeTab === 'markets' && (
+              <MarketsTab
+                intlMarkets={macro.intlMarkets}
+                bonds={macro.bonds}
+                macroNews={macro.macroNews}
+                calendar={macro.calendar}
+              />
+            )}
+          </SignedIn>
 
-        {activeTab !== 'help' && (
-          <SignedOut>
-            <div style={{
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              minHeight: '60vh', gap: 20,
-            }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
-                SIGN IN TO ACCESS
+          {activeTab !== 'help' && (
+            <SignedOut>
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                minHeight: '60vh', gap: 20,
+              }}>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
+                  SIGN IN TO ACCESS
+                </div>
+                <div style={{ fontSize: 14, color: '#b0c0dd', marginBottom: 8 }}>
+                  Create a free account to use QuAInt Signal
+                </div>
+                <SignInButton mode="modal">
+                  <button className="btn" style={{ fontSize: 14, padding: '14px 40px' }}>
+                    SIGN IN / CREATE ACCOUNT
+                  </button>
+                </SignInButton>
               </div>
-              <div style={{ fontSize: 14, color: '#b0c0dd', marginBottom: 8 }}>
-                Create a free account to use QuAInt Signal
-              </div>
-              <SignInButton mode="modal">
-                <button className="btn" style={{ fontSize: 14, padding: '14px 40px' }}>
-                  SIGN IN / CREATE ACCOUNT
-                </button>
-              </SignInButton>
-            </div>
-          </SignedOut>
-        )}
-      </div>
+            </SignedOut>
+          )}
+        </div>
+      </ErrorBoundary>
 
       {/* ── Footer ── */}
       <div style={{
