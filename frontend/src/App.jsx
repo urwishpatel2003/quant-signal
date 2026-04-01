@@ -13,6 +13,8 @@ import HelpTab     from './tabs/HelpTab';
 import WelcomePage from './components/WelcomePage';
 import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
 import ErrorBoundary from './components/ErrorBoundary';
+import BlogTab   from './tabs/BlogTab';
+import BlogAdmin from './tabs/BlogAdmin';
 
 export default function App() {
   const [enteredApp,    setEnteredApp]    = useState(false);
@@ -133,7 +135,8 @@ export default function App() {
 
           {/* Help is always public */}
           {activeTab === 'help' && <HelpTab />}
-
+          {activeTab === 'blog'  && <BlogTab />}
+          {activeTab === 'admin' && <BlogAdmin />}
           <SignedIn>
             {activeTab === 'scanner' && (
               <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />

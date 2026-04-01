@@ -1051,6 +1051,129 @@ app.post('/api/analyze', (req, res) => {
   request.end();
 });
 
+// ─── BLOG ROUTES ─────────────────────────────────────────────────────────────
+// Add these routes to server.js before the app.listen() line
+
+// GET /blog — fetch all published posts
+app.get('/blog', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .select('id, slug, title, excerpt, category, tags, created_at')
+      .eq('published', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    console.error('[blog GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /blog/:slug — fetch single post
+app.get('/blog/:slug', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .select('*')
+      .eq('slug', req.params.slug)
+      .eq('published', true)
+      .single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Post not found' });
+    res.json(data);
+  } catch (e) {
+    console.error('[blog slug GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /blog/generate — Claude generates a blog post
+app.post('/blog/generate', async (req, res) => {
+  const { topic, ticker, category } = req.body;
+  if (!topic) return res.status(400).json({ error: 'topic required' });
+  try {
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514', max_tokens: 2000, temperature: 0.7,
+      system: `You are a quantitative trading analyst and financial writer for QuAInt Signal, an AI-powered trading platform. 
+Write engaging, educational blog posts about trading, options, technical analysis, and market strategy.
+Posts should be practical, data-driven, and targeted at active traders.
+Always include actionable insights. Never give specific financial advice — frame everything as education.
+Return ONLY valid JSON with no markdown or backticks.`,
+      messages: [{
+        role: 'user',
+        content: `Write a blog post about: "${topic}"${ticker ? ` focused on ${ticker}` : ''}.
+Category: ${category || 'Market Analysis'}
+
+Return JSON:
+{
+  "title": "Engaging title under 70 chars",
+  "excerpt": "2-sentence summary under 160 chars, SEO-optimized",
+  "content": "Full HTML blog post, 600-900 words. Use <h2>, <p>, <ul>, <li>, <strong> tags. Include: intro, 2-3 main sections with headers, practical takeaways, conclusion. No inline styles.",
+  "tags": ["tag1", "tag2", "tag3"],
+  "slug": "url-friendly-slug-from-title"
+}`
+      }]
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[blog generate]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /blog/publish — save post to Supabase
+app.post('/blog/publish', async (req, res) => {
+  const { title, slug, excerpt, content, category, tags } = req.body;
+  if (!title || !slug || !content) return res.status(400).json({ error: 'title, slug, content required' });
+  try {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .upsert({
+        slug, title, excerpt, content,
+        category: category || 'Market Analysis',
+        tags: tags || [],
+        published: true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'slug' })
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    console.error('[blog publish]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /blog/admin/all — fetch all posts including unpublished (admin only)
+app.get('/blog/admin/all', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .select('id, slug, title, excerpt, category, published, created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /blog/:slug — delete a post
+app.delete('/blog/:slug', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('blog_posts')
+      .delete()
+      .eq('slug', req.params.slug);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>

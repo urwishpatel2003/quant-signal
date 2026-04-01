@@ -281,3 +281,62 @@ input, select, textarea {
   .scanner-results-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Blog content styles ── */
+/* Add these to frontend/src/styles/globals.css */
+
+.blog-content h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  color: #ffaa00;
+  letter-spacing: 0.1em;
+  margin: 24px 0 10px;
+}
+
+.blog-content h3 {
+  font-size: 14px;
+  color: #b0c0dd;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 18px 0 8px;
+}
+
+.blog-content p {
+  margin: 0 0 14px;
+  color: #d0d8f0;
+  line-height: 1.9;
+  font-size: 13px;
+}
+
+.blog-content ul, .blog-content ol {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  color: #d0d8f0;
+}
+
+.blog-content li {
+  margin-bottom: 6px;
+  line-height: 1.7;
+  font-size: 13px;
+}
+
+.blog-content strong {
+  color: #e8e8f0;
+  font-weight: 700;
+}
+
+.blog-content a {
+  color: #ffaa00;
+  text-decoration: none;
+}
+
+.blog-content a:hover {
+  text-decoration: underline;
+}
+
+.blog-content blockquote {
+  border-left: 2px solid #ffaa0044;
+  padding-left: 14px;
+  margin: 16px 0;
+  color: #99aacc;
+  font-style: italic;
+}
