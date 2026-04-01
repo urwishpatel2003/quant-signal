@@ -98,9 +98,13 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
 
 
+  // Auto-navigate to results page when scan completes
   useEffect(() => {
-    if (!showResults && !scan.analysis) setMoversOpen(true);
-  }, [scan.analysis]); // only trigger when analysis changes
+    if (scan.analysis && !scan.loading) {
+      setShowResults(true);
+      setMoversOpen(false);
+    }
+  }, [scan.analysis, scan.loading]);
 
   useEffect(() => {
     const handler = () => setIsWide(window.innerWidth > 768);
@@ -523,18 +527,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
         )}
       </div>
 
-      {/* ── View Results button ── */}
-      {scan.analysis && !scan.loading && (
-        <div className="fade-in" style={{ marginTop: 8 }}>
-          <button
-            className="btn"
-            style={{ width: '100%', fontSize: 14, padding: '13px' }}
-            onClick={() => { setShowResults(true); setMoversOpen(false); }}
-          >
-            ◉ VIEW SCAN RESULTS — {scan.ticker}
-          </button>
-        </div>
-      )}
         </>
       )}
     </div>
