@@ -61,12 +61,16 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions }) {
   const sigColor = SC[scan.analysis.signal];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 12,
+      paddingTop: 8,
+    }}>
 
       {/* ── Top bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 12, flexWrap: 'wrap',
+        paddingTop: 'max(8px, env(safe-area-inset-top))',
       }}>
         <button
           onClick={onBack}

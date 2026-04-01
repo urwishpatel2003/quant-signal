@@ -18,6 +18,12 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* Safe area support for notched phones */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* ── Global inline style overrides ── */
 /* These ensure small labels are always readable */
 [style*="font-size: 9px"],
