@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 
-const FREE_LIMITS = { scans: 10, options: 5 };
+const FREE_LIMITS = { scans: 5, options: 3 };
 const PRO_LIMITS  = { scans: 999, options: 999 };
 const BASE        = import.meta.env.VITE_API_BASE;
 
