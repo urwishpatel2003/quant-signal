@@ -45,12 +45,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     if (!optionsSignal && !loading) setExpiryOpen(true);
   }, [optionsSignal, loading]);
 
-  // Auto-open AI rec modal when analysis completes
-  useEffect(() => {
-    if (optionsSignal && !loading && !reanalyzing) {
-      setActiveModal('ai');
-    }
-  }, [optionsSignal, loading, reanalyzing]);
+
 
   const fetchTickerPrice = async t => {
     const sym = t.toUpperCase();

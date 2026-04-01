@@ -96,12 +96,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
     if (scan.loading) setMoversOpen(false);
   }, [scan.loading]);
 
-  // Auto-open ticker modal when scan completes
-  useEffect(() => {
-    if (scan.analysis && !scan.loading) {
-      setActiveModal('ticker');
-    }
-  }, [scan.analysis, scan.loading]);
+
 
   useEffect(() => {
     if (!activeModal && !scan.analysis) setMoversOpen(true);
