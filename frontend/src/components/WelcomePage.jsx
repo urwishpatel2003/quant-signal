@@ -161,7 +161,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               </div>
               <div style={{ fontSize: 13, color: '#8899aa', lineHeight: 1.8 }}>
                 Free tier includes 10 stock scans and 5 options analyses per day.
-                Pro plan at $15/month provides unlimited access to all features
+                Pro plan at $5/month provides unlimited access to all features
                 including all 4 timeframes and priority AI processing.
               </div>
             </div>
@@ -173,7 +173,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                 { icon: '📊', label: 'Stock History',  value: 'Tradier — OHLCV + quotes',      color: '#4488ff' },
                 { icon: '🌍', label: 'Macro Data',     value: 'Polygon — 15+ global markets',  color: '#ff8844' },
                 { icon: '🔒', label: 'Your Privacy',   value: 'No data sold — ever',           color: '#aa44ff' },
-                { icon: '💰', label: 'Pricing',        value: 'Free tier · Pro $15/mo',        color: '#00ff88' },
+                { icon: '💰', label: 'Pricing',        value: 'Free tier · Pro $5/mo',        color: '#00ff88' },
               ].map((item, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14,
                   background: '#0f0f18', border: `1px solid ${item.color}22`,
