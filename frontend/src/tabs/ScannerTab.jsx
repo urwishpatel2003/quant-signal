@@ -105,7 +105,7 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
   useEffect(() => {
     if (!activeModal && !scan.analysis) setMoversOpen(true);
-  }, [activeModal, scan.analysis]);
+  }, [scan.analysis]); // only trigger when analysis changes, not on modal close
 
   useEffect(() => {
     const handler = () => setIsWide(window.innerWidth > 768);
@@ -182,7 +182,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
 
   const handleCloseModal = () => {
     setActiveModal(null);
-    setMoversOpen(true);
   };
 
   const handleNewScan = () => {
@@ -611,24 +610,24 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
           </div>
 
           {/* Card 3: News */}
-          {scan.news?.length > 0 && (
-            <div
-              className="card"
-              onClick={() => setActiveModal('news')}
-              style={{
-                cursor: 'pointer', borderColor: '#2a2a40',
-                padding: '14px 16px', transition: 'border-color 0.15s, background 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#141420'; e.currentTarget.style.borderColor = '#ffaa0033'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#0f0f1a'; e.currentTarget.style.borderColor = '#2a2a40'; }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em' }}>
-                  RECENT NEWS <span style={{ color: '#7788aa', fontWeight: 400 }}>({scan.news.length})</span>
-                </div>
-                <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.1em' }}>VIEW →</div>
+          <div
+            className="card"
+            onClick={() => setActiveModal('news')}
+            style={{
+              cursor: 'pointer', borderColor: '#2a2a40',
+              padding: '14px 16px', transition: 'border-color 0.15s, background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#141420'; e.currentTarget.style.borderColor = '#ffaa0033'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#0f0f1a'; e.currentTarget.style.borderColor = '#2a2a40'; }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em' }}>
+                RECENT NEWS {scan.news?.length > 0 && <span style={{ color: '#7788aa', fontWeight: 400 }}>({scan.news.length})</span>}
               </div>
-              {scan.news.slice(0, 2).map((n, i) => (
+              <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.1em' }}>VIEW →</div>
+            </div>
+            {scan.news?.length > 0 ? (
+              scan.news.slice(0, 2).map((n, i) => (
                 <div key={i} style={{
                   fontSize: 11, color: '#b0c0dd', padding: '4px 0',
                   borderBottom: i === 0 ? '1px solid #1a1a26' : 'none',
@@ -636,9 +635,11 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
                 }}>
                   {n.title}
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            ) : (
+              <div style={{ fontSize: 11, color: '#7788aa' }}>No recent news available</div>
+            )}
+          </div>
 
         </div>
       )}
