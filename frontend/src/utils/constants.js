@@ -2,8 +2,6 @@ export const TABS = [
   { id: 'scanner', label: 'SCANNER' },
   { id: 'options', label: 'OPTIONS' },
   { id: 'markets', label: 'MARKETS' },
-  { id: 'blog',    label: 'BLOG'    },
-  { id: 'admin',   label: 'ADMIN'   },
   { id: 'help',    label: 'HELP'    },
 ];
 

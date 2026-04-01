@@ -21,6 +21,7 @@ export default function App() {
   const [activeTab,     setActiveTab]     = useState('scanner');
   const [optionsTicker, setOptionsTicker] = useState('');
   const [modal,         setModal]         = useState(null);
+  const [logoClicks,    setLogoClicks]    = useState(0);
 
   const macro                    = useMacroData();
   const { user }                 = useUser();
@@ -28,6 +29,18 @@ export default function App() {
 
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
+
+  // Secret admin access — click logo 5 times
+  const handleLogoClick = () => {
+    const clicks = logoClicks + 1;
+    setLogoClicks(clicks);
+    if (clicks >= 5) {
+      setActiveTab('admin');
+      setLogoClicks(0);
+    } else {
+      setModal('about');
+    }
+  };
 
   if (!isLoaded) {
     return (
@@ -66,7 +79,7 @@ export default function App() {
           <div
             style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
               letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer' }}
-            onClick={() => setModal('about')}>
+            onClick={handleLogoClick}>
             <span style={{ color: '#ffaa00' }}>Qu</span>
             <span style={{ color: '#00ff88' }}>AI</span>
             <span style={{ color: '#ffaa00' }}>nt Signal</span>
@@ -107,7 +120,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Nav Tabs ── */}
+      {/* ── Nav Tabs — only TABS from constants, no blog/admin ── */}
       <div className="app-tabs">
         {TABS.map(tab => {
           const id       = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
@@ -133,10 +146,11 @@ export default function App() {
       <ErrorBoundary>
         <div className="app-content" style={{ flex: 1 }}>
 
-          {/* Help is always public */}
-          {activeTab === 'help' && <HelpTab />}
+          {/* Public tabs — no auth required */}
+          {activeTab === 'help'  && <HelpTab />}
           {activeTab === 'blog'  && <BlogTab />}
           {activeTab === 'admin' && <BlogAdmin />}
+
           <SignedIn>
             {activeTab === 'scanner' && (
               <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
@@ -154,7 +168,7 @@ export default function App() {
             )}
           </SignedIn>
 
-          {activeTab !== 'help' && (
+          {activeTab !== 'help' && activeTab !== 'blog' && activeTab !== 'admin' && (
             <SignedOut>
               <div style={{
                 display: 'flex', flexDirection: 'column',
@@ -196,10 +210,11 @@ export default function App() {
             { label: 'Contact', key: 'contact' },
             { label: 'Terms',   key: 'terms'   },
             { label: 'Privacy', key: 'privacy' },
+            { label: 'Blog',    key: 'blog'    },
           ].map(item => (
             <button
               key={item.key}
-              onClick={() => setModal(item.key)}
+              onClick={() => item.key === 'blog' ? setActiveTab('blog') : setModal(item.key)}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 color: '#7788aa', fontSize: 11, fontFamily: 'inherit',
