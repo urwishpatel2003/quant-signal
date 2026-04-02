@@ -282,8 +282,6 @@ input, select, textarea {
 }
 
 /* ── Blog content styles ── */
-/* Add these to frontend/src/styles/globals.css */
-
 .blog-content h2 {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 20px;
@@ -291,7 +289,6 @@ input, select, textarea {
   letter-spacing: 0.1em;
   margin: 24px 0 10px;
 }
-
 .blog-content h3 {
   font-size: 14px;
   color: #b0c0dd;
@@ -299,40 +296,25 @@ input, select, textarea {
   letter-spacing: 0.05em;
   margin: 18px 0 8px;
 }
-
 .blog-content p {
   margin: 0 0 14px;
   color: #d0d8f0;
   line-height: 1.9;
   font-size: 13px;
 }
-
 .blog-content ul, .blog-content ol {
   margin: 0 0 14px;
   padding-left: 20px;
   color: #d0d8f0;
 }
-
 .blog-content li {
   margin-bottom: 6px;
   line-height: 1.7;
   font-size: 13px;
 }
-
-.blog-content strong {
-  color: #e8e8f0;
-  font-weight: 700;
-}
-
-.blog-content a {
-  color: #ffaa00;
-  text-decoration: none;
-}
-
-.blog-content a:hover {
-  text-decoration: underline;
-}
-
+.blog-content strong { color: #e8e8f0; font-weight: 700; }
+.blog-content a { color: #ffaa00; text-decoration: none; }
+.blog-content a:hover { text-decoration: underline; }
 .blog-content blockquote {
   border-left: 2px solid #ffaa0044;
   padding-left: 14px;
@@ -341,6 +323,94 @@ input, select, textarea {
   font-style: italic;
 }
 
-@media (min-width: 768px) {
+/* ── DESKTOP ENHANCEMENTS (min-width: 769px) ─────────────────────────────────
+   Mobile styles above are completely untouched.
+   These rules only activate on laptop and desktop screens.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 769px) {
+
+  /* Base font size */
+  body { font-size: 15px; }
+
+  /* App content — constrained width, centered, generous padding */
+  .app-content {
+    padding: 32px 48px;
+    max-width: 1440px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Header */
+  .app-header { padding: 14px 48px; }
+
+  /* Cards — more breathing room */
+  .card { padding: 20px 24px; font-size: 14px; }
+
+  /* KV rows */
+  .kv     { font-size: 14px; padding: 10px 0; }
+  .kv-key { font-size: 13px; }
+
+  /* Buttons */
+  .btn    { font-size: 14px; padding: 13px 28px; }
+  .btn-sm { font-size: 12px; padding: 8px 14px; }
+
+  /* Tab nav */
+  .tab-btn { font-size: 13px; padding: 15px 28px; letter-spacing: 0.1em; }
+
+  /* Input */
+  .input { font-size: 15px; padding: 12px 16px; }
+
+  /* Tag */
+  .tag { font-size: 12px; padding: 4px 12px; }
+
+  /* Label */
+  .label-sm { font-size: 11px; }
+
+  /* Scanner — wider gap */
+  .scanner-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+
+  /* Scanner results — more space for the results panel */
+  .scanner-results-grid {
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  /* Options */
+  .options-layout    { grid-template-columns: 320px 1fr; gap: 24px; }
+  .options-contracts { grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* Markets */
+  .markets-summary { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .markets-grid    { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+  /* Watchlist */
+  .watchlist-item { grid-template-columns: 90px 150px 110px 1fr 1fr 1fr 2fr auto; gap: 16px; }
+  .watchlist-form { grid-template-columns: 130px 1fr 1fr 1fr 2fr auto; gap: 10px; }
+
+  /* Blog */
+  .blog-content p  { font-size: 14px; line-height: 2; }
+  .blog-content li { font-size: 14px; }
+  .blog-content h2 { font-size: 22px; }
+  .blog-content h3 { font-size: 15px; }
+
+  /* Welcome */
+  .welcome-hero          { padding: 100px 60px 80px; }
+  .welcome-features      { padding: 0 60px 80px; max-width: 1300px; }
+  .welcome-features-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .welcome-about         { padding: 80px 60px; }
+  .welcome-about-grid    { grid-template-columns: 1fr 1fr; gap: 60px; }
+
+  /* Utility */
   .show-desktop { display: block !important; }
+}
+
+/* ── LARGE DESKTOP (min-width: 1280px) ───────────────────────────────────── */
+@media (min-width: 1280px) {
+  .app-content { padding: 36px 64px; }
+  .app-header  { padding: 14px 64px; }
+
+  .welcome-hero     { padding: 110px 80px 80px; }
+  .welcome-features { padding: 0 80px 80px; }
+  .welcome-about    { padding: 80px 80px; }
 }

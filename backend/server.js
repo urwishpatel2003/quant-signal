@@ -1582,8 +1582,8 @@ app.get('/india/movers', async (req, res) => {
   try {
     const batchSize = 10;
     const results   = [];
-    for (let i = 0; i < NIFTY100.length; i += batchSize) {
-      const batch = NIFTY100.slice(i, i + batchSize);
+    for (let i = 0; i < NIFTY50.length; i += batchSize) {
+      const batch = NIFTY50.slice(i, i + batchSize);
       const batchResults = await Promise.allSettled(batch.map(async ticker => {
         const q = await getNSEQuote(ticker);
         if (!q || q.price == null) return null;
