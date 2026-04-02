@@ -43,7 +43,7 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
   );
 }
 
-export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$' }) {
+export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '' }) {
   const [activeId, setActiveId] = useState('ticker');
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
