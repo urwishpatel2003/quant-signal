@@ -956,7 +956,7 @@ app.get('/watchlist/:userId', async (req, res) => {
       // Fetch India prices from Yahoo Finance (.NS suffix)
       const priceResults = await Promise.all(
         tickers.map(async ticker => {
-          const q = await yahooNSEQuote(ticker);
+          const q = await getNSEQuote(ticker);
           return { ticker, q };
         })
       );
@@ -1063,9 +1063,18 @@ const NSE_NAMES = {
 };
 
 // Fetch Yahoo Finance quote for a single NSE stock
-// ─── NSE quote/history cache (5 min TTL for quotes, 30 min for history) ───────
-const nseQuoteCache   = new Map(); // symbol → { data, ts }
-const nseHistoryCache = new Map(); // `${symbol}:${range}` → { data, ts }
+// ─── NSE India — primary: stock-nse-india package, fallback: Yahoo Finance ────
+let nseIndia = null;
+try {
+  const { NseIndia } = require('stock-nse-india');
+  nseIndia = new NseIndia();
+  console.log('[NSE] stock-nse-india loaded successfully');
+} catch (e) {
+  console.warn('[NSE] stock-nse-india not available, using Yahoo Finance fallback:', e.message);
+}
+
+const nseQuoteCache   = new Map();
+const nseHistoryCache = new Map();
 const NSE_QUOTE_TTL   = 5  * 60 * 1000;
 const NSE_HISTORY_TTL = 30 * 60 * 1000;
 
@@ -1077,16 +1086,11 @@ const YAHOO_HEADERS = {
 const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
 
 async function yahooNSEQuote(symbol) {
-  // Return cached if fresh
-  const cached = nseQuoteCache.get(symbol);
-  if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL) return cached.data;
-
   try {
     const ySymbol = `${symbol}.NS`;
     for (const host of YAHOO_HOSTS) {
       try {
-        const data = await httpsGet(
-          host,
+        const data = await httpsGet(host,
           `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
           YAHOO_HEADERS
         );
@@ -1096,67 +1100,127 @@ async function yahooNSEQuote(symbol) {
         const prevClose = meta.previousClose || meta.chartPreviousClose;
         const change    = price && prevClose ? price - prevClose : null;
         const changePct = change && prevClose ? (change / prevClose) * 100 : null;
-        const result = {
+        return {
           price, prevClose,
           change:    change    ? parseFloat(change.toFixed(2))    : null,
           changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
           volume: meta.regularMarketVolume || 0,
-          open:   meta.regularMarketOpen   || null,
-          high:   meta.regularMarketDayHigh || null,
-          low:    meta.regularMarketDayLow  || null,
+          open: meta.regularMarketOpen    || null,
+          high: meta.regularMarketDayHigh || null,
+          low:  meta.regularMarketDayLow  || null,
         };
-        // Cache successful result
-        nseQuoteCache.set(symbol, { data: result, ts: Date.now() });
-        return result;
       } catch { continue; }
     }
-    // Return stale cache if available (better than nothing)
-    if (cached) { console.warn(`[NSE] Using stale cache for ${symbol}`); return cached.data; }
     return null;
-  } catch (e) {
-    if (cached) return cached.data;
-    return null;
-  }
+  } catch { return null; }
 }
 
-async function yahooNSEHistory(symbol, range = '3mo') {
+async function getNSEQuote(symbol) {
+  const cached = nseQuoteCache.get(symbol);
+  if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL) return cached.data;
+
+  let result = null;
+
+  // Primary: stock-nse-india (direct NSE API, no IP blocks)
+  if (nseIndia) {
+    try {
+      const details = await nseIndia.getEquityDetails(symbol);
+      const p = details?.priceInfo;
+      if (p?.lastPrice) {
+        result = {
+          price:     p.lastPrice,
+          prevClose: p.previousClose || p.close,
+          change:    p.change  ? parseFloat(p.change.toFixed(2))  : null,
+          changePct: p.pChange ? parseFloat(p.pChange.toFixed(2)) : null,
+          volume:    details?.preOpenMarket?.totalTradedVolume || details?.securityInfo?.tradedVolume || 0,
+          open: p.open || null,
+          high: p.intraDayHighLow?.max || null,
+          low:  p.intraDayHighLow?.min || null,
+        };
+      }
+    } catch (e) { console.warn(`[NSE] primary quote failed ${symbol}:`, e.message); }
+  }
+
+  // Fallback: Yahoo Finance
+  if (!result) result = await yahooNSEQuote(symbol);
+
+  if (result) {
+    nseQuoteCache.set(symbol, { data: result, ts: Date.now() });
+  } else if (cached) {
+    console.warn(`[NSE] stale cache for ${symbol}`);
+    return cached.data;
+  }
+  return result;
+}
+
+async function getNSEHistory(symbol, range = '3mo') {
   const cacheKey = `${symbol}:${range}`;
   const cached   = nseHistoryCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < NSE_HISTORY_TTL) return cached.data;
 
-  try {
-    const ySymbol     = `${symbol}.NS`;
-    const intervalMap = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1wk' };
-    const interval    = intervalMap[range] || '1d';
-    for (const host of YAHOO_HOSTS) {
-      try {
-        const data = await httpsGet(
-          host,
-          `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}&includePrePost=false`,
-          YAHOO_HEADERS
-        );
-        const chartResult = data?.chart?.result?.[0];
-        if (!chartResult) continue;
-        const quote  = chartResult.indicators?.quote?.[0] || {};
-        const closes = quote.close || [];
-        if (!closes.length) continue;
-        const result = {
-          close: quote.close, open: quote.open, high: quote.high,
-          low: quote.low, volume: quote.volume,
-          timestamps: chartResult.timestamp || [],
-          current: closes[closes.length - 1],
-          prev:    closes[closes.length - 2],
+  let result = null;
+
+  // Primary: stock-nse-india historical data
+  if (nseIndia) {
+    try {
+      const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
+      const days  = daysMap[range] || 90;
+      const end   = new Date();
+      const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const data  = await nseIndia.getEquityHistoricalData(symbol, { start, end });
+      const rows  = data?.[0]?.data || data || [];
+      if (rows.length) {
+        const sorted = [...rows].sort((a, b) => new Date(a.CH_TIMESTAMP) - new Date(b.CH_TIMESTAMP));
+        const closes = sorted.map(r => r.CH_CLOSING_PRICE).filter(Boolean);
+        result = {
+          close:      sorted.map(r => r.CH_CLOSING_PRICE),
+          open:       sorted.map(r => r.CH_OPENING_PRICE),
+          high:       sorted.map(r => r.CH_TRADE_HIGH_PRICE),
+          low:        sorted.map(r => r.CH_TRADE_LOW_PRICE),
+          volume:     sorted.map(r => r.CH_TOT_TRADED_QTY),
+          timestamps: sorted.map(r => new Date(r.CH_TIMESTAMP).getTime()),
+          current:    closes[closes.length - 1],
+          prev:       closes[closes.length - 2],
         };
-        nseHistoryCache.set(cacheKey, { data: result, ts: Date.now() });
-        return result;
-      } catch { continue; }
-    }
-    if (cached) { console.warn(`[NSE] Using stale history cache for ${symbol}:${range}`); return cached.data; }
-    return null;
-  } catch (e) {
-    if (cached) return cached.data;
-    return null;
+      }
+    } catch (e) { console.warn(`[NSE] history failed ${symbol}:`, e.message); }
   }
+
+  // Fallback: Yahoo Finance
+  if (!result) {
+    try {
+      const ySymbol     = `${symbol}.NS`;
+      const intervalMap = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1wk' };
+      const interval    = intervalMap[range] || '1d';
+      for (const host of YAHOO_HOSTS) {
+        try {
+          const data = await httpsGet(host,
+            `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}&includePrePost=false`,
+            YAHOO_HEADERS
+          );
+          const cr = data?.chart?.result?.[0];
+          if (!cr) continue;
+          const q  = cr.indicators?.quote?.[0] || {};
+          const cl = q.close || [];
+          if (!cl.length) continue;
+          result = {
+            close: q.close, open: q.open, high: q.high, low: q.low, volume: q.volume,
+            timestamps: cr.timestamp || [],
+            current: cl[cl.length - 1], prev: cl[cl.length - 2],
+          };
+          break;
+        } catch { continue; }
+      }
+    } catch { }
+  }
+
+  if (result) {
+    nseHistoryCache.set(cacheKey, { data: result, ts: Date.now() });
+  } else if (cached) {
+    console.warn(`[NSE] stale history cache for ${symbol}:${range}`);
+    return cached.data;
+  }
+  return result;
 }
 
 // ─── GET /india/debug/:symbol — test Yahoo Finance NSE ───────────────────────
@@ -1190,7 +1254,7 @@ app.get('/india/search', (req, res) => {
 app.get('/india/quote/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
-    const q = await yahooNSEQuote(symbol);
+    const q = await getNSEQuote(symbol);
     if (!q) return res.status(404).json({ error: `No data for ${symbol}.NS` });
     res.json({ symbol, name: NSE_NAMES[symbol] || symbol, ...q });
   } catch (e) {
@@ -1204,7 +1268,7 @@ app.get('/india/history/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const range  = req.query.range || '3mo';
   try {
-    const data = await yahooNSEHistory(symbol, range);
+    const data = await getNSEHistory(symbol, range);
     if (!data) return res.status(404).json({ error: `No history for ${symbol}.NS` });
     res.json({ chart: { result: [{ meta: { symbol, currency: 'INR' },
       timestamp: data.timestamps,
@@ -1224,7 +1288,7 @@ app.get('/india/movers', async (req, res) => {
     for (let i = 0; i < NIFTY50.length; i += batchSize) {
       const batch = NIFTY50.slice(i, i + batchSize);
       const batchResults = await Promise.allSettled(batch.map(async ticker => {
-        const q = await yahooNSEQuote(ticker);
+        const q = await getNSEQuote(ticker);
         if (!q || q.price == null) return null;
         return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
       }));
