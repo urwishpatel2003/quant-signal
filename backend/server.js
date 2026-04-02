@@ -1223,21 +1223,47 @@ async function getNSEHistory(symbol, range = '3mo') {
   return result;
 }
 
-// ─── GET /india/debug/:symbol — test Yahoo Finance NSE ───────────────────────
+// ─── GET /india/debug/:symbol — inspect raw NSE data ─────────────────────────
 app.get('/india/debug/:symbol', async (req, res) => {
-  const symbol  = req.params.symbol.toUpperCase();
-  const ySymbol = `${symbol}.NS`;
+  const symbol = req.params.symbol.toUpperCase();
+  const result = {};
+
+  // Test getNSEHistory
   try {
-    const data = await httpsGet(
-      'query2.finance.yahoo.com',
-      `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
-      {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json, */*',
+    const daysMap = { '3mo': 90 };
+    const days  = 90;
+    const end   = new Date();
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    if (nseIndia) {
+      const raw = await nseIndia.getEquityHistoricalData(symbol, { start, end });
+      result.rawHistoryType    = typeof raw;
+      result.rawHistoryIsArray = Array.isArray(raw);
+      result.rawHistoryLength  = Array.isArray(raw) ? raw.length : null;
+      result.firstItem         = Array.isArray(raw) ? raw[0] : raw;
+      result.firstItemKeys     = Array.isArray(raw) && raw[0] ? Object.keys(raw[0]) : null;
+      // If nested
+      if (raw?.[0]?.data) {
+        result.nestedDataLength = raw[0].data.length;
+        result.nestedFirstRow   = raw[0].data[0];
       }
-    );
-    res.json({ ySymbol, status: data?.chart?.result ? 'ok' : 'no data', meta: data?.chart?.result?.[0]?.meta, error: data?.chart?.error });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    } else {
+      result.nseIndia = 'not loaded';
+    }
+  } catch (e) {
+    result.historyError = e.message;
+  }
+
+  // Test getNSEQuote
+  try {
+    if (nseIndia) {
+      const q = await nseIndia.getEquityDetails(symbol);
+      result.quotePriceInfo = q?.priceInfo;
+    }
+  } catch (e) {
+    result.quoteError = e.message;
+  }
+
+  res.json(result);
 });
 
 // ─── GET /india/search ────────────────────────────────────────────────────────
