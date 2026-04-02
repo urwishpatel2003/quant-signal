@@ -13,7 +13,8 @@ import MarketSelector from './components/MarketSelector';
 import ScannerTab     from './tabs/ScannerTab';
 import OptionsTab     from './tabs/OptionsTab';
 import MarketsTab     from './tabs/MarketsTab';
-import WatchlistTab   from './tabs/WatchlistTab';
+import WatchlistTab     from './tabs/WatchlistTab';
+import IndiaInvestTab  from './tabs/IndiaInvestTab';
 import HelpTab        from './tabs/HelpTab';
 import WelcomePage    from './components/WelcomePage';
 import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
@@ -65,9 +66,12 @@ export default function App() {
   };
 
   // Hide Options tab for India market
-  const visibleTabs = market === 'INDIA'
+  const baseTabs = market === 'INDIA'
     ? TABS.filter(t => (typeof t === 'string' ? t : t.id) !== 'options')
     : TABS;
+  const visibleTabs = market === 'INDIA'
+    ? [...baseTabs, { id: 'invest', label: '🇮🇳 INVEST' }]
+    : baseTabs;
 
   if (!isLoaded) {
     return (
@@ -235,6 +239,16 @@ export default function App() {
                 market={market}
               />
             </div>
+            {market === 'INDIA' && (
+              <div style={{ display: activeTab === 'invest' ? 'block' : 'none' }}>
+                <IndiaInvestTab
+                  onScanTicker={ticker => {
+                    setActiveTab('scanner');
+                    scan.runScan(ticker, scan.timeframe, 'INDIA');
+                  }}
+                />
+              </div>
+            )}
           </SignedIn>
 
           {activeTab !== 'help' && activeTab !== 'blog' && activeTab !== 'admin' && (
