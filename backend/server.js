@@ -1055,16 +1055,17 @@ async function loadNSEInstruments() {
     for (const line of lines) {
       if (!line.trim()) continue;
       const cols       = line.split(',');
-      const exchange   = cols[0]?.trim();
-      const segment    = cols[1]?.trim();
-      const securityId = cols[2]?.trim();
-      const instrument = cols[3]?.trim();
-      const symbolName = cols[4]?.trim();
-      const customSym  = cols[6]?.trim();
-      const series     = cols[10]?.trim();
+      const exchange   = cols[0]?.trim();  // NSE, BSE, MCX
+      const segment    = cols[1]?.trim();  // E = Equity
+      const securityId = cols[2]?.trim();  // SEM_SMST_SECURITY_ID
+      const instrument = cols[3]?.trim();  // EQUITY, FUTCUR etc
+      const tradingSym = cols[5]?.trim();  // SEM_TRADING_SYMBOL
+      const customSym  = cols[7]?.trim();  // SEM_CUSTOM_SYMBOL
+      const series     = cols[14]?.trim(); // SEM_SERIES (EQ)
+      const smSymbol   = cols[15]?.trim(); // SM_SYMBOL_NAME
       if (exchange === 'NSE' && segment === 'E' && instrument === 'EQUITY' && series === 'EQ') {
-        if (securityId && symbolName) {
-          map[symbolName] = { securityId, name: customSym || symbolName };
+        if (securityId && tradingSym) {
+          map[tradingSym] = { securityId, name: smSymbol || customSym || tradingSym };
         }
       }
     }
