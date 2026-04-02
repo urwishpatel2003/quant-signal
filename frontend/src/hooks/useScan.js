@@ -1,8 +1,11 @@
 import { useState, useRef } from 'react';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
+import { fetchIndiaHistory, fetchIndiaQuote } from '../api/india';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain } from '../api/tradier';
 import { runPriceAnalysis } from '../api/claude';
 import { calcIndicators, TIMEFRAMES } from '../utils/indicators';
+
+const BASE = import.meta.env.VITE_API_BASE;
 
 export function useScan(macro) {
   const [ticker,       setTicker]       = useState('');
@@ -19,18 +22,35 @@ export function useScan(macro) {
   const [ta,           setTa]           = useState(null);
   const terminalRef = useRef(null);
 
-  const runScan = async (sym, tf = timeframe) => {
-    const t = sym.toUpperCase();
+  const runScan = async (sym, tf = timeframe, market = 'US') => {
+    const t        = sym.toUpperCase();
     const tfConfig = TIMEFRAMES[tf];
+    const isIndia  = market === 'INDIA';
+
     setLoading(true); setError(''); setAnalysis(null);
     setTicker(t); setTimeframe(tf);
+
     try {
       setStage('price');
-      const [p, q] = await Promise.all([
-        fetchPrice(t, tfConfig.range, tfConfig.interval),
-        fetchTradierQuote(t)
-      ]);
-      if (!p) throw new Error('Ticker not found');
+
+      let p, q;
+      if (isIndia) {
+        // Use Dhan for Indian stocks
+        [p, q] = await Promise.all([
+          fetchIndiaHistory(t, tfConfig.range),
+          fetchIndiaQuote(t),
+        ]);
+        if (!p) throw new Error(`${t} not found on NSE. Check the ticker symbol.`);
+        // Normalize Indian quote to match Tradier format
+        q = q ? { last: q.price, open: q.open, change: q.change, change_percentage: q.changePct } : null;
+      } else {
+        [p, q] = await Promise.all([
+          fetchPrice(t, tfConfig.range, tfConfig.interval),
+          fetchTradierQuote(t),
+        ]);
+        if (!p) throw new Error('Ticker not found');
+      }
+
       setOhlcv(p); setQuote(q);
       const indicators = calcIndicators(p, tf);
       setTa(indicators);
@@ -41,11 +61,14 @@ export function useScan(macro) {
       setFundamentals(f);
 
       setStage('options');
-      const exps = await fetchTradierExpirations(t);
       let optData = null;
-      if (exps.length > 0) {
-        optData = await fetchTradierChain(t, exps[0], livePrice);
-        setOptions(optData);
+      if (!isIndia) {
+        // Options only for US market
+        const exps = await fetchTradierExpirations(t);
+        if (exps.length > 0) {
+          optData = await fetchTradierChain(t, exps[0], livePrice);
+          setOptions(optData);
+        }
       }
 
       setStage('news');

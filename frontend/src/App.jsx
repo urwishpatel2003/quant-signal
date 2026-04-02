@@ -7,17 +7,19 @@ import { TABS } from './utils/constants';
 import { useMacroData } from './hooks/useMacroData';
 import { useScan } from './hooks/useScan';
 import { useWatchlistScans } from './hooks/useWatchlistScans';
-import MacroBar    from './components/MacroBar';
-import ScannerTab  from './tabs/ScannerTab';
-import OptionsTab  from './tabs/OptionsTab';
-import MarketsTab  from './tabs/MarketsTab';
-import WatchlistTab from './tabs/WatchlistTab';
-import HelpTab     from './tabs/HelpTab';
-import WelcomePage from './components/WelcomePage';
+import { useMarket } from './context/MarketContext';
+import MacroBar       from './components/MacroBar';
+import MarketSelector from './components/MarketSelector';
+import ScannerTab     from './tabs/ScannerTab';
+import OptionsTab     from './tabs/OptionsTab';
+import MarketsTab     from './tabs/MarketsTab';
+import WatchlistTab   from './tabs/WatchlistTab';
+import HelpTab        from './tabs/HelpTab';
+import WelcomePage    from './components/WelcomePage';
 import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
-import ErrorBoundary from './components/ErrorBoundary';
-import BlogTab   from './tabs/BlogTab';
-import BlogAdmin from './tabs/BlogAdmin';
+import ErrorBoundary  from './components/ErrorBoundary';
+import BlogTab        from './tabs/BlogTab';
+import BlogAdmin      from './tabs/BlogAdmin';
 
 export default function App() {
   const [enteredApp,    setEnteredApp]    = useState(false);
@@ -28,6 +30,7 @@ export default function App() {
 
   const macro                    = useMacroData();
   const scan                     = useScan(macro);
+  const { market }               = useMarket();
   const { user }                 = useUser();
   const { isLoaded, isSignedIn } = useAuth();
 
@@ -43,7 +46,7 @@ export default function App() {
       .catch(() => {});
   }, [user?.id]);
 
-  const { scans: watchlistScans, refreshAll: refreshWatchlistScans } = useWatchlistScans(watchlistTickers);
+  const { scans: watchlistScans } = useWatchlistScans(watchlistTickers);
 
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
@@ -58,6 +61,11 @@ export default function App() {
       setModal('about');
     }
   };
+
+  // Hide Options tab for India market
+  const visibleTabs = market === 'INDIA'
+    ? TABS.filter(t => (typeof t === 'string' ? t : t.id) !== 'options')
+    : TABS;
 
   if (!isLoaded) {
     return (
@@ -89,6 +97,7 @@ export default function App() {
       {modal === 'about'   && <AboutModal   onClose={() => setModal(null)} />}
       {modal === 'contact' && <ContactModal onClose={() => setModal(null)} />}
 
+      {/* ── Header ── */}
       <div className="app-header">
         <div className="app-header-logo">
           <div
@@ -112,6 +121,8 @@ export default function App() {
           loading={macro.loading}
         />
 
+        <MarketSelector />
+
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <SignedOut>
             <SignInButton mode="modal">
@@ -134,8 +145,9 @@ export default function App() {
         </div>
       </div>
 
+      {/* ── Nav Tabs ── */}
       <div className="app-tabs">
-        {TABS.map(tab => {
+        {visibleTabs.map(tab => {
           const id       = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
           const label    = typeof tab === 'string' ? tab : tab.label;
           const isActive = activeTab === id;
@@ -155,6 +167,7 @@ export default function App() {
         })}
       </div>
 
+      {/* ── Content ── */}
       <ErrorBoundary>
         <div className="app-content" style={{ flex: 1 }}>
 
@@ -164,11 +177,19 @@ export default function App() {
 
           <SignedIn>
             <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
-              <ScannerTab scan={scan} macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
+              <ScannerTab
+                scan={scan} macro={macro}
+                onOpenOptions={openOptions}
+                onAddToWatchlist={() => {}}
+                market={market}
+              />
             </div>
-            <div style={{ display: activeTab === 'options' ? 'block' : 'none' }}>
-              <OptionsTab macro={macro} initialTicker={optionsTicker} />
-            </div>
+            {/* Options tab — US only */}
+            {market === 'US' && (
+              <div style={{ display: activeTab === 'options' ? 'block' : 'none' }}>
+                <OptionsTab macro={macro} initialTicker={optionsTicker} />
+              </div>
+            )}
             <div style={{ display: activeTab === 'markets' ? 'block' : 'none' }}>
               <MarketsTab
                 intlMarkets={macro.intlMarkets}
@@ -182,8 +203,9 @@ export default function App() {
                 onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
                 onOpenOptions={ticker => { setOptionsTicker(ticker); setActiveTab('options'); }}
                 watchlistScans={watchlistScans}
-                onTickerAdded={ticker => setWatchlistTickers(prev => [...new Set([...prev, ticker])])}
+                onTickerAdded={ticker  => setWatchlistTickers(prev => [...new Set([...prev, ticker])])}
                 onTickerRemoved={ticker => setWatchlistTickers(prev => prev.filter(t => t !== ticker))}
+                market={market}
               />
             </div>
           </SignedIn>
@@ -212,6 +234,7 @@ export default function App() {
         </div>
       </ErrorBoundary>
 
+      {/* ── Footer ── */}
       <div style={{
         borderTop: '1px solid #1e1e30',
         padding: '16px 24px',

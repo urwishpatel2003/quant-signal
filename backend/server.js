@@ -1241,6 +1241,253 @@ app.delete('/watchlist/:userId/:ticker', async (req, res) => {
   }
 });
 
+// ─── DHAN API — INDIA MARKET ──────────────────────────────────────────────────
+// Add these constants near the top of server.js with other API keys:
+// const DHAN_TOKEN     = process.env.DHAN_TOKEN;
+// const DHAN_CLIENT_ID = process.env.DHAN_CLIENT_ID;
+
+// Add this helper alongside polygonGet / tradierGet:
+// const dhanPost = (path, body) => httpsPost('api.dhan.co', path, body, {
+//   'access-token': DHAN_TOKEN,
+//   'client-id':    DHAN_CLIENT_ID,
+// });
+
+// ─── Dhan httpsPost helper (add alongside httpsGet in server.js) ──────────────
+// function httpsPost(hostname, path, body, headers = {}) {
+//   return new Promise((resolve, reject) => {
+//     const bodyStr = JSON.stringify(body);
+//     const req = https.request({
+//       hostname, path, method: 'POST',
+//       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+//         'Content-Length': Buffer.byteLength(bodyStr), ...headers }
+//     }, res => {
+//       let data = '';
+//       res.on('data', c => data += c);
+//       res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); } });
+//     });
+//     req.on('error', reject);
+//     req.write(bodyStr);
+//     req.end();
+//   });
+// }
+
+// ─── NSE Instrument master — loaded at startup ────────────────────────────────
+// Symbol → { securityId, name } map, refreshed daily
+let nseInstrumentMap = {}; // { 'RELIANCE': { securityId: '2885', name: 'RELIANCE INDUSTRIES' }, ... }
+
+async function loadNSEInstruments() {
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.dhan.co', path: '/v2/instruments/NSE_EQ', method: 'GET',
+        headers: { 'Accept': 'text/csv', 'access-token': process.env.DHAN_TOKEN, 'client-id': process.env.DHAN_CLIENT_ID }
+      }, res => {
+        let raw = '';
+        res.on('data', c => raw += c);
+        res.on('end', () => resolve(raw));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    // Parse CSV — columns: SEM_EXM_EXCH_ID, SEM_SEGMENT, SEM_SMST_SECURITY_ID, SEM_INSTRUMENT_NAME, SEM_TRADING_SYMBOL, SEM_LOT_UNITS, SEM_CUSTOM_SYMBOL, SEM_EXPIRY_DATE, SEM_STRIKE_PRICE, SEM_OPTION_TYPE, SEM_FUT_FLAG, SEM_EXPIRY_FLAG
+    const lines = data.split('\n').slice(1); // skip header
+    const map = {};
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const cols = line.split(',');
+      const securityId    = cols[2]?.trim();
+      const tradingSymbol = cols[4]?.trim();
+      const name          = cols[6]?.trim() || cols[4]?.trim();
+      if (securityId && tradingSymbol) {
+        map[tradingSymbol] = { securityId, name };
+      }
+    }
+    nseInstrumentMap = map;
+    console.log(`[Dhan] Loaded ${Object.keys(map).length} NSE instruments`);
+  } catch (e) {
+    console.error('[Dhan] Failed to load instruments:', e.message);
+  }
+}
+
+// Load on startup and refresh daily
+loadNSEInstruments();
+setInterval(loadNSEInstruments, 24 * 60 * 60 * 1000);
+
+// ─── Nifty 50 tickers ─────────────────────────────────────────────────────────
+const NIFTY50 = [
+  'RELIANCE','TCS','HDFCBANK','BHARTIARTL','ICICIBANK','INFOSYS','SBIN','HINDUNILVR',
+  'ITC','BAJFINANCE','LT','KOTAKBANK','HCLTECH','AXISBANK','ASIANPAINT','MARUTI',
+  'SUNPHARMA','TITAN','ULTRACEMCO','NTPC','POWERGRID','WIPRO','JSWSTEEL','TATAMOTORS',
+  'ADANIPORTS','COALINDIA','BAJAJFINSV','TECHM','INDUSINDBK','BRITANNIA','HINDALCO',
+  'BAJAJ-AUTO','GRASIM','TATACONSUM','CIPLA','APOLLOHOSP','DRREDDY','EICHERMOT',
+  'DIVISLAB','HEROMOTOCO','BPCL','ONGC','M&M','NESTLEIND','SBILIFE','HDFCLIFE',
+  'TATASTEEL','UPL','ADANIENT','SHRIRAMFIN',
+];
+
+// ─── Dhan post helper ─────────────────────────────────────────────────────────
+function dhanPost(path, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const req = https.request({
+      hostname: 'api.dhan.co', path, method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', 'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+        'access-token': process.env.DHAN_TOKEN,
+        'client-id':    process.env.DHAN_CLIENT_ID,
+      }
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); }
+      });
+    });
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ─── GET /india/search ────────────────────────────────────────────────────────
+app.get('/india/search', (req, res) => {
+  const q = (req.query.q || '').toUpperCase().trim();
+  if (!q || q.length < 1) return res.json([]);
+  const results = Object.entries(nseInstrumentMap)
+    .filter(([sym]) => sym.startsWith(q))
+    .slice(0, 10)
+    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
+  // Also include fuzzy matches
+  const fuzzy = Object.entries(nseInstrumentMap)
+    .filter(([sym, info]) => !sym.startsWith(q) && (sym.includes(q) || info.name?.toUpperCase().includes(q)))
+    .slice(0, 5)
+    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
+  const seen = new Set(results.map(r => r.ticker));
+  res.json([...results, ...fuzzy.filter(f => !seen.has(f.ticker))].slice(0, 10));
+});
+
+// ─── GET /india/quote/:symbol ─────────────────────────────────────────────────
+app.get('/india/quote/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const inst   = nseInstrumentMap[symbol];
+  if (!inst) return res.status(404).json({ error: `Symbol ${symbol} not found in NSE instruments` });
+  try {
+    const data = await dhanPost('/v2/marketfeed/quote', {
+      NSE_EQ: [parseInt(inst.securityId)],
+    });
+    const q = data?.data?.NSE_EQ?.[inst.securityId];
+    if (!q) return res.status(404).json({ error: 'No quote data' });
+    const ltp       = q.last_price;
+    const prevClose = q.ohlc?.close;
+    const change    = ltp && prevClose ? ltp - prevClose : null;
+    const changePct = change && prevClose ? (change / prevClose) * 100 : null;
+    res.json({
+      symbol, securityId: inst.securityId, name: inst.name,
+      price: ltp, open: q.ohlc?.open, high: q.ohlc?.high, low: q.ohlc?.low,
+      prevClose, change: change ? parseFloat(change.toFixed(2)) : null,
+      changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
+      volume: q.volume, oi: q.oi,
+    });
+  } catch (e) {
+    console.error('[india/quote]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── GET /india/history/:symbol ───────────────────────────────────────────────
+app.get('/india/history/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const range  = req.query.range || '3mo';
+  const inst   = nseInstrumentMap[symbol];
+  if (!inst) return res.status(404).json({ error: `Symbol ${symbol} not found` });
+
+  const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
+  const days    = daysMap[range] || 90;
+  const toDate  = new Date().toISOString().split('T')[0];
+  const fromDate= new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  try {
+    const data = await dhanPost('/v2/charts/historical', {
+      securityId:      inst.securityId,
+      exchangeSegment: 'NSE_EQ',
+      instrument:      'EQUITY',
+      expiryCode:      0,
+      oi:              false,
+      fromDate,
+      toDate,
+    });
+
+    if (!data?.open?.length) return res.status(404).json({ error: 'No history data' });
+
+    const closes = data.close || [];
+    res.json({
+      chart: { result: [{
+        meta: { symbol, currency: 'INR' },
+        timestamp: data.timestamp,
+        indicators: { quote: [{
+          open:   data.open,
+          high:   data.high,
+          low:    data.low,
+          close:  data.close,
+          volume: data.volume,
+        }] }
+      }] }
+    });
+  } catch (e) {
+    console.error('[india/history]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── GET /india/movers ────────────────────────────────────────────────────────
+app.get('/india/movers', async (req, res) => {
+  try {
+    // Get security IDs for all Nifty 50
+    const validTickers = NIFTY50.filter(t => nseInstrumentMap[t]);
+    const secIds = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
+
+    const data = await dhanPost('/v2/marketfeed/quote', {
+      NSE_EQ: secIds,
+    });
+
+    const quotes = data?.data?.NSE_EQ || {};
+    const list = validTickers.map(ticker => {
+      const inst = nseInstrumentMap[ticker];
+      const q    = quotes[inst.securityId];
+      if (!q) return null;
+      const ltp       = q.last_price;
+      const prevClose = q.ohlc?.close;
+      const change    = ltp && prevClose ? ltp - prevClose : 0;
+      const changePct = change && prevClose ? (change / prevClose) * 100 : 0;
+      return {
+        ticker, name: inst.name, price: ltp,
+        change: parseFloat(change.toFixed(2)),
+        changePct: parseFloat(changePct.toFixed(2)),
+        volume: q.volume || 0,
+        open: q.ohlc?.open, high: q.ohlc?.high, low: q.ohlc?.low,
+      };
+    }).filter(Boolean);
+
+    const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
+    const gainers = sorted.filter(s => s.changePct > 0).slice(0, 10);
+    const losers  = [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10);
+    const volume  = [...list].sort((a, b) => b.volume - a.volume).slice(0, 10);
+
+    res.json({ gainers, losers, volume });
+  } catch (e) {
+    console.error('[india/movers]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── GET /india/instruments/status ───────────────────────────────────────────
+// Health check — how many instruments loaded
+app.get('/india/instruments/status', (req, res) => {
+  res.json({ loaded: Object.keys(nseInstrumentMap).length, sample: Object.keys(nseInstrumentMap).slice(0, 5) });
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
