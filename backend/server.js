@@ -953,21 +953,20 @@ app.get('/watchlist/:userId', async (req, res) => {
     const tickers = data.map(r => r.ticker);
 
     if (isIndia) {
-      // Fetch India prices from Dhan
-      const validTickers = tickers.filter(t => nseInstrumentMap[t]);
-      if (!validTickers.length) return res.json(data.map(r => ({ ticker: r.ticker, added_at: r.added_at, market, price: null, changePct: null, change: null })));
-      const secIds    = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
-      const dhanData  = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: secIds });
-      const quotes    = dhanData?.data?.NSE_EQ || {};
-      return res.json(data.map(row => {
-        const inst      = nseInstrumentMap[row.ticker];
-        const q         = inst ? quotes[inst.securityId] : null;
-        const ltp       = q?.last_price || null;
-        const prevClose = q?.ohlc?.close || null;
-        const change    = ltp && prevClose ? parseFloat((ltp - prevClose).toFixed(2)) : null;
-        const changePct = change && prevClose ? parseFloat(((change / prevClose) * 100).toFixed(2)) : null;
-        return { ticker: row.ticker, added_at: row.added_at, market, price: ltp, changePct, change };
-      }));
+      // Fetch India prices from Yahoo Finance (.NS suffix)
+      const priceResults = await Promise.all(
+        tickers.map(async ticker => {
+          const q = await yahooNSEQuote(ticker);
+          return { ticker, q };
+        })
+      );
+      return res.json(priceResults.map(({ ticker, q }) => ({
+        ticker, added_at: data.find(r => r.ticker === ticker)?.added_at,
+        market, price: q?.price || null,
+        changePct: q?.changePct || null,
+        change: q?.change || null,
+        volume: q?.volume || null,
+      })));
     } else {
       // Fetch US prices from Tradier
       const quotes    = await tradierGet(`/v1/markets/quotes?symbols=${tickers.join(',')}&greeks=false`);
@@ -1029,56 +1028,9 @@ app.delete('/watchlist/:userId/:ticker', async (req, res) => {
   }
 });
 
-// ─── Dhan / India market ──────────────────────────────────────────────────────
+// ─── India market — Yahoo Finance (.NS suffix) ────────────────────────────────
 
-let nseInstrumentMap = {};
-
-async function loadNSEInstruments() {
-  try {
-    const csv = await new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: 'images.dhan.co',
-        path: '/api-data/api-scrip-master.csv',
-        method: 'GET',
-        headers: { 'Accept': 'text/csv' }
-      }, res => {
-        let raw = '';
-        res.on('data', c => raw += c);
-        res.on('end', () => resolve(raw));
-      });
-      req.on('error', reject);
-      req.end();
-    });
-
-    const lines = csv.split('\n').slice(1);
-    const map   = {};
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const cols       = line.split(',');
-      const exchange   = cols[0]?.trim();  // NSE, BSE, MCX
-      const segment    = cols[1]?.trim();  // E = Equity
-      const securityId = cols[2]?.trim();  // SEM_SMST_SECURITY_ID
-      const instrument = cols[3]?.trim();  // EQUITY, FUTCUR etc
-      const tradingSym = cols[5]?.trim();  // SEM_TRADING_SYMBOL
-      const customSym  = cols[7]?.trim();  // SEM_CUSTOM_SYMBOL
-      const series     = cols[14]?.trim(); // SEM_SERIES (EQ)
-      const smSymbol   = cols[15]?.trim(); // SM_SYMBOL_NAME
-      if (exchange === 'NSE' && segment === 'E' && instrument === 'EQUITY' && series === 'EQ') {
-        if (securityId && tradingSym) {
-          map[tradingSym] = { securityId, name: smSymbol || customSym || tradingSym };
-        }
-      }
-    }
-    nseInstrumentMap = map;
-    console.log(`[Dhan] Loaded ${Object.keys(map).length} NSE EQ instruments`);
-  } catch (e) {
-    console.error('[Dhan] Failed to load instruments:', e.message);
-  }
-}
-
-loadNSEInstruments();
-setInterval(loadNSEInstruments, 24 * 60 * 60 * 1000);
-
+// Nifty 50 tickers with Yahoo Finance .NS suffix
 const NIFTY50 = [
   'RELIANCE','TCS','HDFCBANK','BHARTIARTL','ICICIBANK','INFOSYS','SBIN','HINDUNILVR',
   'ITC','BAJFINANCE','LT','KOTAKBANK','HCLTECH','AXISBANK','ASIANPAINT','MARUTI',
@@ -1089,138 +1041,149 @@ const NIFTY50 = [
   'TATASTEEL','UPL','ADANIENT','SHRIRAMFIN',
 ];
 
-function dhanPost(path, body) {
-  return new Promise((resolve, reject) => {
-    const bodyStr = JSON.stringify(body);
-    const req = https.request({
-      hostname: 'api.dhan.co', path, method: 'POST',
-      headers: {
-        'Content-Type': 'application/json', 'Accept': 'application/json',
-        'Content-Length': Buffer.byteLength(bodyStr),
-        'access-token': process.env.DHAN_TOKEN,
-        'client-id':    process.env.DHAN_CLIENT_ID,
-      }
-    }, res => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: 'Parse error', raw: data.slice(0,200) }); } });
-    });
-    req.on('error', reject);
-    req.write(bodyStr);
-    req.end();
-  });
+// NSE symbol → display name map
+const NSE_NAMES = {
+  'RELIANCE':'Reliance Industries','TCS':'Tata Consultancy Services','HDFCBANK':'HDFC Bank',
+  'BHARTIARTL':'Bharti Airtel','ICICIBANK':'ICICI Bank','INFOSYS':'Infosys',
+  'SBIN':'State Bank of India','HINDUNILVR':'Hindustan Unilever','ITC':'ITC Ltd',
+  'BAJFINANCE':'Bajaj Finance','LT':'Larsen & Toubro','KOTAKBANK':'Kotak Mahindra Bank',
+  'HCLTECH':'HCL Technologies','AXISBANK':'Axis Bank','ASIANPAINT':'Asian Paints',
+  'MARUTI':'Maruti Suzuki','SUNPHARMA':'Sun Pharmaceutical','TITAN':'Titan Company',
+  'ULTRACEMCO':'UltraTech Cement','NTPC':'NTPC Ltd','POWERGRID':'Power Grid Corp',
+  'WIPRO':'Wipro','JSWSTEEL':'JSW Steel','TATAMOTORS':'Tata Motors',
+  'ADANIPORTS':'Adani Ports','COALINDIA':'Coal India','BAJAJFINSV':'Bajaj Finserv',
+  'TECHM':'Tech Mahindra','INDUSINDBK':'IndusInd Bank','BRITANNIA':'Britannia Industries',
+  'HINDALCO':'Hindalco Industries','BAJAJ-AUTO':'Bajaj Auto','GRASIM':'Grasim Industries',
+  'TATACONSUM':'Tata Consumer Products','CIPLA':'Cipla','APOLLOHOSP':'Apollo Hospitals',
+  'DRREDDY':"Dr. Reddy's Laboratories",'EICHERMOT':'Eicher Motors',
+  'DIVISLAB':"Divi's Laboratories",'HEROMOTOCO':'Hero MotoCorp','BPCL':'BPCL',
+  'ONGC':'ONGC','M&M':'Mahindra & Mahindra','NESTLEIND':'Nestle India',
+  'SBILIFE':'SBI Life Insurance','HDFCLIFE':'HDFC Life Insurance','TATASTEEL':'Tata Steel',
+  'UPL':'UPL Ltd','ADANIENT':'Adani Enterprises','SHRIRAMFIN':'Shriram Finance',
+};
+
+// Fetch Yahoo Finance quote for a single NSE stock
+async function yahooNSEQuote(symbol) {
+  try {
+    const ySymbol = `${symbol}.NS`;
+    const data = await httpsGet(
+      'query1.finance.yahoo.com',
+      `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d`,
+      { 'User-Agent': 'Mozilla/5.0' }
+    );
+    const meta   = data?.chart?.result?.[0]?.meta;
+    const quotes = data?.chart?.result?.[0]?.indicators?.quote?.[0];
+    const closes = data?.chart?.result?.[0]?.timestamp;
+    if (!meta?.regularMarketPrice) return null;
+    const price     = meta.regularMarketPrice;
+    const prevClose = meta.previousClose || meta.chartPreviousClose;
+    const change    = price && prevClose ? price - prevClose : null;
+    const changePct = change && prevClose ? (change / prevClose) * 100 : null;
+    const volume    = meta.regularMarketVolume || 0;
+    return {
+      price, prevClose,
+      change:    change    ? parseFloat(change.toFixed(2))    : null,
+      changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
+      volume, open: meta.regularMarketOpen || null,
+      high: meta.regularMarketDayHigh || null,
+      low:  meta.regularMarketDayLow  || null,
+    };
+  } catch (e) { return null; }
 }
 
-// ─── Debug route — check Dhan CSV loading ────────────────────────────────────
-app.get('/india/debug', async (req, res) => {
+// Fetch Yahoo Finance history for NSE stock
+async function yahooNSEHistory(symbol, range = '3mo') {
   try {
-    const csv = await new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: 'images.dhan.co',
-        path: '/api-data/api-scrip-master.csv',
-        method: 'GET',
-        headers: { 'Accept': 'text/csv' }
-      }, r => {
-        let raw = '';
-        r.on('data', c => raw += c);
-        r.on('end', () => resolve(raw));
-      });
-      req.on('error', reject);
-      req.end();
-    });
-    res.json({
-      length:     csv.length,
-      first500:   csv.slice(0, 500),
-      lineCount:  csv.split('\n').length,
-      firstLines: csv.split('\n').slice(0, 3),
-      mapLoaded:  Object.keys(nseInstrumentMap).length,
-    });
+    const ySymbol  = `${symbol}.NS`;
+    const intervalMap = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1wk' };
+    const interval = intervalMap[range] || '1d';
+    const data = await httpsGet(
+      'query1.finance.yahoo.com',
+      `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}`,
+      { 'User-Agent': 'Mozilla/5.0' }
+    );
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+    const timestamps = result.timestamp || [];
+    const quote      = result.indicators?.quote?.[0] || {};
+    const closes     = quote.close || [];
+    if (!closes.length) return null;
+    return {
+      close: quote.close, open: quote.open, high: quote.high,
+      low: quote.low, volume: quote.volume, timestamps,
+      current: closes[closes.length - 1],
+      prev:    closes[closes.length - 2],
+    };
+  } catch (e) { return null; }
+}
+
+// ─── GET /india/search ────────────────────────────────────────────────────────
+app.get('/india/search', (req, res) => {
+  const q = (req.query.q || '').toUpperCase().trim();
+  if (!q) return res.json([]);
+  const all = NIFTY50.map(sym => ({ ticker: sym, name: NSE_NAMES[sym] || sym, exchange: 'NSE' }));
+  const startsWith = all.filter(s => s.ticker.startsWith(q));
+  const contains   = all.filter(s => !s.ticker.startsWith(q) && (s.ticker.includes(q) || s.name.toUpperCase().includes(q)));
+  res.json([...startsWith, ...contains].slice(0, 10));
+});
+
+// ─── GET /india/quote/:symbol ─────────────────────────────────────────────────
+app.get('/india/quote/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const q = await yahooNSEQuote(symbol);
+    if (!q) return res.status(404).json({ error: `No data for ${symbol}.NS` });
+    res.json({ symbol, name: NSE_NAMES[symbol] || symbol, ...q });
   } catch (e) {
+    console.error('[india/quote]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.get('/india/instruments/status', (req, res) => {
-  res.json({ loaded: Object.keys(nseInstrumentMap).length, sample: Object.keys(nseInstrumentMap).slice(0, 5) });
-});
-
-app.get('/india/search', (req, res) => {
-  const q = (req.query.q || '').toUpperCase().trim();
-  if (!q) return res.json([]);
-  const results = Object.entries(nseInstrumentMap)
-    .filter(([sym]) => sym.startsWith(q)).slice(0, 8)
-    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
-  const seen  = new Set(results.map(r => r.ticker));
-  const fuzzy = Object.entries(nseInstrumentMap)
-    .filter(([sym, info]) => !seen.has(sym) && (sym.includes(q) || info.name?.toUpperCase().includes(q)))
-    .slice(0, 4)
-    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
-  res.json([...results, ...fuzzy].slice(0, 10));
-});
-
-app.get('/india/quote/:symbol', async (req, res) => {
-  const symbol = req.params.symbol.toUpperCase();
-  const inst   = nseInstrumentMap[symbol];
-  if (!inst) return res.status(404).json({ error: `${symbol} not found in NSE instruments` });
-  try {
-    // Dhan expects array of integer security IDs
-    const data = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: [parseInt(inst.securityId)] });
-
-    // Debug: return raw response to diagnose key format
-    if (req.query.debug) return res.json({ raw: data, securityId: inst.securityId, inst });
-
-    // Try both string and integer key lookup
-    const nseData = data?.data?.NSE_EQ || {};
-    const q = nseData[inst.securityId] || nseData[parseInt(inst.securityId)] || Object.values(nseData)[0];
-    if (!q) return res.status(404).json({ error: 'No quote data', raw: data, securityId: inst.securityId });
-
-    const ltp       = q.last_price;
-    const prevClose = q.ohlc?.close;
-    const change    = ltp && prevClose ? ltp - prevClose : null;
-    const changePct = change && prevClose ? (change / prevClose) * 100 : null;
-    res.json({ symbol, securityId: inst.securityId, name: inst.name, price: ltp, open: q.ohlc?.open, high: q.ohlc?.high, low: q.ohlc?.low, prevClose, change: change ? parseFloat(change.toFixed(2)) : null, changePct: changePct ? parseFloat(changePct.toFixed(2)) : null, volume: q.volume });
-  } catch (e) { console.error('[india/quote]', e.message); res.status(500).json({ error: e.message }); }
-});
-
+// ─── GET /india/history/:symbol ───────────────────────────────────────────────
 app.get('/india/history/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const range  = req.query.range || '3mo';
-  const inst   = nseInstrumentMap[symbol];
-  if (!inst) return res.status(404).json({ error: `${symbol} not found` });
-  const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
-  const days    = daysMap[range] || 90;
-  const toDate  = new Date().toISOString().split('T')[0];
-  const fromDate= new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   try {
-    const data = await dhanPost('/v2/charts/historical', { securityId: inst.securityId, exchangeSegment: 'NSE_EQ', instrument: 'EQUITY', expiryCode: 0, oi: false, fromDate, toDate });
-    if (!data?.open?.length) return res.status(404).json({ error: 'No history data' });
-    res.json({ chart: { result: [{ meta: { symbol, currency: 'INR' }, timestamp: data.timestamp, indicators: { quote: [{ open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume }] } }] } });
-  } catch (e) { console.error('[india/history]', e.message); res.status(500).json({ error: e.message }); }
+    const data = await yahooNSEHistory(symbol, range);
+    if (!data) return res.status(404).json({ error: `No history for ${symbol}.NS` });
+    res.json({ chart: { result: [{ meta: { symbol, currency: 'INR' },
+      timestamp: data.timestamps,
+      indicators: { quote: [{ open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume }] }
+    }] } });
+  } catch (e) {
+    console.error('[india/history]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
+// ─── GET /india/movers ────────────────────────────────────────────────────────
 app.get('/india/movers', async (req, res) => {
   try {
-    const validTickers = NIFTY50.filter(t => nseInstrumentMap[t]);
-    const secIds       = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
-    const data         = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: secIds });
-    const quotes = data?.data?.NSE_EQ || {};
-    const list = validTickers.map(ticker => {
-      const inst      = nseInstrumentMap[ticker];
-      const q         = quotes[inst.securityId] || quotes[parseInt(inst.securityId)];
-      if (!q) return null;
-      const ltp       = q.last_price;
-      const prevClose = q.ohlc?.close;
-      const change    = ltp && prevClose ? ltp - prevClose : 0;
-      const changePct = change && prevClose ? (change / prevClose) * 100 : 0;
-      return { ticker, name: inst.name, price: ltp, change: parseFloat(change.toFixed(2)), changePct: parseFloat(changePct.toFixed(2)), volume: q.volume || 0 };
-    }).filter(Boolean);
-    const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
+    // Fetch all Nifty 50 quotes in parallel batches of 10
+    const batchSize = 10;
+    const results   = [];
+    for (let i = 0; i < NIFTY50.length; i += batchSize) {
+      const batch = NIFTY50.slice(i, i + batchSize);
+      const batchResults = await Promise.all(batch.map(async ticker => {
+        const q = await yahooNSEQuote(ticker);
+        if (!q || q.price == null) return null;
+        return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
+      }));
+      results.push(...batchResults.filter(Boolean));
+      if (i + batchSize < NIFTY50.length) await sleep(200);
+    }
+
+    const sorted  = [...results].sort((a, b) => b.changePct - a.changePct);
     res.json({
       gainers: sorted.filter(s => s.changePct > 0).slice(0, 10),
-      losers:  [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
-      volume:  [...list].sort((a, b) => b.volume - a.volume).slice(0, 10),
+      losers:  [...results].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
+      volume:  [...results].sort((a, b) => b.volume - a.volume).slice(0, 10),
     });
-  } catch (e) { console.error('[india/movers]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('[india/movers]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
