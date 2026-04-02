@@ -1170,15 +1170,25 @@ async function getNSEHistory(symbol, range = '3mo') {
       const data  = await nseIndia.getEquityHistoricalData(symbol, { start, end });
       const rows  = data?.[0]?.data || data || [];
       if (rows.length) {
-        const sorted = [...rows].sort((a, b) => new Date(a.CH_TIMESTAMP) - new Date(b.CH_TIMESTAMP));
-        const closes = sorted.map(r => r.CH_CLOSING_PRICE).filter(Boolean);
+        const sorted = [...rows].sort((a, b) => {
+          // mtimestamp format: "09-Mar-2026" — parse it
+          const parseDate = s => {
+            const [d, m, y] = s.split('-');
+            return new Date(`${m} ${d} ${y}`).getTime();
+          };
+          return parseDate(a.mtimestamp) - parseDate(b.mtimestamp);
+        });
+        const closes = sorted.map(r => r.chClosingPrice).filter(Boolean);
         result = {
-          close:      sorted.map(r => r.CH_CLOSING_PRICE),
-          open:       sorted.map(r => r.CH_OPENING_PRICE),
-          high:       sorted.map(r => r.CH_TRADE_HIGH_PRICE),
-          low:        sorted.map(r => r.CH_TRADE_LOW_PRICE),
-          volume:     sorted.map(r => r.CH_TOT_TRADED_QTY),
-          timestamps: sorted.map(r => new Date(r.CH_TIMESTAMP).getTime()),
+          close:      sorted.map(r => r.chClosingPrice),
+          open:       sorted.map(r => r.chOpeningPrice),
+          high:       sorted.map(r => r.chTradeHighPrice),
+          low:        sorted.map(r => r.chTradeLowPrice),
+          volume:     sorted.map(r => r.chTotTradedQty),
+          timestamps: sorted.map(r => {
+            const [d, m, y] = r.mtimestamp.split('-');
+            return new Date(`${m} ${d} ${y}`).getTime();
+          }),
           current:    closes[closes.length - 1],
           prev:       closes[closes.length - 2],
         };
