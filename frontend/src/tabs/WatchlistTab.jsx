@@ -61,10 +61,9 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
   const [expanded,  setExpanded]  = useState(false);
   const [activeId,  setActiveId]  = useState(null);
 
-  // Use preloaded scan data directly
-  const scanData  = preloadedScan?.data  || null;
+  const scanData  = preloadedScan?.data    || null;
   const scanning  = preloadedScan?.loading || false;
-  const scanError = preloadedScan?.error || '';
+  const scanError = preloadedScan?.error   || '';
 
   const isUp     = item.changePct > 0;
   const isDown   = item.changePct < 0;
@@ -75,11 +74,11 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* ── Main row ── */}
+      {/* ── Main row — all columns fixed width, no flex-grow ── */}
       <div
         onClick={handleExpand}
         style={{
-          display: 'flex', alignItems: 'center', gap: 12,
+          display: 'flex', alignItems: 'center',
           padding: '14px 16px', cursor: 'pointer',
           background: expanded ? '#0f0f1a' : 'transparent',
           transition: 'background 0.15s',
@@ -87,14 +86,14 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
         onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = '#0d0d18'; }}
         onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = 'transparent'; }}
       >
-        {/* Ticker */}
-        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: '#ffaa00', lineHeight: 1, minWidth: 70, flexShrink: 0 }}>
+        {/* Ticker — fixed 72px */}
+        <div style={{ width: 72, flexShrink: 0, fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: '#ffaa00', lineHeight: 1 }}>
           {item.ticker}
         </div>
 
-        {/* Price + change */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 160 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>
+        {/* Price + change — fixed 120px */}
+        <div style={{ width: 120, flexShrink: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
             {fmtPrice(item.price)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, color: pctColor, marginTop: 2 }}>
@@ -104,19 +103,16 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           </div>
         </div>
 
-        {/* Signal badge or loading */}
-        <div style={{ flexShrink: 0, width: 90, textAlign: 'center' }}>
+        {/* Signal badge — fixed 96px with left margin for spacing */}
+        <div style={{ width: 96, flexShrink: 0, marginLeft: 8, textAlign: 'center' }}>
           {scanning ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
               <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #ffaa0022', borderTop: '2px solid #ffaa00', animation: 'spin 0.8s linear infinite' }} />
               <div style={{ fontSize: 9, color: '#ffaa0066', letterSpacing: '0.05em' }}>ANALYZING</div>
             </div>
           ) : scanData?.analysis ? (
-            <div style={{
-              background: sigColor + '11', border: `1px solid ${sigColor}44`,
-              padding: '5px 10px', borderRadius: 2,
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
+            <div style={{ background: sigColor + '11', border: `1px solid ${sigColor}44`, padding: '5px 8px', borderRadius: 2 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
                 {scanData.analysis.signal}
               </div>
               <div style={{ fontSize: 9, color: sigColor + '88', marginTop: 2 }}>
@@ -124,12 +120,12 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: 9, color: '#3a3a5e', letterSpacing: '0.05em' }}>—</div>
+            <div style={{ fontSize: 9, color: '#3a3a5e' }}>—</div>
           )}
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        {/* Actions — pushed to far right */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onOpenOptions(item.ticker)}
             style={{
@@ -155,7 +151,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           >{removing === item.ticker ? '...' : '✕'}</button>
         </div>
 
-        <div style={{ fontSize: 12, color: expanded ? '#ffaa00' : '#3a3a5e', flexShrink: 0 }}>
+        <div style={{ fontSize: 12, color: expanded ? '#ffaa00' : '#3a3a5e', flexShrink: 0, marginLeft: 8 }}>
           {expanded ? '▲' : '▼'}
         </div>
       </div>
@@ -166,28 +162,20 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           {scanError && (
             <div style={{ fontSize: 11, color: '#ff4444', padding: '10px 0' }}>{scanError}</div>
           )}
-
           {scanning && (
             <div style={{ fontSize: 11, color: '#ffaa0066', padding: '12px 0', textAlign: 'center', letterSpacing: '0.15em' }}>
               RUNNING LONG TERM ANALYSIS...
             </div>
           )}
-
           {scanData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 }}>
 
-              {/* Summary line */}
               {scanData.analysis && (
-                <div style={{
-                  fontSize: 12, color: '#d0d8f0', lineHeight: 1.7,
-                  borderLeft: `2px solid ${sigColor}44`, paddingLeft: 10,
-                  fontStyle: 'italic', marginBottom: 4,
-                }}>
+                <div style={{ fontSize: 12, color: '#d0d8f0', lineHeight: 1.7, borderLeft: `2px solid ${sigColor}44`, paddingLeft: 10, fontStyle: 'italic', marginBottom: 4 }}>
                   {scanData.analysis.thesis}
                 </div>
               )}
 
-              {/* Accordion 1: Technicals */}
               <AccordionCard
                 id="technicals"
                 activeId={activeId}
@@ -196,7 +184,6 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                 preview={scanData.ta ? `RSI ${scanData.ta.rsi14} · ${scanData.ta.trendSignal} · Vol ${scanData.ta.volumeRatio}x` : ''}
               >
                 <div style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {/* TA grid */}
                   {scanData.ta && (
                     <div>
                       <div style={{ fontSize: 9, color: '#4488ff', letterSpacing: '0.15em', fontWeight: 700, marginBottom: 8 }}>TECHNICAL</div>
@@ -221,21 +208,19 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                       </div>
                     </div>
                   )}
-
-                  {/* Fundamentals */}
                   {scanData.fundamentals && (
                     <div>
                       <div style={{ fontSize: 9, color: '#ffaa00', letterSpacing: '0.15em', fontWeight: 700, marginBottom: 8 }}>FUNDAMENTALS</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                         {[
-                          ['P/E',         scanData.fundamentals.pe?.toFixed(1)],
-                          ['EPS',         scanData.fundamentals.eps ? `$${scanData.fundamentals.eps.toFixed(2)}` : null],
-                          ['Beta',        scanData.fundamentals.beta?.toFixed(2)],
-                          ['52W High',    scanData.fundamentals.fiftyTwoWeekHigh ? `$${scanData.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
-                          ['52W Low',     scanData.fundamentals.fiftyTwoWeekLow  ? `$${scanData.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
-                          ['ROE',         scanData.fundamentals.roe ? `${(scanData.fundamentals.roe * 100).toFixed(1)}%` : null],
-                          ['Rev Growth',  scanData.fundamentals.revenueGrowth ? `${(scanData.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
-                          ['Target',      scanData.fundamentals.targetMeanPrice ? `$${scanData.fundamentals.targetMeanPrice.toFixed(2)}` : null],
+                          ['P/E',        scanData.fundamentals.pe?.toFixed(1)],
+                          ['EPS',        scanData.fundamentals.eps ? `$${scanData.fundamentals.eps.toFixed(2)}` : null],
+                          ['Beta',       scanData.fundamentals.beta?.toFixed(2)],
+                          ['52W High',   scanData.fundamentals.fiftyTwoWeekHigh ? `$${scanData.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
+                          ['52W Low',    scanData.fundamentals.fiftyTwoWeekLow  ? `$${scanData.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
+                          ['ROE',        scanData.fundamentals.roe ? `${(scanData.fundamentals.roe * 100).toFixed(1)}%` : null],
+                          ['Rev Growth', scanData.fundamentals.revenueGrowth ? `${(scanData.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
+                          ['Target',     scanData.fundamentals.targetMeanPrice ? `$${scanData.fundamentals.targetMeanPrice.toFixed(2)}` : null],
                         ].filter(([, v]) => v != null).map(([k, v]) => (
                           <div key={k} style={{ background: '#0a0a12', padding: '6px 8px', borderRadius: 3 }}>
                             <div style={{ fontSize: 8, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
@@ -245,8 +230,6 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                       </div>
                     </div>
                   )}
-
-                  {/* Bull / Bear */}
                   {scanData.analysis && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       <div style={{ background: '#070e0a', border: '1px solid #00ff8822', borderRadius: 4, padding: '10px' }}>
@@ -270,7 +253,6 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                 </div>
               </AccordionCard>
 
-              {/* Accordion 2: News */}
               <AccordionCard
                 id="news"
                 activeId={activeId}
@@ -315,14 +297,14 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
   const userId   = user?.id;
   const { plan } = useUsage();
 
-  const [items,      setItems]      = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [inputVal,   setInputVal]   = useState('');
-  const [adding,     setAdding]     = useState(false);
-  const [error,      setError]      = useState('');
-  const [showUpgrade,setShowUpgrade]= useState(false);
-  const [removing,   setRemoving]   = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [items,       setItems]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [inputVal,    setInputVal]    = useState('');
+  const [adding,      setAdding]      = useState(false);
+  const [error,       setError]       = useState('');
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [removing,    setRemoving]    = useState(null);
+  const [refreshing,  setRefreshing]  = useState(false);
 
   const fetchWatchlist = useCallback(async (silent = false) => {
     if (!userId) return;
@@ -379,7 +361,6 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
     <div>
       {showUpgrade && <UpgradeModal type="watchlist" onClose={() => setShowUpgrade(false)} />}
 
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: '#ffaa00', lineHeight: 1 }}>WATCHLIST</div>
@@ -393,7 +374,6 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
         </button>
       </div>
 
-      {/* Add ticker */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
@@ -416,7 +396,6 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
 
       {error && <div style={{ fontSize: 11, color: '#ff4444', marginBottom: 10 }}>{error}</div>}
 
-      {/* Capacity bar */}
       {!isPro && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
