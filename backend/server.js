@@ -719,6 +719,7 @@ app.post('/api/analyze/combined', async (req, res) => {
       system: `You are a quantitative trading analyst and expert options trader.
 HARD RULES: 1.RSI>70+CALL=overbought 2.RSI<30+PUT=oversold 3.StochRSI>90+CALL=extreme overbought 4.StochRSI<10+PUT=extreme oversold 5.Earnings BEFORE expiry+CRITICAL/HIGH=consider NEUTRAL 6.Down>2%+PUT=assess 7.Up>2%+CALL=assess 8.Wide spread=avoid
 NEUTRAL only when multiple HARD RULES fire. Do NOT default to NEUTRAL.
+THESIS RULE: The "thesis" must be 2-3 sentences combining: (1) what the company does and its sector context, (2) the key fundamental driver (earnings, growth, valuation, analyst rating), (3) the technical setup. Never write a purely technical thesis.
 Return ONLY JSON with keys "price" and "options". No markdown.`,
       messages: [{ role: 'user', content: `Analyze ${ticker} @ $${price?.toFixed(2)} | ${tf.label} | Expiry: ${expiry}
 Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'} | ${new Date().toLocaleDateString()}
@@ -763,6 +764,7 @@ app.post('/api/analyze/price', async (req, res) => {
       system: `You are a quantitative trading analyst. Timeframe: ${tf.label}. Focus: ${tf.focus}
 [UPGRADE]/[INSIDER/FUND]=bullish. [DOWNGRADE]/[SHORT ATTACK]=bearish.
 Use ATR for stop/target sizing. SMA200 dist >15% = extended.
+THESIS RULE: The "thesis" must be 2-3 sentences combining: (1) what the company does and its sector context, (2) the key fundamental driver (earnings, growth, valuation, analyst rating), (3) the technical setup. Never write a purely technical thesis.
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
       messages: [{ role: 'user', content: `${ticker} @ $${price?.toFixed(2)} | ${tf.label}
 PRICE (5): ${JSON.stringify(ohlcv?.close?.slice(-5))}
@@ -843,6 +845,7 @@ app.post('/api/analyze/watchlist', async (req, res) => {
       model: 'claude-sonnet-4-20250514', max_tokens: 800, temperature: 0,
       system: `You are a quantitative trading analyst. Timeframe: Long Term (6-12 months).
 Focus: fundamentals, macro cycle, SMA200, analyst consensus.
+THESIS RULE: The "thesis" must be 2-3 sentences combining: (1) what the company does and its sector context, (2) the key fundamental driver (earnings, growth, valuation, analyst rating), (3) the long-term technical setup. Never write a purely technical thesis.
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH"}`,
       messages: [{ role: 'user', content: `${ticker} @ $${price?.toFixed(2)} | LONG TERM
 PRICE (5): ${JSON.stringify(ohlcv?.close?.slice(-5))}
