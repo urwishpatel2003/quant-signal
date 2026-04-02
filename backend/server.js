@@ -1277,10 +1277,12 @@ let nseInstrumentMap = {}; // { 'RELIANCE': { securityId: '2885', name: 'RELIANC
 
 async function loadNSEInstruments() {
   try {
-    const data = await new Promise((resolve, reject) => {
+    const csv = await new Promise((resolve, reject) => {
       const req = https.request({
-        hostname: 'api.dhan.co', path: '/v2/instruments/NSE_EQ', method: 'GET',
-        headers: { 'Accept': 'text/csv', 'access-token': process.env.DHAN_TOKEN, 'client-id': process.env.DHAN_CLIENT_ID }
+        hostname: 'images.dhan.co',
+        path: '/api-data/api-scrip-master.csv',
+        method: 'GET',
+        headers: { 'Accept': 'text/csv' }
       }, res => {
         let raw = '';
         res.on('data', c => raw += c);
@@ -1290,25 +1292,27 @@ async function loadNSEInstruments() {
       req.end();
     });
 
-    // Parse CSV — columns: SEM_EXM_EXCH_ID, SEM_SEGMENT, SEM_SMST_SECURITY_ID, SEM_INSTRUMENT_NAME, SEM_TRADING_SYMBOL, SEM_LOT_UNITS, SEM_CUSTOM_SYMBOL, SEM_EXPIRY_DATE, SEM_STRIKE_PRICE, SEM_OPTION_TYPE, SEM_FUT_FLAG, SEM_EXPIRY_FLAG
-    const lines = data.split('\n').slice(1); // skip header
+    // Compact CSV columns:
+    // SEM_EXM_EXCH_ID, SEM_SEGMENT, SEM_SMST_SECURITY_ID, SEM_INSTRUMENT_NAME,
+    // SM_SYMBOL_NAME, SEM_LOT_UNITS, SEM_CUSTOM_SYMBOL, SEM_EXPIRY_DATE,
+    // SEM_STRIKE_PRICE, SEM_OPTION_TYPE, SEM_SERIES, SEM_TICK_SIZE, SEM_EXPIRY_FLAG
+    const lines = csv.split('\n').slice(1);
     const map = {};
     for (const line of lines) {
       if (!line.trim()) continue;
-      const cols = line.split(',');
-      const securityId    = cols[2]?.trim();
-      const tradingSymbol = cols[4]?.trim();
-      const name          = cols[6]?.trim() || cols[4]?.trim();
-      if (securityId && tradingSymbol) {
-        map[tradingSymbol] = { securityId, name };
-      }
-    }
-    nseInstrumentMap = map;
-    console.log(`[Dhan] Loaded ${Object.keys(map).length} NSE instruments`);
-  } catch (e) {
-    console.error('[Dhan] Failed to load instruments:', e.message);
-  }
-}
+      const cols    = line.split(',');
+      const exchange   = cols[0]?.trim(); // NSE, BSE, MCX
+      const segment    = cols[1]?.trim(); // E = Equity
+      const securityId = cols[2]?.trim();
+      const instrument = cols[3]?.trim(); // EQUITY, FUTIDX etc
+      const symbolName = cols[4]?.trim(); // SM_SYMBOL_NAME
+      const customSymbol = cols[6]?.trim(); // SEM_CUSTOM_SYMBOL / display name
+      const series     = cols[10]?.trim(); // EQ series
+
+      // Only NSE Equity in EQ series
+      if (exchange === 'NSE' && segment === 'E' && instrument === 'EQUITY' && series === 'EQ') {
+        if (securityId && symbolName) {
+          map[symbolName] = { securityId, name: customSymbol || symbolName };
 
 // Load on startup and refresh daily
 loadNSEInstruments();
