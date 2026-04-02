@@ -52,7 +52,7 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
 }
 
 export default function ScannerResults({ scan, macro, onBack, onOpenOptions }) {
-  const [activeId, setActiveId] = useState(null);
+  const [activeId, setActiveId] = useState('ticker');
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
   const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
