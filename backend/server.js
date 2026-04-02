@@ -109,7 +109,7 @@ app.post('/usage/:userId/track', async (req, res) => {
 });
 
 app.post('/stripe/checkout', async (req, res) => {
-  const { userId, email } = req.body;
+  const { userId, email, market = 'US' } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
   try {
     await getOrCreateUser(userId, email);
@@ -122,12 +122,20 @@ app.post('/stripe/checkout', async (req, res) => {
       customerId = customer.id;
       await supabase.from('users').update({ stripe_customer_id: customerId }).eq('id', userId);
     }
+    // Use INR price for India users, USD for everyone else
+    const priceId = market === 'INDIA'
+      ? process.env.STRIPE_PRICE_ID_INR   // ₹249/mo
+      : process.env.STRIPE_PRICE_ID;       // $5/mo
+    if (!priceId) {
+      console.error('[stripe checkout] Missing price ID for market:', market);
+      return res.status(500).json({ error: 'Pricing not configured for this market' });
+    }
     const session = await stripe.checkout.sessions.create({
       customer:   customerId, mode: 'subscription',
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.FRONTEND_URL || 'https://quaint-signal.tech'}/?upgraded=true`,
       cancel_url:  `${process.env.FRONTEND_URL  || 'https://quaint-signal.tech'}/?cancelled=true`,
-      metadata:    { clerk_user_id: userId },
+      metadata:    { clerk_user_id: userId, market },
     });
     res.json({ url: session.url });
   } catch (e) {
@@ -1122,35 +1130,175 @@ app.delete('/watchlist/:userId/:ticker', async (req, res) => {
 // ─── India market — Yahoo Finance (.NS suffix) ────────────────────────────────
 
 // Nifty 50 tickers with Yahoo Finance .NS suffix
-const NIFTY50 = [
+const NIFTY500 = [
+  'HDFCBANK','ICICIBANK','KOTAKBANK','SBIN','AXISBANK','BAJFINANCE','BAJAJFINSV','SHRIRAMFIN',
+  'SBILIFE','HDFCLIFE','ICICIPRULI','ICICIGI','SBICARD','HDFCAMC','NIPPONLIFE','UTIAMC',
+  'BANKBARODA','CANBK','PNB','UNIONBANK','IDFCFIRSTB','FEDERALBNK','INDUSINDBK','BANDHANBNK',
+  'AUBANK','CHOLAFIN','MUTHOOTFIN','LICHSGFIN','RECLTD','PFC','IRFC','M&MFIN',
+  'SUNDARMFIN','LTFH','ABCAPITAL','POONAWALLA','MANAPPURAM','CREDITACC','IIFL','360ONE',
+  'ANGELONE','MOTILALOFS','NUVAMA','CANFINHOME','HOMEFIRST','AAVAS','APTUS','RBLBANK',
+  'JMFINANCIL','EDELWEISS','STARHEALTH','GODIGIT','NIACL','GICRE','LICINDIA','BSE',
+  'CDSL','MCX','CAMS','KFINTECH','TCS','INFOSYS','HCLTECH','WIPRO',
+  'TECHM','LTIM','MPHASIS','PERSISTENT','COFORGE','KPITTECH','LTTS','TATAELXSI',
+  'CYIENT','BIRLASOFT','OFSS','HEXAWARE','NIIT','ZENSAR','SONATSOFTW','INTELLECT',
+  'NEWGEN','TANLA','ROUTE','MASTEK','FSL','RAMSARUP','NAUKRI','INDIAMART',
+  'JUSTDIAL','CARTRADE','DELHIVERY','ZOMATO','PAYTM','POLICYBZR','RELIANCE','ONGC',
+  'BPCL','IOC','HINDPETRO','GAIL','PETRONET','GSPL','MGL','IGL',
+  'ATGL','MRPL','CASTROLIND','GULFOILLUB','MARUTI','TATAMOTORS','M&M','BAJAJ-AUTO',
+  'HEROMOTOCO','EICHERMOT','TVSMOTOR','ASHOKLEY','ESCORTS','FORCEMOT','BHARATFORG','MOTHERSON',
+  'BALKRISIND','MRF','APOLLOTYRE','CEATLTD','JKTYRE','EXIDEIND','AMARAJABAT','BOSCHLTD',
+  'SUNDRMFAST','ENDURANCE','SUPRAJIT','GABRIEL','UNOMINDA','MAHINDCIE','CRAFTSMAN','SUBROS',
+  'SETCO','TIINDIA','SCHAEFFLER','SKFINDIA','TIMKEN','GREAVESCOT','HINDUNILVR','ITC',
+  'NESTLEIND','BRITANNIA','TATACONSUM','DABUR','GODREJCP','MARICO','COLPAL','EMAMILTD',
+  'JYOTHYLAB','BAJAJCON','VBLLTD','RADICO','UNITDSPR','MCDOWELL-N','PGHH','GILLETTE',
+  'ZYDUSWELL','HONASA','BIKAJI','CCL','TASTYBITELTD','SUNPHARMA','DRREDDY','CIPLA',
+  'DIVISLAB','BIOCON','AUROPHARMA','TORNTPHARM','LUPIN','ALKEM','GLENMARK','IPCALAB',
+  'ABBOTINDIA','GLAXO','PFIZER','SANOFI','NATCOPHARM','GRANULES','LAURUSLABS','ZYDUSLIFE',
+  'JBCHEPHARM','GLAND','SUVEN','SOLARA','SEQUENT','APLLTD','AJANTPHARM','ERIS',
+  'MARKSANS','APOLLOHOSP','MAXHEALTH','FORTIS','LALPATHLAB','METROPOLIS','THYROCARE','KRSNAA',
+  'VIJAYADIAG','HEALTHCARE','NARAYANHRU','KIMS','LT','SIEMENS','ABB','BHEL',
+  'THERMAX','CUMMINSIND','KECL','KALPATPOWR','AHLUCONT','NCC','PNC','IRB',
+  'HGINFRA','GPIL','HAL','BEL','BHFC','COCHINSHIP','MAZAGON','GRSE',
+  'BEML','RAILTEL','RVNL','IRCON','NBCC','ENGINERSIN','VOLTAS','BLUESTARCO',
+  'WHIRLPOOL','HAVELLS','POLYCAB','KEI','FINOLEX','APAR','TATASTEEL','JSWSTEEL',
+  'HINDALCO','VEDL','NATIONALUM','SAIL','NMDC','COALINDIA','MOIL','HINDCOPPER',
+  'WELCORP','RATNAMANI','JINDALSAW','JSPL','APLAPOLLO','KALYANKJIL','TITAN','RAJESHEXPO',
+  'PCJEWELLER','ULTRACEMCO','SHREECEM','AMBUJACEM','ACCIND','RAMCOCEM','JKCEMENT','DALMIACEMT',
+  'BIRLACORPN','HEIDELBERG','INDIACEM','GRASIM','NCLIND','JKIL','DLF','GODREJPROP',
+  'OBEROIRLTY','PRESTIGE','BRIGADE','SOBHA','PHOENIXLTD','MAHLIFE','KOLTEPATIL','SUNTECK',
+  'ANANTRAJ','LODHA','SIGNATURE','RAYMOND','TREEHOUSE','NTPC','POWERGRID','ADANIPOWER',
+  'ADANIGREEN','TATAPOWER','TORNTPOWER','CESC','NHPC','SJVN','JSWENERGY','INDIAGRID',
+  'POWERMECH','BHARTIARTL','IDEA','TATACOMM','HFCL','STLTECH','INDUS','CROMPTON',
+  'ORIENTELEC','VAIBHAVGBL','AMBER','DIXON','PGEL','VEDANT','NYKAA','BATA',
+  'RELAXO','METROBRAND','VMART','SHOPERSTOP','TRENTLTD','ABFRL','GOCOLORS','MANYAVAR',
+  'SUNTV','ZEEL','PVRINOX','NETWORK18','TV18BRDCST','JAGRAN','CONCOR','IRCTC',
+  'BLUEDART','GATI','VRL','MAHLOG','TCI','SHREYAS','SICAL','INDIAPORT',
+  'INDHOTEL','LEMONTRE','CHALET','EIHOTEL','MAHINDHOLIDAYS','PIDILITIND','VINATIORGA','AARTIIND',
+  'DEEPAKNITR','NAVINFLUOR','SRF','FLUOROCHEM','CLEAN','ROSSARI','NEOGEN','SUDARSCHEM',
+  'FINEORG','GALAXYSURF','TATACHEM','GHCL','ATUL','NOCIL','DHARAMSI','IOLCP',
+  'COROMANDEL','CHAMBLFERT','GNFC','GSFC','FACT','KSCL','RALSIL','PI',
+  'BAYER','DHANUKA','ASTEC','SUMICHEM','JSWHL','TRIDENT','PAGEIND','ARVIND',
+  'VARDHACRLC','WELSPUNIND','SPANDANA','UFLEX','BALRAMCHIN','DHAMPUR','RENUKA','ADANIENT',
+  'ADANIPORTS','BAJAJHLDNG','3MINDIA','HONAUT','GOODYEAR',
+];
+const NIFTY50 = NIFTY500.slice(0, 50); // backward compat
+
+const NIFTY100 = [
   'RELIANCE','TCS','HDFCBANK','BHARTIARTL','ICICIBANK','INFOSYS','SBIN','HINDUNILVR',
   'ITC','BAJFINANCE','LT','KOTAKBANK','HCLTECH','AXISBANK','ASIANPAINT','MARUTI',
   'SUNPHARMA','TITAN','ULTRACEMCO','NTPC','POWERGRID','WIPRO','JSWSTEEL','TATAMOTORS',
-  'ADANIPORTS','COALINDIA','BAJAJFINSV','TECHM','INDUSINDBK','BRITANNIA','HINDALCO',
-  'BAJAJ-AUTO','GRASIM','TATACONSUM','CIPLA','APOLLOHOSP','DRREDDY','EICHERMOT',
-  'DIVISLAB','HEROMOTOCO','BPCL','ONGC','M&M','NESTLEIND','SBILIFE','HDFCLIFE',
-  'TATASTEEL','UPL','ADANIENT','SHRIRAMFIN',
+  'ADANIPORTS','COALINDIA','BAJAJFINSV','TECHM','NESTLEIND','TATASTEEL','ONGC','DRREDDY',
+  'BAJAJ-AUTO','DIVISLAB','CIPLA','EICHERMOT','APOLLOHOSP','HINDALCO','BRITANNIA','TATACONSUM',
+  'GRASIM','HEROMOTOCO','ADANIENT','INDUSINDBK','M&M','BPCL','SHRIRAMFIN','SBILIFE',
+  'HDFCLIFE','TRENT','DMART','ZOMATO','LTIM','VEDL','PIDILITIND','HAL',
+  'SIEMENS','AMBUJACEM','GODREJCP','BOSCHLTD','MOTHERSON','BANKBARODA','RECLTD','PFC',
+  'CANBK','INDIGO','ADANIGREEN','ADANIPOWER','ATGL','NAUKRI','MCDOWELL-N','HAVELLS',
+  'DABUR','MARICO','COLPAL','BERGEPAINT','PGHH','PAGEIND','MUTHOOTFIN','CHOLAFIN',
+  'TORNTPHARM','LUPIN','AUROPHARMA','BIOCON','ALKEM','IPCALAB','ABBOTINDIA','GLAXO',
+  'LALPATHLAB','SJVN','NHPC','CESC','TORNTPOWER','DLF','GODREJPROP','OBEROIRLTY',
+  'TATAPOWER','JSWENERGY','POLYCAB','BEL',
 ];
 
 // NSE symbol → display name map
 const NSE_NAMES = {
-  'RELIANCE':'Reliance Industries','TCS':'Tata Consultancy Services','HDFCBANK':'HDFC Bank',
-  'BHARTIARTL':'Bharti Airtel','ICICIBANK':'ICICI Bank','INFOSYS':'Infosys',
-  'SBIN':'State Bank of India','HINDUNILVR':'Hindustan Unilever','ITC':'ITC Ltd',
-  'BAJFINANCE':'Bajaj Finance','LT':'Larsen & Toubro','KOTAKBANK':'Kotak Mahindra Bank',
-  'HCLTECH':'HCL Technologies','AXISBANK':'Axis Bank','ASIANPAINT':'Asian Paints',
-  'MARUTI':'Maruti Suzuki','SUNPHARMA':'Sun Pharmaceutical','TITAN':'Titan Company',
-  'ULTRACEMCO':'UltraTech Cement','NTPC':'NTPC Ltd','POWERGRID':'Power Grid Corp',
-  'WIPRO':'Wipro','JSWSTEEL':'JSW Steel','TATAMOTORS':'Tata Motors',
-  'ADANIPORTS':'Adani Ports','COALINDIA':'Coal India','BAJAJFINSV':'Bajaj Finserv',
-  'TECHM':'Tech Mahindra','INDUSINDBK':'IndusInd Bank','BRITANNIA':'Britannia Industries',
-  'HINDALCO':'Hindalco Industries','BAJAJ-AUTO':'Bajaj Auto','GRASIM':'Grasim Industries',
-  'TATACONSUM':'Tata Consumer Products','CIPLA':'Cipla','APOLLOHOSP':'Apollo Hospitals',
-  'DRREDDY':"Dr. Reddy's Laboratories",'EICHERMOT':'Eicher Motors',
-  'DIVISLAB':"Divi's Laboratories",'HEROMOTOCO':'Hero MotoCorp','BPCL':'BPCL',
-  'ONGC':'ONGC','M&M':'Mahindra & Mahindra','NESTLEIND':'Nestle India',
-  'SBILIFE':'SBI Life Insurance','HDFCLIFE':'HDFC Life Insurance','TATASTEEL':'Tata Steel',
-  'UPL':'UPL Ltd','ADANIENT':'Adani Enterprises','SHRIRAMFIN':'Shriram Finance',
+  'HDFCBANK':'HDFC Bank','ICICIBANK':'ICICI Bank','KOTAKBANK':'Kotak Mahindra Bank','SBIN':'State Bank of India',
+  'AXISBANK':'Axis Bank','BAJFINANCE':'Bajaj Finance','BAJAJFINSV':'Bajaj Finserv','SHRIRAMFIN':'Shriram Finance',
+  'SBILIFE':'SBI Life Insurance','HDFCLIFE':'HDFC Life Insurance','ICICIPRULI':'ICICI Prudential Life','ICICIGI':'ICICI Lombard General',
+  'SBICARD':'SBI Cards & Payment','HDFCAMC':'HDFC AMC','NIPPONLIFE':'Nippon Life India AMC','UTIAMC':'UTI AMC',
+  'BANKBARODA':'Bank of Baroda','CANBK':'Canara Bank','PNB':'Punjab National Bank','UNIONBANK':'Union Bank of India',
+  'IDFCFIRSTB':'IDFC First Bank','FEDERALBNK':'Federal Bank','INDUSINDBK':'IndusInd Bank','BANDHANBNK':'Bandhan Bank',
+  'AUBANK':'AU Small Finance Bank','CHOLAFIN':'Cholamandalam Investment','MUTHOOTFIN':'Muthoot Finance','LICHSGFIN':'LIC Housing Finance',
+  'RECLTD':'REC Ltd','PFC':'Power Finance Corp','IRFC':'Indian Railway Finance','M&MFIN':'Mahindra & Mahindra Financial',
+  'SUNDARMFIN':'Sundaram Finance','LTFH':'L&T Finance','ABCAPITAL':'Aditya Birla Capital','POONAWALLA':'Poonawalla Fincorp',
+  'MANAPPURAM':'Manappuram Finance','CREDITACC':'CreditAccess Grameen','IIFL':'IIFL Finance','360ONE':'360 ONE WAM',
+  'ANGELONE':'Angel One','MOTILALOFS':'Motilal Oswal Financial','NUVAMA':'Nuvama Wealth Management','CANFINHOME':'Can Fin Homes',
+  'HOMEFIRST':'Home First Finance','AAVAS':'Aavas Financiers','APTUS':'Aptus Value Housing Finance','RBLBANK':'RBL Bank',
+  'JMFINANCIL':'JM Financial','EDELWEISS':'Edelweiss Financial','STARHEALTH':'Star Health Insurance','GODIGIT':'Go Digit General Insurance',
+  'NIACL':'New India Assurance','GICRE':'GIC Re','LICINDIA':'LIC of India','BSE':'BSE Ltd',
+  'CDSL':'Central Depository Services','MCX':'Multi Commodity Exchange','CAMS':'Computer Age Management Services','KFINTECH':'KFin Technologies',
+  'TCS':'Tata Consultancy Services','INFOSYS':'Infosys','HCLTECH':'HCL Technologies','WIPRO':'Wipro',
+  'TECHM':'Tech Mahindra','LTIM':'LTIMindtree','MPHASIS':'Mphasis','PERSISTENT':'Persistent Systems',
+  'COFORGE':'Coforge','KPITTECH':'KPIT Technologies','LTTS':'L&T Technology Services','TATAELXSI':'Tata Elxsi',
+  'CYIENT':'Cyient','BIRLASOFT':'Birlasoft','OFSS':'Oracle Financial Services Software','HEXAWARE':'Hexaware Technologies',
+  'NIIT':'NIIT Technologies','ZENSAR':'Zensar Technologies','SONATSOFTW':'Sonata Software','INTELLECT':'Intellect Design Arena',
+  'NEWGEN':'Newgen Software Technologies','TANLA':'Tanla Platforms','ROUTE':'Route Mobile','MASTEK':'Mastek',
+  'FSL':'Firstsource Solutions','RAMSARUP':'Ram Sarup Industries','NAUKRI':'Info Edge India','INDIAMART':'IndiaMART InterMESH',
+  'JUSTDIAL':'Just Dial','CARTRADE':'CarTrade Tech','DELHIVERY':'Delhivery','ZOMATO':'Zomato',
+  'PAYTM':'One97 Communications (Paytm)','POLICYBZR':'PB Fintech (PolicyBazaar)','RELIANCE':'Reliance Industries','ONGC':'ONGC',
+  'BPCL':'BPCL','IOC':'Indian Oil Corp','HINDPETRO':'HPCL','GAIL':'GAIL India',
+  'PETRONET':'Petronet LNG','GSPL':'Gujarat State Petronet','MGL':'Mahanagar Gas','IGL':'Indraprastha Gas',
+  'ATGL':'Adani Total Gas','MRPL':'Mangalore Refinery','CASTROLIND':'Castrol India','GULFOILLUB':'Gulf Oil Lubricants',
+  'MARUTI':'Maruti Suzuki India','TATAMOTORS':'Tata Motors','M&M':'Mahindra & Mahindra','BAJAJ-AUTO':'Bajaj Auto',
+  'HEROMOTOCO':'Hero MotoCorp','EICHERMOT':'Eicher Motors','TVSMOTOR':'TVS Motor Company','ASHOKLEY':'Ashok Leyland',
+  'ESCORTS':'Escorts Kubota','FORCEMOT':'Force Motors','BHARATFORG':'Bharat Forge','MOTHERSON':'Samvardhana Motherson',
+  'BALKRISIND':'Balkrishna Industries','MRF':'MRF','APOLLOTYRE':'Apollo Tyres','CEATLTD':'CEAT',
+  'JKTYRE':'JK Tyre & Industries','EXIDEIND':'Exide Industries','AMARAJABAT':'Amara Raja Energy & Mobility','BOSCHLTD':'Bosch',
+  'SUNDRMFAST':'Sundram Fasteners','ENDURANCE':'Endurance Technologies','SUPRAJIT':'Suprajit Engineering','GABRIEL':'Gabriel India',
+  'UNOMINDA':'Uno Minda','MAHINDCIE':'Mahindra CIE Automotive','CRAFTSMAN':'Craftsman Automation','SUBROS':'Subros',
+  'SETCO':'Setco Automotive','TIINDIA':'Tube Investments of India','SCHAEFFLER':'Schaeffler India','SKFINDIA':'SKF India',
+  'TIMKEN':'Timken India','GREAVESCOT':'Greaves Cotton','HINDUNILVR':'Hindustan Unilever','ITC':'ITC Ltd',
+  'NESTLEIND':'Nestle India','BRITANNIA':'Britannia Industries','TATACONSUM':'Tata Consumer Products','DABUR':'Dabur India',
+  'GODREJCP':'Godrej Consumer Products','MARICO':'Marico','COLPAL':'Colgate-Palmolive India','EMAMILTD':'Emami',
+  'JYOTHYLAB':'Jyothy Labs','BAJAJCON':'Bajaj Consumer Care','VBLLTD':'Varun Beverages','RADICO':'Radico Khaitan',
+  'UNITDSPR':'United Spirits','MCDOWELL-N':'United Breweries','PGHH':'Procter & Gamble Hygiene','GILLETTE':'Gillette India',
+  'ZYDUSWELL':'Zydus Wellness','HONASA':'Honasa Consumer (Mamaearth)','BIKAJI':'Bikaji Foods International','CCL':'CCL Products',
+  'TASTYBITELTD':'Tasty Bite Eatables','SUNPHARMA':'Sun Pharmaceutical','DRREDDY':'Dr Reddys Laboratories','CIPLA':'Cipla',
+  'DIVISLAB':'Divis Laboratories','BIOCON':'Biocon','AUROPHARMA':'Aurobindo Pharma','TORNTPHARM':'Torrent Pharmaceuticals',
+  'LUPIN':'Lupin','ALKEM':'Alkem Laboratories','GLENMARK':'Glenmark Pharmaceuticals','IPCALAB':'IPCA Laboratories',
+  'ABBOTINDIA':'Abbott India','GLAXO':'GlaxoSmithKline Pharmaceuticals','PFIZER':'Pfizer India','SANOFI':'Sanofi India',
+  'NATCOPHARM':'Natco Pharma','GRANULES':'Granules India','LAURUSLABS':'Laurus Labs','ZYDUSLIFE':'Zydus Lifesciences',
+  'JBCHEPHARM':'JB Chemicals & Pharmaceuticals','GLAND':'Gland Pharma','SUVEN':'Suven Pharmaceuticals','SOLARA':'Solara Active Pharma Sciences',
+  'SEQUENT':'Sequent Scientific','APLLTD':'Alembic Pharmaceuticals','AJANTPHARM':'Ajanta Pharma','ERIS':'Eris Lifesciences',
+  'MARKSANS':'Marksans Pharma','APOLLOHOSP':'Apollo Hospitals','MAXHEALTH':'Max Healthcare Institute','FORTIS':'Fortis Healthcare',
+  'LALPATHLAB':'Dr Lal PathLabs','METROPOLIS':'Metropolis Healthcare','THYROCARE':'Thyrocare Technologies','KRSNAA':'Krsnaa Diagnostics',
+  'VIJAYADIAG':'Vijaya Diagnostic','HEALTHCARE':'Healthcare Global','NARAYANHRU':'Narayana Hrudayalaya','KIMS':'Krishna Institute of Medical Sciences',
+  'LT':'Larsen & Toubro','SIEMENS':'Siemens India','ABB':'ABB India','BHEL':'Bharat Heavy Electricals',
+  'THERMAX':'Thermax','CUMMINSIND':'Cummins India','KECL':'KEC International','KALPATPOWR':'Kalpataru Projects International',
+  'AHLUCONT':'Ahluwalia Contracts','NCC':'NCC','PNC':'PNC Infratech','IRB':'IRB Infrastructure Developers',
+  'HGINFRA':'HG Infra Engineering','GPIL':'Godawari Power & Ispat','HAL':'Hindustan Aeronautics','BEL':'Bharat Electronics',
+  'BHFC':'Bharat Forge','COCHINSHIP':'Cochin Shipyard','MAZAGON':'Mazagon Dock Shipbuilders','GRSE':'Garden Reach Shipbuilders',
+  'BEML':'BEML','RAILTEL':'RailTel Corporation','RVNL':'Rail Vikas Nigam','IRCON':'Ircon International',
+  'NBCC':'NBCC India','ENGINERSIN':'Engineers India','VOLTAS':'Voltas','BLUESTARCO':'Blue Star',
+  'WHIRLPOOL':'Whirlpool India','HAVELLS':'Havells India','POLYCAB':'Polycab India','KEI':'KEI Industries',
+  'FINOLEX':'Finolex Cables','APAR':'APAR Industries','TATASTEEL':'Tata Steel','JSWSTEEL':'JSW Steel',
+  'HINDALCO':'Hindalco Industries','VEDL':'Vedanta','NATIONALUM':'National Aluminium','SAIL':'Steel Authority of India',
+  'NMDC':'NMDC','COALINDIA':'Coal India','MOIL':'MOIL','HINDCOPPER':'Hindustan Copper',
+  'WELCORP':'Welspun Corp','RATNAMANI':'Ratnamani Metals & Tubes','JINDALSAW':'Jindal Saw','JSPL':'Jindal Steel & Power',
+  'APLAPOLLO':'APL Apollo Tubes','KALYANKJIL':'Kalyan Jewellers','TITAN':'Titan Company','RAJESHEXPO':'Rajesh Exports',
+  'PCJEWELLER':'PC Jeweller','ULTRACEMCO':'UltraTech Cement','SHREECEM':'Shree Cement','AMBUJACEM':'Ambuja Cements',
+  'ACCIND':'ACC','RAMCOCEM':'Ramco Cements','JKCEMENT':'JK Cement','DALMIACEMT':'Dalmia Bharat',
+  'BIRLACORPN':'Birla Corporation','HEIDELBERG':'HeidelbergCement India','INDIACEM':'India Cements','GRASIM':'Grasim Industries',
+  'NCLIND':'NCL Industries','JKIL':'JK Lakshmi Cement','DLF':'DLF','GODREJPROP':'Godrej Properties',
+  'OBEROIRLTY':'Oberoi Realty','PRESTIGE':'Prestige Estates Projects','BRIGADE':'Brigade Enterprises','SOBHA':'Sobha',
+  'PHOENIXLTD':'Phoenix Mills','MAHLIFE':'Mahindra Lifespace Developers','KOLTEPATIL':'Kolte-Patil Developers','SUNTECK':'Sunteck Realty',
+  'ANANTRAJ':'Anant Raj','LODHA':'Macrotech Developers (Lodha)','SIGNATURE':'Signature Global','RAYMOND':'Raymond',
+  'TREEHOUSE':'Tree House Education','NTPC':'NTPC','POWERGRID':'Power Grid Corp','ADANIPOWER':'Adani Power',
+  'ADANIGREEN':'Adani Green Energy','TATAPOWER':'Tata Power','TORNTPOWER':'Torrent Power','CESC':'CESC',
+  'NHPC':'NHPC','SJVN':'SJVN','JSWENERGY':'JSW Energy','INDIAGRID':'IndiGrid',
+  'POWERMECH':'Power Mech Projects','BHARTIARTL':'Bharti Airtel','IDEA':'Vodafone Idea','TATACOMM':'Tata Communications',
+  'HFCL':'HFCL','STLTECH':'Sterlite Technologies','INDUS':'Indus Towers','CROMPTON':'Crompton Greaves Consumer',
+  'ORIENTELEC':'Orient Electric','VAIBHAVGBL':'Vaibhav Global','AMBER':'Amber Enterprises','DIXON':'Dixon Technologies',
+  'PGEL':'PG Electroplast','VEDANT':'Vedant Fashions (Manyavar)','NYKAA':'FSN E-Commerce (Nykaa)','BATA':'Bata India',
+  'RELAXO':'Relaxo Footwears','METROBRAND':'Metro Brands','VMART':'V-Mart Retail','SHOPERSTOP':'Shoppers Stop',
+  'TRENTLTD':'Trent','ABFRL':'Aditya Birla Fashion & Retail','GOCOLORS':'Go Fashion (India)','MANYAVAR':'Vedant Fashions',
+  'SUNTV':'Sun TV Network','ZEEL':'Zee Entertainment Enterprises','PVRINOX':'PVR Inox','NETWORK18':'Network18 Media',
+  'TV18BRDCST':'TV18 Broadcast','JAGRAN':'Jagran Prakashan','CONCOR':'Container Corp of India','IRCTC':'IRCTC',
+  'BLUEDART':'Blue Dart Express','GATI':'Gati','VRL':'VRL Logistics','MAHLOG':'Mahindra Logistics',
+  'TCI':'Transport Corporation of India','SHREYAS':'Shreyas Shipping','SICAL':'SICAL Logistics','INDIAPORT':'India Port Global',
+  'INDHOTEL':'Indian Hotels','LEMONTRE':'Lemon Tree Hotels','CHALET':'Chalet Hotels','EIHOTEL':'EIH (Oberoi Hotels)',
+  'MAHINDHOLIDAYS':'Club Mahindra Holidays','PIDILITIND':'Pidilite Industries','VINATIORGA':'Vinati Organics','AARTIIND':'Aarti Industries',
+  'DEEPAKNITR':'Deepak Nitrite','NAVINFLUOR':'Navin Fluorine International','SRF':'SRF','FLUOROCHEM':'Gujarat Fluorochemicals',
+  'CLEAN':'Clean Science & Technology','ROSSARI':'Rossari Biotech','NEOGEN':'Neogen Chemicals','SUDARSCHEM':'Sudarshan Chemical Industries',
+  'FINEORG':'Fine Organics','GALAXYSURF':'Galaxy Surfactants','TATACHEM':'Tata Chemicals','GHCL':'GHCL',
+  'ATUL':'Atul Ltd','NOCIL':'NOCIL','DHARAMSI':'Dharamsi Morarji Chemical','IOLCP':'IOL Chemicals & Pharmaceuticals',
+  'COROMANDEL':'Coromandel International','CHAMBLFERT':'Chambal Fertilizers & Chemicals','GNFC':'Gujarat Narmada Valley Fertilizers','GSFC':'Gujarat State Fertilizers & Chemicals',
+  'FACT':'Fertilisers and Chemicals Travancore','KSCL':'Kaveri Seed Company','RALSIL':'Rallis India','PI':'PI Industries',
+  'BAYER':'Bayer CropScience','DHANUKA':'Dhanuka Agritech','ASTEC':'Astec LifeSciences','SUMICHEM':'Sumitomo Chemical India',
+  'JSWHL':'JSW Holdings','TRIDENT':'Trident','PAGEIND':'Page Industries','ARVIND':'Arvind',
+  'VARDHACRLC':'Vardhman Textiles','WELSPUNIND':'Welspun India','SPANDANA':'Spandana Sphoorty','UFLEX':'Uflex',
+  'BALRAMCHIN':'Balrampur Chini Mills','DHAMPUR':'Dhampur Sugar Mills','RENUKA':'Shree Renuka Sugars','ADANIENT':'Adani Enterprises',
+  'ADANIPORTS':'Adani Ports & SEZ','BAJAJHLDNG':'Bajaj Holdings & Investment','3MINDIA':'3M India','HONAUT':'Honeywell Automation India',
+  'GOODYEAR':'Goodyear India',
 };
 
 // Fetch Yahoo Finance quote for a single NSE stock
@@ -1371,7 +1519,7 @@ app.get('/india/debug/:symbol', async (req, res) => {
 app.get('/india/search', (req, res) => {
   const q = (req.query.q || '').toUpperCase().trim();
   if (!q) return res.json([]);
-  const all = NIFTY50.map(sym => ({ ticker: sym, name: NSE_NAMES[sym] || sym, exchange: 'NSE' }));
+  const all = NIFTY500.map(sym => ({ ticker: sym, name: NSE_NAMES[sym] || sym, exchange: 'NSE' }));
   const startsWith = all.filter(s => s.ticker.startsWith(q));
   const contains   = all.filter(s => !s.ticker.startsWith(q) && (s.ticker.includes(q) || s.name.toUpperCase().includes(q)));
   res.json([...startsWith, ...contains].slice(0, 10));
@@ -1434,8 +1582,8 @@ app.get('/india/movers', async (req, res) => {
   try {
     const batchSize = 10;
     const results   = [];
-    for (let i = 0; i < NIFTY50.length; i += batchSize) {
-      const batch = NIFTY50.slice(i, i + batchSize);
+    for (let i = 0; i < NIFTY100.length; i += batchSize) {
+      const batch = NIFTY100.slice(i, i + batchSize);
       const batchResults = await Promise.allSettled(batch.map(async ticker => {
         const q = await getNSEQuote(ticker);
         if (!q || q.price == null) return null;
