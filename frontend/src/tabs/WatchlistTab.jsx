@@ -9,12 +9,12 @@ const FREE_LIMIT = 5;
 
 const SC = { BUY: '#00ff88', SELL: '#ff4444', HOLD: '#ffaa00' };
 
-function fmtPrice(p) {
+function fmtPrice(p, currency = '$') {
   if (!p) return '—';
-  if (p >= 1000) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  if (p >= 1)    return `$${p.toFixed(2)}`;
-  if (p >= 0.01) return `$${p.toFixed(4)}`;
-  return `$${p.toFixed(6)}`;
+  if (p >= 1000) return `${currency}${p.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (p >= 1)    return `${currency}${p.toFixed(2)}`;
+  if (p >= 0.01) return `${currency}${p.toFixed(4)}`;
+  return `${currency}${p.toFixed(6)}`;
 }
 
 // ── Accordion card ─────────────────────────────────────────────────────────────
@@ -57,9 +57,9 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
 }
 
 // ── Watchlist item card ────────────────────────────────────────────────────────
-function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan }) {
-  const [expanded,  setExpanded]  = useState(false);
-  const [activeId,  setActiveId]  = useState(null);
+function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan, currency, isIndia }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeId, setActiveId] = useState(null);
 
   const scanData  = preloadedScan?.data    || null;
   const scanning  = preloadedScan?.loading || false;
@@ -70,13 +70,13 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
   const pctColor = isUp ? '#00ff88' : isDown ? '#ff4444' : '#7788aa';
   const sigColor = scanData?.analysis ? SC[scanData.analysis.signal] : '#7788aa';
 
-  const handleExpand = () => setExpanded(e => !e);
+  const fmt = (val, dec = 2) => val != null ? `${currency}${parseFloat(val).toFixed(dec)}` : null;
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* ── Main row — CSS grid for reliable alignment ── */}
+      {/* ── Main row ── */}
       <div
-        onClick={handleExpand}
+        onClick={() => setExpanded(e => !e)}
         style={{
           display: 'grid',
           gridTemplateColumns: '64px 100px 88px auto 20px',
@@ -96,7 +96,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
         {/* Price + change */}
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
-            {fmtPrice(item.price)}
+            {fmtPrice(item.price, currency)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, color: pctColor, marginTop: 2 }}>
             {item.changePct != null
@@ -114,12 +114,8 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
             </div>
           ) : scanData?.analysis ? (
             <div style={{ background: sigColor + '11', border: `1px solid ${sigColor}44`, padding: '5px 6px', borderRadius: 2 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
-                {scanData.analysis.signal}
-              </div>
-              <div style={{ fontSize: 9, color: sigColor + '88', marginTop: 2 }}>
-                {scanData.analysis.confidence}% · LT
-              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: sigColor, lineHeight: 1 }}>{scanData.analysis.signal}</div>
+              <div style={{ fontSize: 9, color: sigColor + '88', marginTop: 2 }}>{scanData.analysis.confidence}% · LT</div>
             </div>
           ) : (
             <div style={{ fontSize: 9, color: '#3a3a5e' }}>—</div>
@@ -128,25 +124,25 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => onOpenOptions(item.ticker)}
-            style={{
-              background: '#4488ff11', border: '1px solid #4488ff33',
-              color: '#4488ff', cursor: 'pointer', borderRadius: 4,
-              padding: '6px 10px', fontSize: 10, fontFamily: 'inherit',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#4488ff22'; e.currentTarget.style.borderColor = '#4488ff66'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#4488ff11'; e.currentTarget.style.borderColor = '#4488ff33'; }}
-          >⚡</button>
+          {!isIndia && (
+            <button
+              onClick={() => onOpenOptions(item.ticker)}
+              style={{
+                background: '#4488ff11', border: '1px solid #4488ff33',
+                color: '#4488ff', cursor: 'pointer', borderRadius: 4,
+                padding: '6px 10px', fontSize: 10, fontFamily: 'inherit', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#4488ff22'; e.currentTarget.style.borderColor = '#4488ff66'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#4488ff11'; e.currentTarget.style.borderColor = '#4488ff33'; }}
+            >⚡</button>
+          )}
           <button
             onClick={() => onRemove(item.ticker)}
             disabled={removing === item.ticker}
             style={{
               background: 'none', border: '1px solid #ff444422',
               color: '#ff444466', cursor: 'pointer', borderRadius: 4,
-              padding: '6px 10px', fontSize: 10, fontFamily: 'inherit',
-              transition: 'all 0.15s',
+              padding: '6px 10px', fontSize: 10, fontFamily: 'inherit', transition: 'all 0.15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.color = '#ff4444'; e.currentTarget.style.borderColor = '#ff4444'; }}
             onMouseLeave={e => { e.currentTarget.style.color = '#ff444466'; e.currentTarget.style.borderColor = '#ff444422'; }}
@@ -162,9 +158,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
       {/* ── Expanded section ── */}
       {expanded && (
         <div style={{ padding: '0 16px 14px', borderTop: '1px solid #1e1e2e' }}>
-          {scanError && (
-            <div style={{ fontSize: 11, color: '#ff4444', padding: '10px 0' }}>{scanError}</div>
-          )}
+          {scanError && <div style={{ fontSize: 11, color: '#ff4444', padding: '10px 0' }}>{scanError}</div>}
           {scanning && (
             <div style={{ fontSize: 11, color: '#ffaa0066', padding: '12px 0', textAlign: 'center', letterSpacing: '0.15em' }}>
               RUNNING LONG TERM ANALYSIS...
@@ -172,17 +166,13 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           )}
           {scanData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 }}>
-
               {scanData.analysis && (
                 <div style={{ fontSize: 12, color: '#d0d8f0', lineHeight: 1.7, borderLeft: `2px solid ${sigColor}44`, paddingLeft: 10, fontStyle: 'italic', marginBottom: 4 }}>
                   {scanData.analysis.thesis}
                 </div>
               )}
 
-              <AccordionCard
-                id="technicals"
-                activeId={activeId}
-                setActiveId={setActiveId}
+              <AccordionCard id="technicals" activeId={activeId} setActiveId={setActiveId}
                 label="TECHNICALS & FUNDAMENTALS"
                 preview={scanData.ta ? `RSI ${scanData.ta.rsi14} · ${scanData.ta.trendSignal} · Vol ${scanData.ta.volumeRatio}x` : ''}
               >
@@ -196,12 +186,12 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                           ['Trend',      scanData.ta.trendSignal,       scanData.ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
                           ['Volume',     `${scanData.ta.volumeRatio}x`, scanData.ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
                           ['MACD',       scanData.ta.macd?.cross,       scanData.ta.macd?.cross === 'BULLISH_CROSS' ? '#00ff88' : scanData.ta.macd?.cross === 'BEARISH_CROSS' ? '#ff4444' : '#e8e8f0'],
-                          ['SMA 50',     scanData.ta.sma50 ? `$${scanData.ta.sma50}` : null, '#e8e8f0'],
-                          ['SMA 200',    scanData.ta.sma200 ? `$${scanData.ta.sma200}` : null, '#e8e8f0'],
-                          ['ATR',        scanData.ta.atr?.atr, scanData.ta.atr?.volatility === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
-                          ['StochRSI K', scanData.ta.stochRSI?.k, scanData.ta.stochRSI?.k > 90 ? '#ff4444' : scanData.ta.stochRSI?.k < 10 ? '#00ff88' : '#ffaa00'],
-                          ['Support',    scanData.ta.sr?.nearestSupport ? `$${scanData.ta.sr.nearestSupport}` : null, '#00ff88'],
-                          ['Resistance', scanData.ta.sr?.nearestResistance ? `$${scanData.ta.sr.nearestResistance}` : null, '#ff4444'],
+                          ['SMA 50',     scanData.ta.sma50  ? fmt(scanData.ta.sma50)  : null, '#e8e8f0'],
+                          ['SMA 200',    scanData.ta.sma200 ? fmt(scanData.ta.sma200) : null, '#e8e8f0'],
+                          ['ATR',        scanData.ta.atr?.atr,          scanData.ta.atr?.volatility === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
+                          ['StochRSI K', scanData.ta.stochRSI?.k,       scanData.ta.stochRSI?.k > 90 ? '#ff4444' : scanData.ta.stochRSI?.k < 10 ? '#00ff88' : '#ffaa00'],
+                          ['Support',    scanData.ta.sr?.nearestSupport    ? fmt(scanData.ta.sr.nearestSupport)    : null, '#00ff88'],
+                          ['Resistance', scanData.ta.sr?.nearestResistance ? fmt(scanData.ta.sr.nearestResistance) : null, '#ff4444'],
                         ].filter(([, v]) => v != null).map(([k, v, c]) => (
                           <div key={k} style={{ background: '#0a0a12', padding: '6px 8px', borderRadius: 3 }}>
                             <div style={{ fontSize: 8, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
@@ -217,13 +207,13 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                         {[
                           ['P/E',        scanData.fundamentals.pe?.toFixed(1)],
-                          ['EPS',        scanData.fundamentals.eps ? `$${scanData.fundamentals.eps.toFixed(2)}` : null],
+                          ['EPS',        scanData.fundamentals.eps        ? fmt(scanData.fundamentals.eps)                   : null],
                           ['Beta',       scanData.fundamentals.beta?.toFixed(2)],
-                          ['52W High',   scanData.fundamentals.fiftyTwoWeekHigh ? `$${scanData.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
-                          ['52W Low',    scanData.fundamentals.fiftyTwoWeekLow  ? `$${scanData.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
-                          ['ROE',        scanData.fundamentals.roe ? `${(scanData.fundamentals.roe * 100).toFixed(1)}%` : null],
+                          ['52W High',   scanData.fundamentals.fiftyTwoWeekHigh ? fmt(scanData.fundamentals.fiftyTwoWeekHigh) : null],
+                          ['52W Low',    scanData.fundamentals.fiftyTwoWeekLow  ? fmt(scanData.fundamentals.fiftyTwoWeekLow)  : null],
+                          ['ROE',        scanData.fundamentals.roe         ? `${(scanData.fundamentals.roe * 100).toFixed(1)}%`         : null],
                           ['Rev Growth', scanData.fundamentals.revenueGrowth ? `${(scanData.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
-                          ['Target',     scanData.fundamentals.targetMeanPrice ? `$${scanData.fundamentals.targetMeanPrice.toFixed(2)}` : null],
+                          ['Target',     scanData.fundamentals.targetMeanPrice ? fmt(scanData.fundamentals.targetMeanPrice)  : null],
                         ].filter(([, v]) => v != null).map(([k, v]) => (
                           <div key={k} style={{ background: '#0a0a12', padding: '6px 8px', borderRadius: 3 }}>
                             <div style={{ fontSize: 8, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
@@ -256,10 +246,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                 </div>
               </AccordionCard>
 
-              <AccordionCard
-                id="news"
-                activeId={activeId}
-                setActiveId={setActiveId}
+              <AccordionCard id="news" activeId={activeId} setActiveId={setActiveId}
                 label={`RECENT NEWS${scanData.news?.length ? ` (${scanData.news.length})` : ''}`}
                 preview={scanData.news?.[0]?.title || 'No recent news'}
               >
@@ -267,8 +254,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
                   {scanData.news?.length > 0 ? (
                     scanData.news.slice(0, 6).map((n, i) => (
                       <div key={i} style={{ padding: '8px 0', borderBottom: i < Math.min(scanData.news.length, 6) - 1 ? '1px solid #1a1a26' : 'none' }}>
-                        <a
-                          href={n.url} target="_blank" rel="noopener noreferrer"
+                        <a href={n.url} target="_blank" rel="noopener noreferrer"
                           style={{ color: '#c8d8f0', fontSize: 11, lineHeight: 1.5, display: 'block', textDecoration: 'none', marginBottom: 3 }}
                           onMouseEnter={e => { e.currentTarget.style.color = '#ffaa00'; }}
                           onMouseLeave={e => { e.currentTarget.style.color = '#c8d8f0'; }}
@@ -295,10 +281,13 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
 }
 
 // ── Main WatchlistTab ──────────────────────────────────────────────────────────
-export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistScans, onTickerAdded, onTickerRemoved }) {
+export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistScans, onTickerAdded, onTickerRemoved, market = 'US' }) {
   const { user } = useUser();
   const userId   = user?.id;
   const { plan } = useUsage();
+
+  const isIndia  = market === 'INDIA';
+  const currency = isIndia ? '₹' : '$';
 
   const [items,       setItems]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -314,15 +303,20 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const res  = await fetch(`${BASE}/watchlist/${userId}`);
+      const res  = await fetch(`${BASE}/watchlist/${userId}?market=${market}`);
       const data = await res.json();
       if (Array.isArray(data)) setItems(data);
     } catch {}
     setLoading(false);
     setRefreshing(false);
-  }, [userId]);
+  }, [userId, market]);
 
-  useEffect(() => { fetchWatchlist(); }, [fetchWatchlist]);
+  // Refetch when market switches
+  useEffect(() => {
+    setItems([]);
+    setLoading(true);
+    fetchWatchlist();
+  }, [market]);
 
   useEffect(() => {
     const interval = setInterval(() => fetchWatchlist(true), 60000);
@@ -337,7 +331,7 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
     try {
       const res  = await fetch(`${BASE}/watchlist/${userId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker }),
+        body: JSON.stringify({ ticker, market }),
       });
       const data = await res.json();
       if (data.error) { if (data.error.includes('limit')) setShowUpgrade(true); else setError(data.error); }
@@ -350,7 +344,7 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
     if (!userId) return;
     setRemoving(ticker);
     try {
-      await fetch(`${BASE}/watchlist/${userId}/${ticker}`, { method: 'DELETE' });
+      await fetch(`${BASE}/watchlist/${userId}/${ticker}?market=${market}`, { method: 'DELETE' });
       setItems(prev => prev.filter(i => i.ticker !== ticker));
       onTickerRemoved?.(ticker);
     } catch {}
@@ -364,11 +358,15 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
     <div>
       {showUpgrade && <UpgradeModal type="watchlist" onClose={() => setShowUpgrade(false)} />}
 
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: '#ffaa00', lineHeight: 1 }}>WATCHLIST</div>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: '#ffaa00', lineHeight: 1 }}>
+            {isIndia ? '🇮🇳 WATCHLIST' : 'WATCHLIST'}
+          </div>
           <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2 }}>
             {isPro ? `${items.length} tickers · unlimited` : `${items.length} / ${FREE_LIMIT} · free tier`}
+            {isIndia && ' · NSE India'}
           </div>
         </div>
         <button onClick={() => fetchWatchlist(true)} disabled={refreshing}
@@ -377,14 +375,17 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
         </button>
       </div>
 
+      {/* Add input */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>
+            {currency}
+          </span>
           <input
             value={inputVal}
             onChange={e => setInputVal(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === 'Enter' && !adding && handleAdd()}
-            placeholder={isFull ? 'UPGRADE TO ADD MORE' : 'ADD TICKER...'}
+            placeholder={isFull ? 'UPGRADE TO ADD MORE' : isIndia ? 'ADD NSE TICKER...' : 'ADD TICKER...'}
             disabled={isFull && !isPro}
             className="input"
             style={{ padding: '10px 12px 10px 26px', fontSize: 13, fontWeight: 600, opacity: isFull ? 0.5 : 1 }}
@@ -423,11 +424,15 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
 
       {!loading && items.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: 48 }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>👁</div>
-          <div style={{ fontSize: 14, color: '#99aacc', marginBottom: 8 }}>Your watchlist is empty</div>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>{isIndia ? '🇮🇳' : '👁'}</div>
+          <div style={{ fontSize: 14, color: '#99aacc', marginBottom: 8 }}>
+            Your {isIndia ? 'India' : 'US'} watchlist is empty
+          </div>
           <div style={{ fontSize: 11, color: '#7788aa', lineHeight: 1.8 }}>
-            Add tickers above · Click any ticker to see long term analysis<br />
-            Prices refresh every minute
+            {isIndia
+              ? 'Add NSE tickers above (e.g. RELIANCE, TCS, INFY)\nClick any ticker to see long term analysis'
+              : 'Add tickers above · Click any ticker to see long term analysis'
+            }<br />Prices refresh every minute
           </div>
         </div>
       )}
@@ -442,6 +447,8 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistSc
               removing={removing}
               onOpenOptions={onOpenOptions}
               preloadedScan={watchlistScans?.[item.ticker]}
+              currency={currency}
+              isIndia={isIndia}
             />
           ))}
         </div>
