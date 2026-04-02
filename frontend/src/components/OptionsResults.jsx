@@ -56,7 +56,7 @@ export default function OptionsResults({
   ta, macro, selectedExpiry,
   onBack,
 }) {
-  const [activeId,     setActiveId]     = useState(null);
+  const [activeId,     setActiveId]     = useState('ai');
   const [selectedSide, setSelectedSide] = useState(null);
 
   const recColor   = optionsSignal.recommendation === 'CALL' ? '#00ff88'
