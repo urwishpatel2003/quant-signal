@@ -38,13 +38,15 @@ export default function App() {
   const [watchlistTickers, setWatchlistTickers] = useState([]);
   useEffect(() => {
     if (!user?.id) return;
-    fetch(`${import.meta.env.VITE_API_BASE}/watchlist/${user.id}`)
+    // Reset tickers immediately on market change to avoid stale data
+    setWatchlistTickers([]);
+    fetch(`${import.meta.env.VITE_API_BASE}/watchlist/${user.id}?market=${market}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) setWatchlistTickers(data.map(d => d.ticker));
       })
       .catch(() => {});
-  }, [user?.id]);
+  }, [user?.id, market]);
 
   const { scans: watchlistScans } = useWatchlistScans(watchlistTickers, market);
 
@@ -98,47 +100,68 @@ export default function App() {
       {modal === 'contact' && <ContactModal onClose={() => setModal(null)} />}
 
       {/* ── Header ── */}
-      <div className="app-header">
-        <div className="app-header-logo">
-          <div
-            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
-              letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer' }}
-            onClick={handleLogoClick}>
-            <span style={{ color: '#ffaa00' }}>Qu</span>
-            <span style={{ color: '#00ff88' }}>AI</span>
-            <span style={{ color: '#ffaa00' }}>nt Signal</span>
+      <div style={{
+        borderBottom: '1px solid #1e1e30',
+        background: '#07070e',
+        position: 'sticky', top: 0, zIndex: 100,
+      }}>
+        {/* ── Row 1: Logo + MarketSelector + User ── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 16px', gap: 12,
+        }}>
+          {/* Logo */}
+          <div style={{ flexShrink: 0 }}>
+            <div
+              style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
+                letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer' }}
+              onClick={handleLogoClick}>
+              <span style={{ color: '#ffaa00' }}>Qu</span>
+              <span style={{ color: '#00ff88' }}>AI</span>
+              <span style={{ color: '#ffaa00' }}>nt Signal</span>
+            </div>
+            <div style={{ fontSize: 10, color: '#6677aa', letterSpacing: '0.2em', fontWeight: 600 }}>
+              AI-POWERED · MARKET INTELLIGENCE
+            </div>
           </div>
-          <div className="app-header-subtitle hide-mobile"
-            style={{ fontSize: 10, color: '#6677aa', letterSpacing: '0.2em', fontWeight: 600 }}>
-            AI-POWERED MARKET INTELLIGENCE
+
+          {/* Right: MarketSelector + User */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <MarketSelector />
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="btn-sm"
+                  style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap' }}>
+                  SIGN IN
+                </button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {user?.firstName && (
+                  <span style={{
+                    fontSize: 11, color: '#b0c0dd', fontWeight: 600, letterSpacing: '0.05em',
+                    // Hide on small screens
+                    maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {user.firstName.toUpperCase()}
+                  </span>
+                )}
+                <UserButton appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} />
+              </div>
+            </SignedIn>
           </div>
         </div>
 
-        <MacroBar bonds={macro.bonds} intlMarkets={macro.intlMarkets} 
-          macroNews={macro.macroNews} loading={macro.loading}
-          market={market} />
-
-        <MarketSelector />
-
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button className="btn-sm"
-                style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap' }}>
-                SIGN IN
-              </button>
-            </SignInButton>
-          </SignedOut>
-          <SignedIn>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {user?.firstName && (
-                <span style={{ fontSize: 11, color: '#b0c0dd', fontWeight: 600, letterSpacing: '0.05em' }}>
-                  {user.firstName.toUpperCase()}
-                </span>
-              )}
-              <UserButton appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} />
-            </div>
-          </SignedIn>
+        {/* ── Row 2: MacroBar full width ── */}
+        <div style={{ borderTop: '1px solid #1a1a2e', overflow: 'hidden' }}>
+          <MacroBar
+            bonds={macro.bonds}
+            intlMarkets={macro.intlMarkets}
+            macroNews={macro.macroNews}
+            loading={macro.loading}
+            market={market}
+          />
         </div>
       </div>
 
@@ -181,12 +204,14 @@ export default function App() {
                 market={market}
               />
             </div>
+
             {/* Options tab — US only */}
             {market === 'US' && (
               <div style={{ display: activeTab === 'options' ? 'block' : 'none' }}>
                 <OptionsTab macro={macro} initialTicker={optionsTicker} />
               </div>
             )}
+
             <div style={{ display: activeTab === 'markets' ? 'block' : 'none' }}>
               <MarketsTab
                 intlMarkets={macro.intlMarkets}
@@ -195,6 +220,7 @@ export default function App() {
                 calendar={macro.calendar}
               />
             </div>
+
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
               <WatchlistTab
                 onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
@@ -242,7 +268,6 @@ export default function App() {
         <div style={{ fontSize: 11, color: '#7788aa' }}>
           © {new Date().getFullYear()} QuAInt Signal · Built with Claude AI
         </div>
-
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
           {[
             { label: 'About',   key: 'about'   },
@@ -265,7 +290,6 @@ export default function App() {
             </button>
           ))}
         </div>
-
         <div style={{ fontSize: 10, color: '#445' }}>
           ⚠ Not financial advice · Trading involves risk
         </div>

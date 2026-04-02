@@ -151,16 +151,18 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             ))}
           </div>
 
-          {/* Thesis — inline so user sees it immediately */}
-          {scan.analysis.thesis && (
-            <div style={{
-              fontSize: 12, color: '#d0d8f0', lineHeight: 1.8,
-              borderLeft: `3px solid ${sigColor}55`, paddingLeft: 12,
-              fontStyle: 'italic',
-            }}>
-              {scan.analysis.thesis}
+          {/* Thesis */}
+          <div style={{
+            background: '#0a0a14', borderRadius: 4, padding: '12px 14px',
+            borderLeft: `3px solid ${sigColor}55`,
+          }}>
+            <div style={{ fontSize: 9, color: sigColor, fontWeight: 700, letterSpacing: '0.15em', marginBottom: 6 }}>
+              AI THESIS
             </div>
-          )}
+            <div style={{ fontSize: 12, color: '#d0d8f0', lineHeight: 1.8, fontStyle: 'italic' }}>
+              {scan.analysis.thesis || scan.analysis.reasoning || '—'}
+            </div>
+          </div>
         </div>
       </AccordionCard>
 

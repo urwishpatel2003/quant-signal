@@ -340,3 +340,7 @@ input, select, textarea {
   color: #99aacc;
   font-style: italic;
 }
+
+@media (min-width: 768px) {
+  .show-desktop { display: block !important; }
+}
