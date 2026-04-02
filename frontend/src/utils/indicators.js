@@ -80,7 +80,6 @@ export function calcAvgVolume(volumes, period = 20) {
   return Math.round(slice.reduce((a, b) => a + b, 0) / slice.length);
 }
 
-// ─── ATR ──────────────────────────────────────────────────────────────────────
 export function calcATR(ohlcv, period = 14) {
   const { high, low, close } = ohlcv;
   if (!high || !low || !close || close.length < period + 1) return null;
@@ -111,7 +110,6 @@ export function calcATR(ohlcv, period = 14) {
   };
 }
 
-// ─── Stochastic RSI — thresholds 90/10 ───────────────────────────────────────
 export function calcStochRSI(closes, rsiPeriod = 14, stochPeriod = 14, smoothK = 3, smoothD = 3) {
   if (closes.length < rsiPeriod + stochPeriod + smoothK + smoothD) return null;
   const rsiSeries = [];
@@ -142,7 +140,6 @@ export function calcStochRSI(closes, rsiPeriod = 14, stochPeriod = 14, smoothK =
   }
   const k = smoothedK[smoothedK.length - 1];
   const d = dValues[dValues.length - 1];
-  // ── Raised thresholds: 90/10 instead of 80/20 ─────────────────────────────
   const signal =
     k > 90 && d > 90 ? 'OVERBOUGHT' :
     k < 10 && d < 10 ? 'OVERSOLD'   :
@@ -156,7 +153,6 @@ export function calcStochRSI(closes, rsiPeriod = 14, stochPeriod = 14, smoothK =
   return { k, d, signal, crossover };
 }
 
-// ─── Support & Resistance — 5% proximity warning ─────────────────────────────
 export function calcSupportResistance(ohlcv, lookback = 20) {
   const { high, low, close } = ohlcv;
   if (!high || !low || !close || close.length < lookback) return null;
@@ -208,7 +204,6 @@ export function calcSupportResistance(ohlcv, lookback = 20) {
   };
 }
 
-// ─── Earnings proximity ───────────────────────────────────────────────────────
 export function calcEarningsProximity(calendar, ticker, selectedExpiry = null) {
   if (!calendar?.length) return null;
   const earningsKeywords = ['earnings', 'eps', 'quarterly results', 'q1', 'q2', 'q3', 'q4', 'results'];
@@ -241,7 +236,6 @@ export function calcEarningsProximity(calendar, ticker, selectedExpiry = null) {
   return { daysToEarnings, earningsDate: new Date(next.date).toISOString().split('T')[0], earningsTitle: next.title, earningsBeforeExpiry, risk, advice };
 }
 
-// ─── RSI contradiction checker ────────────────────────────────────────────────
 export function checkRSIContradiction(rsi14, recommendation) {
   if (!rsi14 || !recommendation) return null;
   if (recommendation === 'CALL' && rsi14 > 70)
@@ -255,7 +249,6 @@ export function checkRSIContradiction(rsi14, recommendation) {
   return null;
 }
 
-// ─── Delta-adjusted position sizing ──────────────────────────────────────────
 export function calcDeltaAdjustedSize(delta, premium, budget = 1500) {
   if (!delta || !premium || premium <= 0) return null;
   const absDelta    = Math.abs(parseFloat(delta));
@@ -282,31 +275,66 @@ export const TIMEFRAMES = {
 
 export function calcIndicators(ohlcv, timeframeKey = 'swing') {
   if (!ohlcv?.close) return null;
-  const tf      = TIMEFRAMES[timeframeKey] || TIMEFRAMES.swing;
-  const closes  = ohlcv.close.filter(Boolean);
-  const volumes = ohlcv.volume || [];
-  const rsi14   = calcRSI(closes, tf.rsiPeriod);
-  const sma20   = tf.smas.includes(20)  ? calcSMA(closes, 20)  : null;
-  const sma50   = tf.smas.includes(50)  ? calcSMA(closes, 50)  : null;
-  const sma200  = tf.smas.includes(200) ? calcSMA(closes, 200) : null;
-  const macd    = calcMACD(closes);
-  const bb      = calcBollingerBands(closes, 20, 2);
-  const atr     = calcATR(ohlcv, 14);
-  const stochRSI = calcStochRSI(closes, 14, 14, 3, 3);
-  const sr      = calcSupportResistance(ohlcv, 30);
+  const tf = TIMEFRAMES[timeframeKey] || TIMEFRAMES.swing;
+
+  // Clean nulls from all OHLCV arrays — keep only indices where close is valid
+  const rawClose  = ohlcv.close  || [];
+  const rawOpen   = ohlcv.open   || [];
+  const rawHigh   = ohlcv.high   || [];
+  const rawLow    = ohlcv.low    || [];
+  const rawVolume = ohlcv.volume || [];
+
+  const validIdx = rawClose.map((c, i) => i).filter(i => rawClose[i] != null && !isNaN(rawClose[i]));
+  if (!validIdx.length) return null;
+
+  const cleanOhlcv = {
+    close:  validIdx.map(i => rawClose[i]),
+    open:   validIdx.map(i => rawOpen[i]   ?? rawClose[i]),
+    high:   validIdx.map(i => rawHigh[i]   ?? rawClose[i]),
+    low:    validIdx.map(i => rawLow[i]    ?? rawClose[i]),
+    volume: validIdx.map(i => rawVolume[i] ?? 0),
+  };
+
+  const closes  = cleanOhlcv.close;
+  const volumes = cleanOhlcv.volume;
   const price   = closes[closes.length - 1];
-  const avgVol  = calcAvgVolume(volumes, 20);
-  const curVol  = volumes.filter(Boolean).slice(-1)[0] || 0;
+
+  const rsi14    = calcRSI(closes, tf.rsiPeriod);
+  const sma20    = tf.smas.includes(20)  ? calcSMA(closes, 20)  : null;
+  const sma50    = tf.smas.includes(50)  ? calcSMA(closes, 50)  : null;
+  const sma200   = tf.smas.includes(200) ? calcSMA(closes, 200) : null;
+  const macd     = calcMACD(closes);
+  const bb       = calcBollingerBands(closes, 20, 2);
+  const atr      = calcATR(cleanOhlcv, 14);
+  const stochRSI = calcStochRSI(closes, 14, 14, 3, 3);
+  const sr       = calcSupportResistance(cleanOhlcv, 30);
+  const avgVol   = calcAvgVolume(volumes, 20);
+  const curVol   = volumes.filter(Boolean).slice(-1)[0] || 0;
+
   const rsiSignal = rsi14 > 70 ? 'OVERBOUGHT' : rsi14 < 30 ? 'OVERSOLD' : 'NEUTRAL';
+
+  // Trend — graceful fallback when not enough data for preferred SMAs
   let trendSignal = 'UNKNOWN';
-  if      (timeframeKey === 'short')  trendSignal = sma20  ? (price > sma20  ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
-  else if (timeframeKey === 'swing')  trendSignal = sma20 && sma50  ? (sma20  > sma50  ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
-  else                                trendSignal = sma50 && sma200 ? (sma50  > sma200 ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
+  if (timeframeKey === 'short') {
+    trendSignal = sma20 ? (price > sma20 ? 'BULLISH' : 'BEARISH') : 'UNKNOWN';
+  } else if (timeframeKey === 'swing') {
+    if (sma20 && sma50)   trendSignal = sma20 > sma50  ? 'BULLISH' : 'BEARISH';
+    else if (sma20)       trendSignal = price > sma20  ? 'BULLISH' : 'BEARISH';
+    else if (macd)        trendSignal = macd.trend;
+  } else {
+    // position / longterm
+    if (sma50 && sma200)  trendSignal = sma50  > sma200 ? 'BULLISH' : 'BEARISH';
+    else if (sma50)       trendSignal = price  > sma50  ? 'BULLISH' : 'BEARISH';
+    else if (sma20)       trendSignal = price  > sma20  ? 'BULLISH' : 'BEARISH';
+    else if (macd)        trendSignal = macd.trend;
+  }
+
   const priceVsSma20  = sma20  ? ((price - sma20)  / sma20  * 100).toFixed(2) : null;
   const priceVsSma50  = sma50  ? ((price - sma50)  / sma50  * 100).toFixed(2) : null;
   const priceVsSma200 = sma200 ? ((price - sma200) / sma200 * 100).toFixed(2) : null;
   const volumeRatio   = avgVol ? parseFloat((curVol / avgVol).toFixed(2)) : null;
   const volumeSignal  = volumeRatio > 1.5 ? 'HIGH' : volumeRatio < 0.5 ? 'LOW' : 'NORMAL';
+
   return {
     timeframeKey, timeframeLabel: tf.label,
     rsi14, rsiSignal, sma20, sma50, sma200, trendSignal,
