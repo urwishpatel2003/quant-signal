@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   SignedIn, SignedOut, SignInButton,
   UserButton, useUser, useAuth,
@@ -6,6 +6,7 @@ import {
 import { TABS } from './utils/constants';
 import { useMacroData } from './hooks/useMacroData';
 import { useScan } from './hooks/useScan';
+import { useWatchlistScans } from './hooks/useWatchlistScans';
 import MacroBar    from './components/MacroBar';
 import ScannerTab  from './tabs/ScannerTab';
 import OptionsTab  from './tabs/OptionsTab';
@@ -29,6 +30,20 @@ export default function App() {
   const scan                     = useScan(macro);
   const { user }                 = useUser();
   const { isLoaded, isSignedIn } = useAuth();
+
+  // Fetch watchlist tickers for background scanning
+  const [watchlistTickers, setWatchlistTickers] = useState([]);
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`${import.meta.env.VITE_API_BASE}/watchlist/${user.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setWatchlistTickers(data.map(d => d.ticker));
+      })
+      .catch(() => {});
+  }, [user?.id]);
+
+  const { scans: watchlistScans, refreshAll: refreshWatchlistScans } = useWatchlistScans(watchlistTickers);
 
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
@@ -166,6 +181,9 @@ export default function App() {
               <WatchlistTab
                 onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
                 onOpenOptions={ticker => { setOptionsTicker(ticker); setActiveTab('options'); }}
+                watchlistScans={watchlistScans}
+                onTickerAdded={ticker => setWatchlistTickers(prev => [...new Set([...prev, ticker])])}
+                onTickerRemoved={ticker => setWatchlistTickers(prev => prev.filter(t => t !== ticker))}
               />
             </div>
           </SignedIn>

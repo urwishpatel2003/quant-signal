@@ -2,15 +2,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useUsage } from '../hooks/useUsage';
-import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
-import { fetchTradierQuote, fetchTradierChain, fetchTradierExpirations } from '../api/tradier';
-import { calcIndicators } from '../utils/indicators';
-import { runPriceAnalysis } from '../api/claude';
-import { SC } from '../utils/constants';
 import UpgradeModal from '../components/UpgradeModal';
 
 const BASE       = import.meta.env.VITE_API_BASE;
 const FREE_LIMIT = 5;
+
+const SC = { BUY: '#00ff88', SELL: '#ff4444', HOLD: '#ffaa00' };
 
 function fmtPrice(p) {
   if (!p) return '—';
@@ -20,7 +17,8 @@ function fmtPrice(p) {
   return `$${p.toFixed(6)}`;
 }
 
-function Accordion({ id, activeId, setActiveId, label, preview, children }) {
+// ── Accordion card ─────────────────────────────────────────────────────────────
+function AccordionCard({ id, activeId, setActiveId, label, preview, children }) {
   const isOpen = activeId === id;
   return (
     <div style={{
@@ -31,26 +29,26 @@ function Accordion({ id, activeId, setActiveId, label, preview, children }) {
         onClick={() => setActiveId(isOpen ? null : id)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 12px', cursor: 'pointer',
+          padding: '10px 14px', cursor: 'pointer',
           background: isOpen ? '#ffaa0008' : 'transparent',
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em' }}>
+          <div style={{ fontSize: 10, color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: isOpen ? 0 : 2 }}>
             {label}
           </div>
           {!isOpen && preview && (
-            <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 10, color: '#7788aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {preview}
             </div>
           )}
         </div>
-        <div style={{ fontSize: 12, color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 8 }}>
+        <div style={{ fontSize: 12, color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 10, flexShrink: 0 }}>
           {isOpen ? '▲' : '▼'}
         </div>
       </div>
       {isOpen && (
-        <div style={{ padding: '0 12px 14px', borderTop: '1px solid #1e1e2e' }}>
+        <div style={{ padding: '0 14px 14px', borderTop: '1px solid #1e1e30' }}>
           {children}
         </div>
       )}
@@ -58,153 +56,139 @@ function Accordion({ id, activeId, setActiveId, label, preview, children }) {
   );
 }
 
-function WatchlistItem({ item, onRemove, onOpenOptions }) {
-  const [expanded, setExpanded] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [scanData, setScanData] = useState(null);
-  const [activeId, setActiveId] = useState('technicals');
-  const [removing, setRemoving] = useState(false);
+// ── Watchlist item card ────────────────────────────────────────────────────────
+function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan }) {
+  const [expanded,  setExpanded]  = useState(false);
+  const [activeId,  setActiveId]  = useState(null);
+
+  // Use preloaded scan data directly
+  const scanData  = preloadedScan?.data  || null;
+  const scanning  = preloadedScan?.loading || false;
+  const scanError = preloadedScan?.error || '';
 
   const isUp     = item.changePct > 0;
   const isDown   = item.changePct < 0;
   const pctColor = isUp ? '#00ff88' : isDown ? '#ff4444' : '#7788aa';
   const sigColor = scanData?.analysis ? SC[scanData.analysis.signal] : '#7788aa';
 
-  const runScan = async () => {
-    if (scanData || scanning) { setExpanded(true); return; }
-    setScanning(true); setExpanded(true);
-    try {
-      const [p, q, f, n] = await Promise.all([
-        fetchPrice(item.ticker, '1y', '1d'),
-        fetchTradierQuote(item.ticker),
-        fetchFundamentals(item.ticker),
-        fetchStockNews(item.ticker),
-      ]);
-      const ta        = calcIndicators(p, 'longterm');
-      const livePrice = q?.last || p?.current;
-      const exps      = await fetchTradierExpirations(item.ticker).catch(() => []);
-      let optData     = null;
-      if (exps.length > 0) {
-        optData = await fetchTradierChain(item.ticker, exps[0], livePrice).catch(() => null);
-      }
-      const analysis = await runPriceAnalysis(
-        item.ticker, livePrice, p, f, optData, n,
-        null, null, null, null, ta, 'longterm'
-      );
-      setScanData({ p, q, f, n, ta, analysis, livePrice });
-    } catch (e) { console.error('[watchlist scan]', e.message); }
-    setScanning(false);
-  };
-
-  const handleRemove = async () => {
-    setRemoving(true);
-    await onRemove(item.ticker);
-  };
+  const handleExpand = () => setExpanded(e => !e);
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* ── Row ── */}
+      {/* ── Main row ── */}
       <div
+        onClick={handleExpand}
         style={{
           display: 'flex', alignItems: 'center', gap: 12,
           padding: '14px 16px', cursor: 'pointer',
-          background: expanded ? '#141420' : '#0f0f1a',
+          background: expanded ? '#0f0f1a' : 'transparent',
           transition: 'background 0.15s',
         }}
-        onClick={runScan}
+        onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = '#0d0d18'; }}
+        onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = 'transparent'; }}
       >
+        {/* Ticker */}
         <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: '#ffaa00', lineHeight: 1, minWidth: 70, flexShrink: 0 }}>
           {item.ticker}
         </div>
+
+        {/* Price + change */}
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{fmtPrice(item.price)}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: pctColor, marginTop: 1 }}>
-            {item.changePct != null ? `${isUp ? '▲' : isDown ? '▼' : '—'} ${Math.abs(item.changePct).toFixed(2)}%` : '—'}
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>
+            {fmtPrice(item.price)}
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: pctColor, marginTop: 2 }}>
+            {item.changePct != null
+              ? `${isUp ? '▲' : isDown ? '▼' : '—'} ${Math.abs(item.changePct).toFixed(2)}%`
+              : '—'}
           </div>
         </div>
 
-        {scanning && <div style={{ fontSize: 10, color: '#ffaa0077', letterSpacing: '0.1em' }}>ANALYZING...</div>}
-        {scanData?.analysis && !scanning && (
-          <div style={{
-            background: sigColor + '11', border: `1px solid ${sigColor}44`,
-            padding: '5px 10px', borderRadius: 2, textAlign: 'center', flexShrink: 0,
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: sigColor, lineHeight: 1 }}>{scanData.analysis.signal}</div>
-            <div style={{ fontSize: 9, color: '#b0c0dd', marginTop: 1 }}>{scanData.analysis.confidence}%</div>
-          </div>
-        )}
+        {/* Signal badge or loading */}
+        <div style={{ flexShrink: 0, minWidth: 80, textAlign: 'center' }}>
+          {scanning ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #ffaa0022', borderTop: '2px solid #ffaa00', animation: 'spin 0.8s linear infinite' }} />
+              <div style={{ fontSize: 9, color: '#ffaa0066', letterSpacing: '0.05em' }}>ANALYZING</div>
+            </div>
+          ) : scanData?.analysis ? (
+            <div style={{
+              background: sigColor + '11', border: `1px solid ${sigColor}44`,
+              padding: '5px 10px', borderRadius: 2,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
+                {scanData.analysis.signal}
+              </div>
+              <div style={{ fontSize: 9, color: sigColor + '88', marginTop: 2 }}>
+                {scanData.analysis.confidence}% · LT
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 9, color: '#3a3a5e', letterSpacing: '0.05em' }}>—</div>
+          )}
+        </div>
 
+        {/* Actions */}
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onOpenOptions(item.ticker)}
             style={{
-              background: '#4488ff11', border: '1px solid #4488ff33', color: '#4488ff',
-              cursor: 'pointer', borderRadius: 4, padding: '6px 10px',
-              fontSize: 10, fontFamily: 'inherit', transition: 'all 0.15s',
+              background: '#4488ff11', border: '1px solid #4488ff33',
+              color: '#4488ff', cursor: 'pointer', borderRadius: 4,
+              padding: '6px 10px', fontSize: 10, fontFamily: 'inherit',
+              transition: 'all 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#4488ff22'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#4488ff11'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#4488ff22'; e.currentTarget.style.borderColor = '#4488ff66'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#4488ff11'; e.currentTarget.style.borderColor = '#4488ff33'; }}
           >⚡</button>
           <button
-            onClick={handleRemove}
-            disabled={removing}
+            onClick={() => onRemove(item.ticker)}
+            disabled={removing === item.ticker}
             style={{
-              background: 'none', border: '1px solid #ff444422', color: '#ff444466',
-              cursor: 'pointer', borderRadius: 4, padding: '6px 10px',
-              fontSize: 10, fontFamily: 'inherit', transition: 'all 0.15s',
+              background: 'none', border: '1px solid #ff444422',
+              color: '#ff444466', cursor: 'pointer', borderRadius: 4,
+              padding: '6px 10px', fontSize: 10, fontFamily: 'inherit',
+              transition: 'all 0.15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.color = '#ff4444'; e.currentTarget.style.borderColor = '#ff4444'; }}
             onMouseLeave={e => { e.currentTarget.style.color = '#ff444466'; e.currentTarget.style.borderColor = '#ff444422'; }}
-          >{removing ? '...' : '✕'}</button>
+          >{removing === item.ticker ? '...' : '✕'}</button>
+        </div>
+
+        <div style={{ fontSize: 12, color: expanded ? '#ffaa00' : '#3a3a5e', flexShrink: 0 }}>
+          {expanded ? '▲' : '▼'}
         </div>
       </div>
 
-      {/* ── Expanded ── */}
+      {/* ── Expanded section ── */}
       {expanded && (
-        <div style={{ padding: '0 12px 12px', borderTop: '1px solid #1e1e2e' }}>
+        <div style={{ padding: '0 16px 14px', borderTop: '1px solid #1e1e2e' }}>
+          {scanError && (
+            <div style={{ fontSize: 11, color: '#ff4444', padding: '10px 0' }}>{scanError}</div>
+          )}
+
           {scanning && (
-            <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 11, color: '#ffaa0077', letterSpacing: '0.2em' }}>
+            <div style={{ fontSize: 11, color: '#ffaa0066', padding: '12px 0', textAlign: 'center', letterSpacing: '0.15em' }}>
               RUNNING LONG TERM ANALYSIS...
             </div>
           )}
 
-          {scanData && !scanning && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 10 }}>
+          {scanData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 }}>
 
-              {/* Signal summary */}
+              {/* Summary line */}
               {scanData.analysis && (
                 <div style={{
-                  background: sigColor + '0d', border: `1px solid ${sigColor}33`,
-                  borderRadius: 4, padding: '10px 12px', marginBottom: 4,
+                  fontSize: 12, color: '#d0d8f0', lineHeight: 1.7,
+                  borderLeft: `2px solid ${sigColor}44`, paddingLeft: 10,
+                  fontStyle: 'italic', marginBottom: 4,
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, color: sigColor }}>
-                      {scanData.analysis.signal} · {scanData.analysis.confidence}%
-                    </div>
-                    <div style={{ fontSize: 10, color: '#7788aa' }}>LONG TERM</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                    {[
-                      ['TARGET', `$${scanData.analysis.priceTarget?.toFixed(2)}`, '#00ff88'],
-                      ['STOP',   `$${scanData.analysis.stopLoss?.toFixed(2)}`,    '#ff4444'],
-                      ['RISK',   scanData.analysis.riskLevel,                      scanData.analysis.riskLevel === 'LOW' ? '#00ff88' : scanData.analysis.riskLevel === 'HIGH' ? '#ff4444' : '#ffaa00'],
-                    ].map(([l, v, c]) => (
-                      <div key={l} style={{ background: '#070710', padding: '5px 10px', borderRadius: 2 }}>
-                        <div style={{ fontSize: 8, color: '#7788aa', marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {scanData.analysis.thesis && (
-                    <div style={{ fontSize: 11, color: '#99aacc', lineHeight: 1.6, fontStyle: 'italic' }}>
-                      {scanData.analysis.thesis}
-                    </div>
-                  )}
+                  {scanData.analysis.thesis}
                 </div>
               )}
 
               {/* Accordion 1: Technicals */}
-              <Accordion
+              <AccordionCard
                 id="technicals"
                 activeId={activeId}
                 setActiveId={setActiveId}
@@ -212,86 +196,103 @@ function WatchlistItem({ item, onRemove, onOpenOptions }) {
                 preview={scanData.ta ? `RSI ${scanData.ta.rsi14} · ${scanData.ta.trendSignal} · Vol ${scanData.ta.volumeRatio}x` : ''}
               >
                 <div style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* TA grid */}
                   {scanData.ta && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      {[
-                        ['RSI (14)',    scanData.ta.rsi14,             scanData.ta.rsi14 > 70 ? '#ff4444' : scanData.ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
-                        ['Trend',      scanData.ta.trendSignal,        scanData.ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
-                        ['Volume',     `${scanData.ta.volumeRatio}x`,  scanData.ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
-                        ['MACD',       scanData.ta.macd?.cross,        scanData.ta.macd?.cross === 'BULLISH_CROSS' ? '#00ff88' : scanData.ta.macd?.cross === 'BEARISH_CROSS' ? '#ff4444' : '#e8e8f0'],
-                        ['SMA 50',     scanData.ta.sma50  ? `$${scanData.ta.sma50}`  : null, '#e8e8f0'],
-                        ['SMA 200',    scanData.ta.sma200 ? `$${scanData.ta.sma200}` : null, '#e8e8f0'],
-                        ['ATR (14)',   scanData.ta.atr?.atr,           scanData.ta.atr?.volatility === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
-                        ['StochRSI K', scanData.ta.stochRSI?.k,        scanData.ta.stochRSI?.k > 90 ? '#ff4444' : scanData.ta.stochRSI?.k < 10 ? '#00ff88' : '#ffaa00'],
-                        ['Support',    scanData.ta.sr?.nearestSupport    ? `$${scanData.ta.sr.nearestSupport}`    : null, '#00ff88'],
-                        ['Resistance', scanData.ta.sr?.nearestResistance ? `$${scanData.ta.sr.nearestResistance}` : null, '#ff4444'],
-                      ].filter(([, v]) => v != null).map(([k, v, c]) => (
-                        <div key={k} style={{ background: '#0a0a14', padding: '7px 8px', borderRadius: 3 }}>
-                          <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{v}</div>
-                        </div>
-                      ))}
+                    <div>
+                      <div style={{ fontSize: 9, color: '#4488ff', letterSpacing: '0.15em', fontWeight: 700, marginBottom: 8 }}>TECHNICAL</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                        {[
+                          ['RSI (14)',    scanData.ta.rsi14,            scanData.ta.rsi14 > 70 ? '#ff4444' : scanData.ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
+                          ['Trend',      scanData.ta.trendSignal,       scanData.ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
+                          ['Volume',     `${scanData.ta.volumeRatio}x`, scanData.ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
+                          ['MACD',       scanData.ta.macd?.cross,       scanData.ta.macd?.cross === 'BULLISH_CROSS' ? '#00ff88' : scanData.ta.macd?.cross === 'BEARISH_CROSS' ? '#ff4444' : '#e8e8f0'],
+                          ['SMA 50',     scanData.ta.sma50 ? `$${scanData.ta.sma50}` : null, '#e8e8f0'],
+                          ['SMA 200',    scanData.ta.sma200 ? `$${scanData.ta.sma200}` : null, '#e8e8f0'],
+                          ['ATR',        scanData.ta.atr?.atr, scanData.ta.atr?.volatility === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
+                          ['StochRSI K', scanData.ta.stochRSI?.k, scanData.ta.stochRSI?.k > 90 ? '#ff4444' : scanData.ta.stochRSI?.k < 10 ? '#00ff88' : '#ffaa00'],
+                          ['Support',    scanData.ta.sr?.nearestSupport ? `$${scanData.ta.sr.nearestSupport}` : null, '#00ff88'],
+                          ['Resistance', scanData.ta.sr?.nearestResistance ? `$${scanData.ta.sr.nearestResistance}` : null, '#ff4444'],
+                        ].filter(([, v]) => v != null).map(([k, v, c]) => (
+                          <div key={k} style={{ background: '#0a0a12', padding: '6px 8px', borderRadius: 3 }}>
+                            <div style={{ fontSize: 8, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                  {scanData.f && (
-                    <>
-                      <div style={{ fontSize: 10, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em' }}>FUNDAMENTALS</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+
+                  {/* Fundamentals */}
+                  {scanData.fundamentals && (
+                    <div>
+                      <div style={{ fontSize: 9, color: '#ffaa00', letterSpacing: '0.15em', fontWeight: 700, marginBottom: 8 }}>FUNDAMENTALS</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                         {[
-                          ['P/E',        scanData.f.pe?.toFixed(1)],
-                          ['EPS',        scanData.f.eps ? `$${scanData.f.eps.toFixed(2)}` : null],
-                          ['Beta',       scanData.f.beta?.toFixed(2)],
-                          ['52W High',   scanData.f.fiftyTwoWeekHigh ? `$${scanData.f.fiftyTwoWeekHigh.toFixed(2)}` : null],
-                          ['52W Low',    scanData.f.fiftyTwoWeekLow  ? `$${scanData.f.fiftyTwoWeekLow.toFixed(2)}`  : null],
-                          ['ROE',        scanData.f.roe ? `${(scanData.f.roe * 100).toFixed(1)}%` : null],
-                          ['Rev Growth', scanData.f.revenueGrowth ? `${(scanData.f.revenueGrowth * 100).toFixed(1)}%` : null],
-                          ['D/E',        scanData.f.debtToEquity?.toFixed(2)],
-                          ['Target',     scanData.f.targetMeanPrice ? `$${scanData.f.targetMeanPrice.toFixed(2)}` : null],
+                          ['P/E',         scanData.fundamentals.pe?.toFixed(1)],
+                          ['EPS',         scanData.fundamentals.eps ? `$${scanData.fundamentals.eps.toFixed(2)}` : null],
+                          ['Beta',        scanData.fundamentals.beta?.toFixed(2)],
+                          ['52W High',    scanData.fundamentals.fiftyTwoWeekHigh ? `$${scanData.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
+                          ['52W Low',     scanData.fundamentals.fiftyTwoWeekLow  ? `$${scanData.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
+                          ['ROE',         scanData.fundamentals.roe ? `${(scanData.fundamentals.roe * 100).toFixed(1)}%` : null],
+                          ['Rev Growth',  scanData.fundamentals.revenueGrowth ? `${(scanData.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
+                          ['Target',      scanData.fundamentals.targetMeanPrice ? `$${scanData.fundamentals.targetMeanPrice.toFixed(2)}` : null],
                         ].filter(([, v]) => v != null).map(([k, v]) => (
-                          <div key={k} style={{ background: '#0a0a14', padding: '7px 8px', borderRadius: 3 }}>
-                            <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
+                          <div key={k} style={{ background: '#0a0a12', padding: '6px 8px', borderRadius: 3 }}>
+                            <div style={{ fontSize: 8, color: '#7788aa', marginBottom: 2, letterSpacing: '0.1em' }}>{k}</div>
                             <div style={{ fontSize: 12, fontWeight: 700, color: '#e8e8f0' }}>{v}</div>
                           </div>
                         ))}
                       </div>
-                    </>
+                    </div>
+                  )}
+
+                  {/* Bull / Bear */}
+                  {scanData.analysis && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div style={{ background: '#070e0a', border: '1px solid #00ff8822', borderRadius: 4, padding: '10px' }}>
+                        <div style={{ fontSize: 9, color: '#00ff88', fontWeight: 700, marginBottom: 8, letterSpacing: '0.1em' }}>▲ BULL</div>
+                        {scanData.analysis.bullFactors?.slice(0, 3).map((f, i) => (
+                          <div key={i} style={{ fontSize: 10, color: '#d0d8f0', padding: '3px 0', borderBottom: i < 2 ? '1px solid #0f1a14' : 'none', display: 'flex', gap: 5, lineHeight: 1.4 }}>
+                            <span style={{ color: '#00ff88', flexShrink: 0 }}>▲</span>{f}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ background: '#0e0707', border: '1px solid #ff444422', borderRadius: 4, padding: '10px' }}>
+                        <div style={{ fontSize: 9, color: '#ff4444', fontWeight: 700, marginBottom: 8, letterSpacing: '0.1em' }}>▼ BEAR</div>
+                        {scanData.analysis.bearFactors?.slice(0, 3).map((f, i) => (
+                          <div key={i} style={{ fontSize: 10, color: '#d0d8f0', padding: '3px 0', borderBottom: i < 2 ? '1px solid #1a0f0f' : 'none', display: 'flex', gap: 5, lineHeight: 1.4 }}>
+                            <span style={{ color: '#ff4444', flexShrink: 0 }}>▼</span>{f}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </Accordion>
+              </AccordionCard>
 
               {/* Accordion 2: News */}
-              <Accordion
+              <AccordionCard
                 id="news"
                 activeId={activeId}
                 setActiveId={setActiveId}
-                label={`RECENT NEWS${scanData.n?.length ? ` (${scanData.n.length})` : ''}`}
-                preview={scanData.n?.[0]?.title || 'No recent news available'}
+                label={`RECENT NEWS${scanData.news?.length ? ` (${scanData.news.length})` : ''}`}
+                preview={scanData.news?.[0]?.title || 'No recent news'}
               >
                 <div style={{ paddingTop: 10 }}>
-                  {scanData.n?.length > 0 ? (
-                    scanData.n.slice(0, 8).map((n, i) => (
-                      <div key={i} style={{
-                        padding: '9px 0',
-                        borderBottom: i < Math.min(scanData.n.length, 8) - 1 ? '1px solid #1a1a26' : 'none',
-                      }}>
-                        <a href={n.url} target="_blank" rel="noopener noreferrer"
-                          style={{ color: '#c8d8f0', fontSize: 12, lineHeight: 1.5, display: 'block', textDecoration: 'none', marginBottom: 3 }}
-                          onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
+                  {scanData.news?.length > 0 ? (
+                    scanData.news.slice(0, 6).map((n, i) => (
+                      <div key={i} style={{ padding: '8px 0', borderBottom: i < Math.min(scanData.news.length, 6) - 1 ? '1px solid #1a1a26' : 'none' }}>
+                        <a
+                          href={n.url} target="_blank" rel="noopener noreferrer"
+                          style={{ color: '#c8d8f0', fontSize: 11, lineHeight: 1.5, display: 'block', textDecoration: 'none', marginBottom: 3 }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#ffaa00'; }}
                           onMouseLeave={e => { e.currentTarget.style.color = '#c8d8f0'; }}
                         >{n.title}</a>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <span style={{ color: '#7788aa', fontSize: 10 }}>{n.publisher}</span>
-                          <span style={{ color: '#3a3a5e', fontSize: 10 }}>·</span>
                           <span style={{ color: '#7788aa', fontSize: 10 }}>
-                            {new Date(n.time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {new Date(n.time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                           </span>
-                          {n.url && (
-                            <a href={n.url} target="_blank" rel="noopener noreferrer"
-                              style={{ marginLeft: 'auto', fontSize: 9, color: '#ffaa0077', textDecoration: 'none' }}
-                              onMouseEnter={e => { e.currentTarget.style.color = '#ffaa00'; }}
-                              onMouseLeave={e => { e.currentTarget.style.color = '#ffaa0077'; }}
-                            >READ →</a>
-                          )}
                         </div>
                       </div>
                     ))
@@ -299,30 +300,17 @@ function WatchlistItem({ item, onRemove, onOpenOptions }) {
                     <div style={{ fontSize: 11, color: '#7788aa', padding: '8px 0' }}>No recent news available</div>
                   )}
                 </div>
-              </Accordion>
+              </AccordionCard>
             </div>
           )}
-
-          <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <button
-              onClick={() => setExpanded(false)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: '#7788aa', fontSize: 10, fontFamily: 'inherit',
-                letterSpacing: '0.1em', padding: '4px 8px',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#b0c0dd'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#7788aa'; }}
-            >▲ COLLAPSE</button>
-          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ── Main Tab ──────────────────────────────────────────────────────────────────
-export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
+// ── Main WatchlistTab ──────────────────────────────────────────────────────────
+export default function WatchlistTab({ onOpenScanner, onOpenOptions, watchlistScans, onTickerAdded, onTickerRemoved }) {
   const { user } = useUser();
   const userId   = user?.id;
   const { plan } = useUsage();
@@ -333,17 +321,20 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
   const [adding,     setAdding]     = useState(false);
   const [error,      setError]      = useState('');
   const [showUpgrade,setShowUpgrade]= useState(false);
+  const [removing,   setRemoving]   = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchWatchlist = useCallback(async (silent = false) => {
     if (!userId) return;
-    if (!silent) setLoading(true); else setRefreshing(true);
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
     try {
       const res  = await fetch(`${BASE}/watchlist/${userId}`);
       const data = await res.json();
       if (Array.isArray(data)) setItems(data);
     } catch {}
-    setLoading(false); setRefreshing(false);
+    setLoading(false);
+    setRefreshing(false);
   }, [userId]);
 
   useEffect(() => { fetchWatchlist(); }, [fetchWatchlist]);
@@ -364,19 +355,21 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
         body: JSON.stringify({ ticker }),
       });
       const data = await res.json();
-      if (data.error) {
-        if (data.error.includes('limit')) setShowUpgrade(true);
-        else setError(data.error);
-      } else { setInputVal(''); fetchWatchlist(true); }
+      if (data.error) { if (data.error.includes('limit')) setShowUpgrade(true); else setError(data.error); }
+      else { setInputVal(''); fetchWatchlist(true); onTickerAdded?.(ticker); }
     } catch (e) { setError(e.message); }
     setAdding(false);
   };
 
   const handleRemove = async (ticker) => {
+    if (!userId) return;
+    setRemoving(ticker);
     try {
       await fetch(`${BASE}/watchlist/${userId}/${ticker}`, { method: 'DELETE' });
       setItems(prev => prev.filter(i => i.ticker !== ticker));
+      onTickerRemoved?.(ticker);
     } catch {}
+    setRemoving(null);
   };
 
   const isPro  = plan === 'pro';
@@ -386,23 +379,21 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
     <div>
       {showUpgrade && <UpgradeModal type="watchlist" onClose={() => setShowUpgrade(false)} />}
 
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: '#ffaa00', lineHeight: 1 }}>WATCHLIST</div>
           <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2 }}>
-            {isPro ? `${items.length} tickers · unlimited` : `${items.length} / ${FREE_LIMIT} tickers · free tier`}
+            {isPro ? `${items.length} tickers · unlimited` : `${items.length} / ${FREE_LIMIT} · free tier`}
           </div>
         </div>
         <button onClick={() => fetchWatchlist(true)} disabled={refreshing}
-          style={{
-            background: 'none', border: '1px solid #2a2a40', color: refreshing ? '#7788aa' : '#b0c0dd',
-            cursor: refreshing ? 'default' : 'pointer', borderRadius: 4,
-            padding: '6px 12px', fontSize: 11, fontFamily: 'inherit', letterSpacing: '0.1em',
-          }}>
+          style={{ background: 'none', border: '1px solid #2a2a40', color: refreshing ? '#7788aa' : '#b0c0dd', cursor: refreshing ? 'default' : 'pointer', borderRadius: 4, padding: '6px 12px', fontSize: 11, fontFamily: 'inherit', letterSpacing: '0.1em' }}>
           {refreshing ? 'REFRESHING...' : '↻ REFRESH'}
         </button>
       </div>
 
+      {/* Add ticker */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
@@ -417,32 +408,28 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
             autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck="false"
           />
         </div>
-        <button className="btn" onClick={handleAdd}
-          disabled={adding || !inputVal.trim() || (isFull && !isPro)}
+        <button className="btn" onClick={handleAdd} disabled={adding || !inputVal.trim() || (isFull && !isPro)}
           style={{ whiteSpace: 'nowrap', opacity: isFull && !isPro ? 0.4 : 1 }}>
           {adding ? 'ADDING...' : '+ ADD'}
         </button>
       </div>
 
-      {error && <div style={{ fontSize: 11, color: '#ff4444', marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 11, color: '#ff4444', marginBottom: 10 }}>{error}</div>}
 
+      {/* Capacity bar */}
       {!isPro && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em' }}>WATCHLIST CAPACITY</span>
+            <span style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em' }}>CAPACITY</span>
             <span style={{ fontSize: 10, color: isFull ? '#ff4444' : '#b0c0dd' }}>{items.length}/{FREE_LIMIT}</span>
           </div>
           <div style={{ background: '#1a1a2e', borderRadius: 2, height: 3, overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', width: `${Math.min((items.length / FREE_LIMIT) * 100, 100)}%`,
-              background: isFull ? '#ff4444' : '#ffaa00', borderRadius: 2, transition: 'width 0.3s',
-            }} />
+            <div style={{ height: '100%', width: `${Math.min((items.length / FREE_LIMIT) * 100, 100)}%`, background: isFull ? '#ff4444' : '#ffaa00', borderRadius: 2, transition: 'width 0.3s' }} />
           </div>
           {isFull && (
-            <div style={{ fontSize: 11, color: '#ff4444', marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: '#ff4444', marginTop: 5 }}>
               Limit reached —{' '}
-              <button onClick={() => setShowUpgrade(true)}
-                style={{ background: 'none', border: 'none', color: '#ffaa00', cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>
+              <button onClick={() => setShowUpgrade(true)} style={{ background: 'none', border: 'none', color: '#ffaa00', cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>
                 upgrade to Pro
               </button>{' '}for unlimited
             </div>
@@ -457,26 +444,29 @@ export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
           <div style={{ fontSize: 32, marginBottom: 12 }}>👁</div>
           <div style={{ fontSize: 14, color: '#99aacc', marginBottom: 8 }}>Your watchlist is empty</div>
           <div style={{ fontSize: 11, color: '#7788aa', lineHeight: 1.8 }}>
-            Add tickers above to track them here<br />
-            Click any ticker to see long term AI analysis
+            Add tickers above · Click any ticker to see long term analysis<br />
+            Prices refresh every minute
           </div>
         </div>
       )}
 
       {!loading && items.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {items.map(item => (
-            <WatchlistItem key={item.ticker} item={item} onRemove={handleRemove} onOpenOptions={onOpenOptions} />
+            <WatchlistItem
+              key={item.ticker}
+              item={item}
+              onRemove={handleRemove}
+              removing={removing}
+              onOpenOptions={onOpenOptions}
+              preloadedScan={watchlistScans?.[item.ticker]}
+            />
           ))}
         </div>
       )}
 
       {!isPro && items.length > 0 && (
-        <div style={{
-          marginTop: 20, padding: '14px 16px',
-          background: '#ffaa0008', border: '1px solid #ffaa0022',
-          borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8,
-        }}>
+        <div style={{ marginTop: 16, padding: '12px 16px', background: '#ffaa0008', border: '1px solid #ffaa0022', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div>
             <div style={{ fontSize: 11, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.1em' }}>UPGRADE TO PRO</div>
             <div style={{ fontSize: 11, color: '#7788aa', marginTop: 2 }}>Unlimited watchlist + unlimited scans & options</div>

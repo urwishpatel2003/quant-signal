@@ -1270,6 +1270,76 @@ app.post('/watchlist/:userId', async (req, res) => {
   }
 });
 
+// ─── WATCHLIST ROUTES ─────────────────────────────────────────────────────────
+// Add these routes to server.js before the app.listen() line
+
+// GET /watchlist/:userId — fetch user's watchlist with live prices
+app.get('/watchlist/:userId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('watchlist')
+      .select('ticker, added_at')
+      .eq('user_id', req.params.userId)
+      .order('added_at', { ascending: false });
+    if (error) throw error;
+    if (!data?.length) return res.json([]);
+
+    // Fetch live prices for all tickers in one Tradier call
+    const tickers = data.map(r => r.ticker).join(',');
+    const quotes  = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
+    const raw     = quotes?.quotes?.quote || [];
+    const quoteList = Array.isArray(raw) ? raw : [raw];
+    const quoteMap  = {};
+    quoteList.forEach(q => { quoteMap[q.symbol] = q; });
+
+    const result = data.map(row => {
+      const q = quoteMap[row.ticker];
+      return {
+        ticker:    row.ticker,
+        added_at:  row.added_at,
+        price:     q?.last ? parseFloat(q.last) : null,
+        changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null,
+        change:    q?.change ? parseFloat(q.change) : null,
+        volume:    q?.volume ? parseInt(q.volume) : null,
+      };
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[watchlist GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /watchlist/:userId — add ticker to watchlist
+app.post('/watchlist/:userId', async (req, res) => {
+  const { ticker } = req.body;
+  if (!ticker) return res.status(400).json({ error: 'ticker required' });
+  try {
+    // Check free tier limit (10 items)
+    const user = await getOrCreateUser(req.params.userId);
+    if (user.plan !== 'pro') {
+      const { count } = await supabase
+        .from('watchlist')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', req.params.userId);
+      if (count >= 5) return res.status(403).json({ error: 'Free tier limit: 5 watchlist items. Upgrade to Pro for unlimited.' });
+    }
+    const { data, error } = await supabase
+      .from('watchlist')
+      .insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() })
+      .select()
+      .single();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' });
+      throw error;
+    }
+    res.json(data);
+  } catch (e) {
+    console.error('[watchlist POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // DELETE /watchlist/:userId/:ticker — remove ticker from watchlist
 app.delete('/watchlist/:userId/:ticker', async (req, res) => {
   try {
@@ -1282,6 +1352,43 @@ app.delete('/watchlist/:userId/:ticker', async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('[watchlist DELETE]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── WATCHLIST BACKGROUND ANALYSIS ───────────────────────────────────────────
+// Add this route to server.js before app.listen()
+// This is a lightweight long-term price signal — no usage tracking
+
+app.post('/api/analyze/watchlist', async (req, res) => {
+  try {
+    const { ticker, price, ohlcv, fundamentals, options, news,
+            bonds, macroNews, intlMarkets, calendar, ta } = req.body;
+
+    const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
+    const taCtx       = buildTAContext(ta, ticker, calendar);
+    const categorized = categorizeNews(news).slice(0, 5);
+
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514', max_tokens: 800, temperature: 0,
+      system: `You are a quantitative trading analyst. Timeframe: Long Term (6-12 months).
+Focus: fundamentals, macro cycle, SMA200, analyst consensus.
+Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"thesis":"string (1 sentence)","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH"}`,
+      messages: [{
+        role: 'user',
+        content: `${ticker} @ $${price?.toFixed(2)} | LONG TERM (6-12 months)
+PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
+RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal}
+FUNDAMENTALS: P/E=${fundamentals?.pe} | EPS=$${fundamentals?.eps} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey}
+NEWS: ${categorized.slice(0, 4).join(' | ')}
+${macroCtx}
+Return JSON only.`
+      }]
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('[analyze/watchlist]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
