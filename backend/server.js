@@ -288,7 +288,7 @@ app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
 app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   const { ticker } = req.params;
   try {
-    const [, financials, quoteData] = await Promise.all([
+    const [refData, financials, quoteData] = await Promise.all([
       polygonGet(`/v3/reference/tickers/${ticker}`),
       polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=1&timeframe=annual`),
       tradierGet(`/v1/markets/quotes?symbols=${ticker}&greeks=false`),
@@ -300,7 +300,8 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
     const revenue = income.revenues?.value, netIncome = income.net_income_loss?.value;
     const totalEquity = balance.equity?.value, totalDebt = balance.liabilities?.value;
     const eps = income.basic_earnings_per_share?.value, grossProfit = income.gross_profit?.value;
-    res.json({ quoteSummary: { result: [{ summaryDetail: {
+    const companyName = refData?.results?.[0]?.name || q.description || '';
+    res.json({ quoteSummary: { result: [{ companyName, summaryDetail: {
       trailingPE: { raw: q.pe_ratio || null }, beta: { raw: q.beta || null },
       fiftyTwoWeekHigh: { raw: q.week_52_high || null }, fiftyTwoWeekLow: { raw: q.week_52_low || null },
       averageVolume: { raw: q.average_volume || null },
@@ -1675,6 +1676,7 @@ app.get('/india/fundamentals/:symbol', async (req, res) => {
         const r = data?.quoteSummary?.result?.[0];
         if (!r) continue;
         result = {
+          companyName:       r.quoteType?.longName || r.quoteType?.shortName || '',
           pe:                r.summaryDetail?.trailingPE?.raw         || null,
           eps:               r.defaultKeyStatistics?.trailingEps?.raw || null,
           beta:              r.summaryDetail?.beta?.raw               || null,

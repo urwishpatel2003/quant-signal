@@ -43,7 +43,7 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
   );
 }
 
-export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '' }) {
+export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '', onAddToWatchlist }) {
   const [activeId, setActiveId] = useState('ticker');
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
@@ -52,6 +52,18 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
     : null;
   const sigColor  = SC[scan.analysis.signal];
   const isIndia   = currency === '₹';
+  const [watchlistAdded,   setWatchlistAdded]   = useState(false);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+
+  const handleAddToWatchlist = async () => {
+    if (!onAddToWatchlist || watchlistAdded || watchlistLoading) return;
+    setWatchlistLoading(true);
+    try {
+      await onAddToWatchlist(scan.ticker);
+      setWatchlistAdded(true);
+    } catch { /* non-critical */ }
+    setWatchlistLoading(false);
+  };
 
   // Helper to format price with correct currency symbol
   const fmt = (val, decimals = 2) => val != null ? `${currency}${parseFloat(val).toFixed(decimals)}` : '—';
@@ -73,12 +85,28 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a40'; e.currentTarget.style.color = '#b0c0dd'; }}
         >← BACK TO SCANNER</button>
 
-        {!isIndia && (
-          <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
-            onClick={() => onOpenOptions(scan.ticker)}>
-            ⚡ OPTIONS
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {!isIndia && (
+            <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
+              onClick={() => onOpenOptions(scan.ticker)}>
+              ⚡ OPTIONS
+            </button>
+          )}
+          {onAddToWatchlist && (
+            <button
+              className="btn-sm"
+              onClick={handleAddToWatchlist}
+              disabled={watchlistAdded || watchlistLoading}
+              style={{
+                color:       watchlistAdded ? '#00ff88' : '#b0c0dd',
+                borderColor: watchlistAdded ? '#00ff8844' : '#3a3a5e',
+                background:  watchlistAdded ? '#00ff8811' : '#1a1a2e',
+                opacity:     watchlistLoading ? 0.6 : 1,
+              }}>
+              {watchlistAdded ? '✓ WATCHLIST' : watchlistLoading ? '...' : '+ WATCHLIST'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Price summary bar ── */}

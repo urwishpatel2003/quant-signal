@@ -95,21 +95,7 @@ export function useScan(macro) {
       }
 
       setOhlcv(p); setQuote(q);
-      // Set company name from search endpoints
-      try {
-        if (isIndia) {
-          const nr = await fetch(`${BASE}/india/search?q=${t}`);
-          const nd = await nr.json();
-          const match = (nd || []).find(s => s.ticker === t);
-          if (match?.name) setCompanyName(match.name);
-        } else {
-          // Use Polygon ticker reference via search endpoint
-          const nr = await fetch(`${BASE}/search?q=${encodeURIComponent(t)}`);
-          const nd = await nr.json();
-          const match = (nd || []).find(s => s.ticker === t);
-          if (match?.name) setCompanyName(match.name);
-        }
-      } catch { /* company name is non-critical */ }
+      // Company name resolved below after fundamentals load
       const indicators = calcIndicators(p, tf);
       setTa(indicators);
       const livePrice = q?.last || p.current;
@@ -118,6 +104,8 @@ export function useScan(macro) {
       // Use India-specific fundamentals for NSE stocks (Yahoo .NS)
       const f = isIndia ? await fetchIndiaFundamentals(t) : await fetchFundamentals(t);
       setFundamentals(f);
+      // Extract company name from fundamentals (Polygon ref for US, Yahoo for India)
+      if (f?.companyName) setCompanyName(f.companyName);
 
       setStage('options');
       let optData = null;

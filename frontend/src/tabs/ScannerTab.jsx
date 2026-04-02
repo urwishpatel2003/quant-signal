@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { SC, MC, GC, RC } from '../utils/constants';
 import { TIMEFRAMES } from '../utils/indicators';
 import { useUsage } from '../hooks/useUsage';
@@ -44,6 +45,7 @@ function fmtPrice(p, currency = '$') {
 }
 
 export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlist, market = 'US' }) {
+  const { user } = useUser();
   const isIndia  = market === 'INDIA';
   const currency = isIndia ? '₹' : '$';
 
@@ -66,6 +68,21 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
   const searchCache = useRef({});
 
   const { usage, limits, plan, canScan, canOptions, trackScan } = useUsage();
+
+  const handleAddToWatchlist = async (ticker) => {
+    if (!user?.id) return;
+    const res = await fetch(`${BASE}/watchlist/${user.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker, market }),
+    });
+    const data = await res.json();
+    if (data.error && data.error.includes('limit')) {
+      setShowUpgrade(true);
+      throw new Error('limit');
+    }
+    onAddToWatchlist?.(ticker);
+  };
 
   // Load US movers
   useEffect(() => {
@@ -212,7 +229,8 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
           }}
           currency={currency}
           market={market}
-          companyName={scan.companyName}
+          companyName={scan.companyName || ""}
+          onAddToWatchlist={handleAddToWatchlist}
         />
       )}
 

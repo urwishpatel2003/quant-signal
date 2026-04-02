@@ -29,6 +29,7 @@ export async function fetchFundamentals(ticker) {
     const r    = data?.quoteSummary?.result?.[0];
     if (!r) return null;
     return {
+      companyName:             r.companyName || '',
       pe:                      r.summaryDetail?.trailingPE?.raw,
       eps:                     r.defaultKeyStatistics?.trailingEps?.raw,
       beta:                    r.summaryDetail?.beta?.raw,
