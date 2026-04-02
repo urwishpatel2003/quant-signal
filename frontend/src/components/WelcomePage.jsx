@@ -18,7 +18,7 @@ const FEATURES = [
   },
   {
     icon: '⚡', color: '#00ff88', title: 'AI Options Plays',
-    desc: 'Exact strike, expiry, entry price, exit price, and stop loss for CALL and PUT options. Real-time chain data with Black-Scholes pricing.',
+    desc: 'Exact strike, expiry, entry price, exit price, and stop loss for CALL and PUT options on US stocks. Real-time chain data with Black-Scholes pricing.',
     points: ['Exact contract recommendations', 'Trade checklist GO/NO-GO', 'P&L simulator before you trade'],
     tab: 'options',
   },
@@ -69,7 +69,7 @@ const PRICING = [
   {
     label: 'FREE', color: '#7788aa', price: '$0', sub: 'Forever free',
     features: ['5 stock scans / day', '3 options analyses / day', '5 watchlist items per market', 'All 4 timeframes', 'US & India markets'],
-    cta: 'START FREE',
+    cta: 'GET STARTED',
   },
   {
     label: 'PRO — US', color: '#ffaa00', price: '$5', sub: '/mo · USD · No commitment',
@@ -140,17 +140,17 @@ export default function WelcomePage({ onEnter, onNavigate }) {
         </div>
 
         <div style={{ fontSize: 'clamp(15px,2.2vw,22px)', color: '#8899aa', marginBottom: 10, fontWeight: 300 }}>
-          Quantitative signals for US stocks, NSE India & options
+          Quantitative signals for US & Indian stocks — options for US markets
         </div>
         <div style={{ fontSize: 'clamp(12px,1.4vw,16px)', color: '#99aacc', maxWidth: 640, margin: '0 auto', lineHeight: 1.85, marginBottom: 'clamp(24px,4vw,40px)' }}>
-          Real-time signals · Exact entry & exit prices · Global macro · Nifty 500 · Options analysis
+          Real-time signals · Exact entry & exit · Global macro · Nifty 500 · US options analysis
         </div>
 
         {/* Market badges */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 'clamp(28px,4vw,44px)', flexWrap: 'wrap' }}>
           {[
             { flag: '🇺🇸', label: 'US Stocks & Options', color: '#2a2a3e', border: '#3a3a5e' },
-            { flag: '🇮🇳', label: 'NSE India — Nifty 500', color: '#1a1408', border: '#ff9a0033' },
+            { flag: '🇮🇳', label: 'NSE India — Stocks Only', color: '#1a1408', border: '#ff9a0033' },
           ].map((b, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7,
               background: b.color, border: `1px solid ${b.border}`,
@@ -169,7 +169,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             background: '#ffaa0022', border: '1px solid #ffaa00', color: '#ffaa00',
             cursor: 'pointer', borderRadius: 3, letterSpacing: '0.1em', fontWeight: 700,
           }}>
-            START FREE →
+            GET STARTED →
           </button>
           <button className="wc-cta" onClick={() => go('help')} style={{
             fontFamily: "'IBM Plex Mono',monospace", fontSize: 'clamp(12px,1.3vw,15px)',
