@@ -1186,6 +1186,45 @@ app.get('/india/movers', async (req, res) => {
   }
 });
 
+// ─── GET /india/news/:symbol ─────────────────────────────────────────────────
+app.get('/india/news/:symbol', async (req, res) => {
+  const symbol  = req.params.symbol.toUpperCase();
+  const name    = NSE_NAMES[symbol] || symbol;
+  const ySymbol = `${symbol}.NS`;
+  try {
+    // Try Yahoo Finance news via search endpoint
+    const data = await httpsGet(
+      'query1.finance.yahoo.com',
+      `/v1/finance/search?q=${encodeURIComponent(ySymbol)}&newsCount=8&quotesCount=0&enableFuzzyQuery=false`,
+      { 'User-Agent': 'Mozilla/5.0' }
+    );
+    const items = data?.news || [];
+    if (items.length > 0) {
+      return res.json(items.slice(0, 8).map(n => ({
+        title:     n.title,
+        publisher: n.publisher || '',
+        time:      n.providerPublishTime,
+        url:       n.link || '',
+      })));
+    }
+
+    // Fallback: Finnhub with company name search
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const to   = new Date().toISOString().split('T')[0];
+    const fdata = await finnhubGet(`/company-news?symbol=${encodeURIComponent(ySymbol)}&from=${from}&to=${to}`);
+    if (Array.isArray(fdata) && fdata.length > 0) {
+      return res.json(fdata.slice(0, 8).map(n => ({
+        title: n.headline, publisher: n.source || '', time: n.datetime, url: n.url,
+      })));
+    }
+
+    res.json([]);
+  } catch (e) {
+    console.error('[india/news]', e.message);
+    res.json([]);
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>

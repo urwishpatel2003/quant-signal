@@ -6,7 +6,6 @@ import { calcIndicators, TIMEFRAMES } from '../utils/indicators';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
-// Fetch India price history from our backend (Yahoo Finance .NS)
 async function fetchIndiaHistory(symbol, range = '3mo') {
   const res  = await fetch(`${BASE}/india/history/${symbol}?range=${range}`);
   const data = await res.json();
@@ -24,11 +23,18 @@ async function fetchIndiaHistory(symbol, range = '3mo') {
   };
 }
 
-// Fetch India quote from our backend (Yahoo Finance .NS)
 async function fetchIndiaQuote(symbol) {
-  const res  = await fetch(`${BASE}/india/quote/${symbol}`);
+  const res = await fetch(`${BASE}/india/quote/${symbol}`);
   if (!res.ok) return null;
   return await res.json();
+}
+
+async function fetchIndiaNews(symbol) {
+  try {
+    const res  = await fetch(`${BASE}/india/news/${symbol}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
 }
 
 export function useScan(macro) {
@@ -64,7 +70,6 @@ export function useScan(macro) {
           fetchIndiaQuote(t),
         ]);
         if (!p) throw new Error(`${t} not found on NSE. Check the ticker symbol.`);
-        // Normalize to match Tradier quote format
         q = q ? { last: q.price, open: q.open, change: q.change, change_percentage: q.changePct } : null;
       } else {
         [p, q] = await Promise.all([
@@ -94,7 +99,8 @@ export function useScan(macro) {
       }
 
       setStage('news');
-      const n = await fetchStockNews(t);
+      // Use India-specific news endpoint for NSE stocks
+      const n = isIndia ? await fetchIndiaNews(t) : await fetchStockNews(t);
       setNews(n);
 
       setStage('claude');
