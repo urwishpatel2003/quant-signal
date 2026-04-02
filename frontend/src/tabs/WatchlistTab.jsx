@@ -74,11 +74,13 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* ── Main row — all columns fixed width, no flex-grow ── */}
+      {/* ── Main row — CSS grid for reliable alignment ── */}
       <div
         onClick={handleExpand}
         style={{
-          display: 'flex', alignItems: 'center',
+          display: 'grid',
+          gridTemplateColumns: '64px 100px 88px auto 20px',
+          alignItems: 'center', gap: 8,
           padding: '14px 16px', cursor: 'pointer',
           background: expanded ? '#0f0f1a' : 'transparent',
           transition: 'background 0.15s',
@@ -86,13 +88,13 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
         onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = '#0d0d18'; }}
         onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = 'transparent'; }}
       >
-        {/* Ticker — fixed 72px */}
-        <div style={{ width: 72, flexShrink: 0, fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: '#ffaa00', lineHeight: 1 }}>
+        {/* Ticker */}
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: '#ffaa00', lineHeight: 1, overflow: 'hidden' }}>
           {item.ticker}
         </div>
 
-        {/* Price + change — fixed 120px */}
-        <div style={{ width: 120, flexShrink: 0 }}>
+        {/* Price + change */}
+        <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
             {fmtPrice(item.price)}
           </div>
@@ -103,16 +105,16 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           </div>
         </div>
 
-        {/* Signal badge — fixed 96px with left margin for spacing */}
-        <div style={{ width: 96, flexShrink: 0, marginLeft: 8, textAlign: 'center' }}>
+        {/* Signal badge */}
+        <div style={{ textAlign: 'center' }}>
           {scanning ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
               <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #ffaa0022', borderTop: '2px solid #ffaa00', animation: 'spin 0.8s linear infinite' }} />
               <div style={{ fontSize: 9, color: '#ffaa0066', letterSpacing: '0.05em' }}>ANALYZING</div>
             </div>
           ) : scanData?.analysis ? (
-            <div style={{ background: sigColor + '11', border: `1px solid ${sigColor}44`, padding: '5px 8px', borderRadius: 2 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
+            <div style={{ background: sigColor + '11', border: `1px solid ${sigColor}44`, padding: '5px 6px', borderRadius: 2 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
                 {scanData.analysis.signal}
               </div>
               <div style={{ fontSize: 9, color: sigColor + '88', marginTop: 2 }}>
@@ -124,8 +126,8 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           )}
         </div>
 
-        {/* Actions — pushed to far right */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onOpenOptions(item.ticker)}
             style={{
@@ -151,7 +153,8 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
           >{removing === item.ticker ? '...' : '✕'}</button>
         </div>
 
-        <div style={{ fontSize: 12, color: expanded ? '#ffaa00' : '#3a3a5e', flexShrink: 0, marginLeft: 8 }}>
+        {/* Expand chevron */}
+        <div style={{ fontSize: 12, color: expanded ? '#ffaa00' : '#3a3a5e', textAlign: 'center' }}>
           {expanded ? '▲' : '▼'}
         </div>
       </div>
