@@ -63,6 +63,9 @@ export default function TradeChecklist({ ta, priceSignal, optionsSignal, calenda
   const scoreColor = score >= 70 ? '#00ff88' : score >= 50 ? '#ffaa00' : '#ff4444';
   const verdict    = score >= 70 ? 'GO' : score >= 50 ? 'CAUTION' : 'NO-GO';
 
+  // Detect contradiction — AI says CALL/PUT but checklist says CAUTION or NO-GO
+  const hasContradiction = rec !== 'NEUTRAL' && (verdict === 'CAUTION' || verdict === 'NO-GO');
+
   return (
     <div className="card" style={{ borderColor: scoreColor + '44' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -72,6 +75,32 @@ export default function TradeChecklist({ ta, priceSignal, optionsSignal, calenda
           <div style={{ fontSize: 10, color: '#555' }}>{passCount}/{checks.length} checks passed</div>
         </div>
       </div>
+
+      {/* ── Contradiction warning ── */}
+      {hasContradiction && (
+        <div style={{
+          marginBottom: 14,
+          padding: '10px 12px',
+          background: '#ffaa0011',
+          border: '1px solid #ffaa0044',
+          borderRadius: 4,
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>⚠</span>
+          <div>
+            <div style={{ fontSize: 11, color: '#ffaa00', fontWeight: 700, marginBottom: 3, letterSpacing: '0.05em' }}>
+              SIGNAL CONFLICT
+            </div>
+            <div style={{ fontSize: 11, color: '#b0c0dd', lineHeight: 1.6 }}>
+              AI recommends <span style={{ color: isCall ? '#00ff88' : '#ff4444', fontWeight: 700 }}>LONG {rec}S</span> but
+              the checklist shows <span style={{ color: scoreColor, fontWeight: 700 }}>{verdict}</span>.
+              {verdict === 'CAUTION'
+                ? ' The AI sees opportunity but risk factors are present — consider reducing size or waiting for confirmation.'
+                : ' Multiple risk factors are working against this trade — proceed with caution or wait for a better setup.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bar-bg" style={{ marginBottom: 12 }}>
         <div className="bar-fill" style={{ width: `${score}%`, background: scoreColor }} />
