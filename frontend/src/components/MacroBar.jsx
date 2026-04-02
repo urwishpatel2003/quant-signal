@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
+export default function MacroBar({ bonds, intlMarkets, macroNews, loading, market = 'US' }) {
   const scrollRef = useRef(null);
+  const isIndia   = market === 'INDIA';
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -39,11 +40,11 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
   if (!bonds) return null;
 
   const find = sym => intlMarkets?.find(m => m.symbol === sym);
-  const Div  = () => (
+
+  const Div = () => (
     <div style={{ width: 1, height: 16, background: '#3a3a5e', flexShrink: 0, margin: '0 4px' }} />
   );
 
-  // Label: bright white. Value: colored. Both bold.
   const Stat = ({ label, val, color, alert }) => (
     <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
       <span style={{ color: '#c8d0e8', fontWeight: 700, letterSpacing: '0.05em' }}>{label}</span>
@@ -66,18 +67,59 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
     );
   };
 
-  const vix    = find('^VIX');
-  const gold   = find('GC=F');
-  const oil    = find('CL=F');
-  const dxy    = find('DX-Y.NYB');
-  const isYahoo = bonds.isYahoo;
+  const vix  = find('^VIX');
+  const gold = find('GC=F');
+  const oil  = find('CL=F');
+  const dxy  = find('DX-Y.NYB');
 
-  const items = (
+  // ── India macro items ──
+  const indiaItems = (
     <>
-      <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.2em',
-        fontWeight: 700, flexShrink: 0 }}>MACRO</div>
+      <div style={{ fontSize: 10, color: '#ff9a00', letterSpacing: '0.2em', fontWeight: 700, flexShrink: 0 }}>
+        🇮🇳 MACRO
+      </div>
       <Div />
-      {isYahoo ? (
+      {/* Indian indices */}
+      <Mkt label="NIFTY"  sym="^BSESN" />
+      <Mkt label="SENSEX" sym="^BSESN" />
+      <Mkt label="N225"   sym="^N225"  />
+      <Mkt label="HSI"    sym="^HSI"   />
+      <Div />
+      {/* Commodities in ₹ context */}
+      {gold?.current && (
+        <Stat label="GOLD"    val={`$${gold.current.toFixed(0)}`}
+          color={gold.changePct > 0 ? '#00ff88' : '#ff4444'} />
+      )}
+      {oil?.current && (
+        <Stat label="CRUDE"   val={`$${oil.current.toFixed(2)}`}
+          color={oil.changePct > 0 ? '#00ff88' : '#ff4444'} />
+      )}
+      {/* USD/INR — DXY as proxy */}
+      {dxy?.current && (
+        <Stat label="USD/INR" val={`~${(dxy.current * 0.84).toFixed(1)}`}
+          color={dxy.changePct > 0 ? '#ff4444' : '#00ff88'} />
+      )}
+      <Div />
+      {/* VIX — global risk signal relevant for India too */}
+      {vix?.current && (
+        <Stat label="VIX"     val={vix.current.toFixed(2)}
+          color={vix.current > 25 ? '#ff4444' : vix.current > 20 ? '#ffaa00' : '#00ff88'} />
+      )}
+      {/* Global markets */}
+      <Mkt label="DAX"    sym="^GDAXI" />
+      <Mkt label="FTSE"   sym="^FTSE"  />
+      <Div />
+    </>
+  );
+
+  // ── US macro items ──
+  const usItems = (
+    <>
+      <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.2em', fontWeight: 700, flexShrink: 0 }}>
+        MACRO
+      </div>
+      <Div />
+      {bonds.isYahoo ? (
         <>
           <Stat label="10Y"   val={bonds.tnx?.current ? `${bonds.tnx.current.toFixed(2)}%` : '—'}
             color={bonds.tnx?.changePct > 0 ? '#ff6666' : '#00ff88'} alert={bonds.inverted} />
@@ -115,6 +157,8 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading }) {
       <Div />
     </>
   );
+
+  const items = isIndia ? indiaItems : usItems;
 
   return (
     <div

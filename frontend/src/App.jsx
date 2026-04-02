@@ -114,12 +114,9 @@ export default function App() {
           </div>
         </div>
 
-        <MacroBar
-          bonds={macro.bonds}
-          intlMarkets={macro.intlMarkets}
-          macroNews={macro.macroNews}
-          loading={macro.loading}
-        />
+        <MacroBar bonds={macro.bonds} intlMarkets={macro.intlMarkets} 
+          macroNews={macro.macroNews} loading={macro.loading}
+          market={market} />
 
         <MarketSelector />
 
