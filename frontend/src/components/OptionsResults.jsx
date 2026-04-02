@@ -189,7 +189,7 @@ export default function OptionsResults({
         activeId={activeId}
         setActiveId={setActiveId}
         label="CONTRACT PLAYS"
-        preview={`CALL $${optionsSignal.bestCall?.strike} ~$${optionsSignal.bestCall?.premium} · PUT $${optionsSignal.bestPut?.strike} ~$${optionsSignal.bestPut?.premium}`}
+        preview={`CALL $${optionsSignal.bestCall?.strike} ~$${optionsSignal.bestCall?.mid?.toFixed(2)} · PUT $${optionsSignal.bestPut?.strike} ~$${optionsSignal.bestPut?.mid?.toFixed(2)}`}
       >
         <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="options-contracts">
