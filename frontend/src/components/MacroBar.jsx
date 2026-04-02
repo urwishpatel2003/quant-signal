@@ -46,10 +46,10 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading, marke
   );
 
   const Stat = ({ label, val, color, alert }) => (
-    <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+    <div style={{ fontSize: 11, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
       <span style={{ color: '#c8d0e8', fontWeight: 700, letterSpacing: '0.05em' }}>{label}</span>
       <span style={{ color: alert ? '#ff4444' : color, fontWeight: 700 }}>{val}</span>
-      {alert && <span style={{ color: '#ff4444', fontSize: 10 }}>⚠</span>}
+      {alert && <span style={{ color: '#ff4444', fontSize: 9 }}>⚠</span>}
     </div>
   );
 
@@ -58,7 +58,7 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading, marke
     if (!d?.current) return null;
     const isUp = d.changePct >= 0;
     return (
-      <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ fontSize: 11, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
         <span style={{ color: '#c8d0e8', fontWeight: 700, letterSpacing: '0.05em' }}>{label}</span>
         <span style={{ color: isUp ? '#00ff88' : '#ff4444', fontWeight: 700 }}>
           {isUp ? '▲' : '▼'}{Math.abs(d.changePct)?.toFixed(2)}%
@@ -164,13 +164,13 @@ export default function MacroBar({ bonds, intlMarkets, macroNews, loading, marke
     <div
       ref={scrollRef}
       style={{
-        display: 'flex', gap: 16, alignItems: 'center',
+        display: 'flex', gap: 10, alignItems: 'center',
         overflowX: 'hidden', flex: 1,
         scrollbarWidth: 'none', cursor: 'default',
         userSelect: 'none', padding: '0 12px',
       }}
     >
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
         {items}
       </div>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }} aria-hidden>

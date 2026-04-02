@@ -105,63 +105,67 @@ export default function App() {
         background: '#07070e',
         position: 'sticky', top: 0, zIndex: 100,
       }}>
-        {/* ── Row 1: Logo + MarketSelector + User ── */}
+        {/* ── Row 1: App name + subtitle ── */}
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 16px', gap: 12,
+          display: 'flex', alignItems: 'center',
+          padding: '8px 14px', gap: 10,
         }}>
-          {/* Logo */}
-          <div style={{ flexShrink: 0 }}>
-            <div
-              style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
-                letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer' }}
-              onClick={handleLogoClick}>
-              <span style={{ color: '#ffaa00' }}>Qu</span>
-              <span style={{ color: '#00ff88' }}>AI</span>
-              <span style={{ color: '#ffaa00' }}>nt Signal</span>
-            </div>
-            <div style={{ fontSize: 10, color: '#6677aa', letterSpacing: '0.2em', fontWeight: 600 }}>
-              AI-POWERED · MARKET INTELLIGENCE
-            </div>
+          <div
+            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
+              letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}
+            onClick={handleLogoClick}>
+            <span style={{ color: '#ffaa00' }}>Qu</span>
+            <span style={{ color: '#00ff88' }}>AI</span>
+            <span style={{ color: '#ffaa00' }}>nt Signal</span>
+          </div>
+          <div style={{ fontSize: 9, color: '#445566', letterSpacing: '0.15em', fontWeight: 600, flexShrink: 0 }}>
+            AI-POWERED MARKET INTELLIGENCE
+          </div>
+        </div>
+
+        {/* ── Row 2: MacroBar + MarketSelector + User ── */}
+        <div style={{
+          borderTop: '1px solid #1a1a2e',
+          display: 'flex', alignItems: 'center',
+          height: 32, overflow: 'hidden',
+        }}>
+          {/* MacroBar takes all remaining space */}
+          <div style={{ flex: 1, overflow: 'hidden', height: '100%', display: 'flex', alignItems: 'center' }}>
+            <MacroBar
+              bonds={macro.bonds}
+              intlMarkets={macro.intlMarkets}
+              macroNews={macro.macroNews}
+              loading={macro.loading}
+              market={market}
+            />
           </div>
 
-          {/* Right: MarketSelector + User */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {/* MarketSelector + User pinned right */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            flexShrink: 0, paddingRight: 10, paddingLeft: 8,
+            borderLeft: '1px solid #1a1a2e', height: '100%',
+          }}>
             <MarketSelector />
             <SignedOut>
               <SignInButton mode="modal">
                 <button className="btn-sm"
-                  style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap' }}>
+                  style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap', fontSize: 10, padding: '3px 8px' }}>
                   SIGN IN
                 </button>
               </SignInButton>
             </SignedOut>
             <SignedIn>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {user?.firstName && (
-                  <span style={{
-                    fontSize: 11, color: '#b0c0dd', fontWeight: 600, letterSpacing: '0.05em',
-                    // Hide on small screens
-                    maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
+                  <span style={{ fontSize: 10, color: '#b0c0dd', fontWeight: 600, letterSpacing: '0.05em' }}>
                     {user.firstName.toUpperCase()}
                   </span>
                 )}
-                <UserButton appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} />
+                <UserButton appearance={{ elements: { avatarBox: { width: 22, height: 22 } } }} />
               </div>
             </SignedIn>
           </div>
-        </div>
-
-        {/* ── Row 2: MacroBar full width ── */}
-        <div style={{ borderTop: '1px solid #1a1a2e', overflow: 'hidden' }}>
-          <MacroBar
-            bonds={macro.bonds}
-            intlMarkets={macro.intlMarkets}
-            macroNews={macro.macroNews}
-            loading={macro.loading}
-            market={market}
-          />
         </div>
       </div>
 
