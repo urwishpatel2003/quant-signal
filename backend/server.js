@@ -23,7 +23,7 @@ app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Surrogate-Control', 'no-store');
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
@@ -31,6 +31,7 @@ app.use((req, res, next) => {
 
 const POLYGON_KEY   = process.env.POLYGON_API_KEY;
 const TRADIER_TOKEN = process.env.TRADIER_TOKEN;
+const FINNHUB_TOKEN = process.env.FINNHUB_TOKEN;
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 
@@ -227,10 +228,12 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-const polygonGet = path =>
+const polygonGet  = path =>
   httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
-const tradierGet = path =>
+const tradierGet  = path =>
   httpsGet('api.tradier.com', path, { Authorization: `Bearer ${TRADIER_TOKEN}` });
+const finnhubGet  = path =>
+  httpsGet('finnhub.io', `/api/v1${path}&token=${FINNHUB_TOKEN}`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ─── Tradier history ──────────────────────────────────────────────────────────
@@ -333,42 +336,40 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Stock news ───────────────────────────────────────────────────────────────
+// ─── Stock news — Finnhub ─────────────────────────────────────────────────────
 
 app.get('/yahoo/v1/finance/search', async (req, res) => {
   const q = req.query.q || '';
+  if (!q) return res.json({ news: [] });
   try {
-    // Try ticker-specific news first
-    const data = await polygonGet(
-      `/v2/reference/news?ticker=${encodeURIComponent(q)}&limit=8&order=desc&sort=published_utc`
-    );
-    const results = data.results || [];
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const to   = new Date().toISOString().split('T')[0];
+    const data = await finnhubGet(`/company-news?symbol=${encodeURIComponent(q)}&from=${from}&to=${to}`);
 
-    // If Polygon returns no results (free tier limitation), fall back to general market news
-    if (results.length === 0) {
-      const fallback = await polygonGet(
-        `/v2/reference/news?limit=8&order=desc&sort=published_utc`
-      );
-      const fallbackResults = fallback.results || [];
+    if (!Array.isArray(data) || data.length === 0) {
+      // Fallback: general market news
+      const general  = await finnhubGet(`/news?category=general`);
+      const fallback = Array.isArray(general) ? general : [];
       return res.json({
-        news: fallbackResults.map(n => ({
-          title:               n.title,
-          publisher:           n.publisher?.name || '',
-          providerPublishTime: Math.floor(new Date(n.published_utc).getTime() / 1000),
-          link:                n.article_url,
+        news: fallback.slice(0, 8).map(n => ({
+          title:               n.headline,
+          publisher:           n.source || '',
+          providerPublishTime: n.datetime,
+          link:                n.url,
         }))
       });
     }
 
     res.json({
-      news: results.map(n => ({
-        title:               n.title,
-        publisher:           n.publisher?.name || '',
-        providerPublishTime: Math.floor(new Date(n.published_utc).getTime() / 1000),
-        link:                n.article_url,
+      news: data.slice(0, 8).map(n => ({
+        title:               n.headline,
+        publisher:           n.source || '',
+        providerPublishTime: n.datetime,
+        link:                n.url,
       }))
     });
   } catch (e) {
+    console.error('[news]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -548,7 +549,7 @@ app.get('/calendar', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Indicator helpers (server-side — not exposed to client) ──────────────────
+// ─── Indicator helpers ────────────────────────────────────────────────────────
 
 function checkRSIContradiction(rsi14, recommendation) {
   if (!rsi14 || !recommendation) return null;
@@ -787,7 +788,7 @@ async function callClaudeAPI(body) {
   });
 }
 
-// ─── Combined analysis (scanner + options) ────────────────────────────────────
+// ─── Combined analysis ────────────────────────────────────────────────────────
 
 app.post('/api/analyze/combined', async (req, res) => {
   try {
@@ -836,31 +837,23 @@ app.post('/api/analyze/combined', async (req, res) => {
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
       system: `You are a quantitative trading analyst and expert options trader.
 
-HARD RULES (these MUST block or heavily penalize a recommendation):
-1. RSI >70 + CALL recommendation: Must explicitly address overbought risk.
-2. RSI <30 + PUT recommendation: Must explicitly address oversold/bounce risk.
+HARD RULES:
+1. RSI >70 + CALL: Must explicitly address overbought risk.
+2. RSI <30 + PUT: Must explicitly address oversold/bounce risk.
 3. StochRSI >90 + CALL: Extreme overbought — strong warning.
 4. StochRSI <10 + PUT: Extreme oversold — strong warning.
 5. Earnings BEFORE expiry + CRITICAL/HIGH risk: Strongly consider NEUTRAL due to IV crush.
-6. Stock already down >2% today + PUT: Assess if move already priced in.
-7. Stock already up >2% today + CALL: Assess if move already priced in.
+6. Stock down >2% today + PUT: Assess if move already priced in.
+7. Stock up >2% today + CALL: Assess if move already priced in.
 8. Wide spread contracts (⚠WIDE): Avoid — recommend liquid alternatives.
 
-INFORMATIONAL SIGNALS (weigh but do not automatically block):
-- IV Percentile (session estimate — lower confidence, use as secondary signal)
+INFORMATIONAL SIGNALS:
+- IV Percentile (session estimate — secondary signal only)
 - StochRSI between 10-90: Informational trend signal only
-- MACD cross: Adds directional weight but not a blocker
-- BB position: Context only unless extreme
-- S/R proximity: Note in reasoning if within 5%, but not a blocker
-- ATR HIGH/LOW: Affects sizing recommendation
-- Consecutive days (3+): Elevated caution, not automatic NEUTRAL
-- SMA200 distance >15%: Extended, note in thesis
+- MACD cross, BB position, S/R proximity, ATR, consecutive days, SMA200 distance
 
-IMPORTANT: NEUTRAL is valid when multiple HARD RULES fire simultaneously.
-But do NOT default to NEUTRAL for normal market conditions.
-A stock can be slightly overbought with RSI 65 and still be a valid CALL if trend, MACD, and macro are aligned.
-Use all signals together — single signals rarely justify NEUTRAL.
-
+NEUTRAL is valid when multiple HARD RULES fire simultaneously.
+Do NOT default to NEUTRAL for normal market conditions.
 Return ONLY JSON with keys "price" and "options". No markdown.`,
       messages: [{
         role: 'user',
@@ -919,7 +912,7 @@ RULES: Exact bid/ask/mid only. Avoid wide-spread strikes. OI>50. Return JSON onl
   }
 });
 
-// ─── Price only analysis (scanner) ───────────────────────────────────────────
+// ─── Price only analysis ──────────────────────────────────────────────────────
 
 app.post('/api/analyze/price', async (req, res) => {
   try {
@@ -970,7 +963,7 @@ Return JSON only.`
   }
 });
 
-// ─── Options only analysis (expiry switch) ────────────────────────────────────
+// ─── Options only analysis ────────────────────────────────────────────────────
 
 app.post('/api/analyze/options', async (req, res) => {
   try {
@@ -1009,7 +1002,7 @@ app.post('/api/analyze/options', async (req, res) => {
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
       system: `You are an expert options trader.
 
-HARD RULES (must address explicitly):
+HARD RULES:
 1. RSI >70 + CALL = overbought warning. RSI <30 + PUT = oversold warning.
 2. StochRSI >90 + CALL = extreme overbought. StochRSI <10 + PUT = extreme oversold.
 3. Earnings BEFORE expiry + HIGH/CRITICAL risk = IV crush warning, consider NEUTRAL.
@@ -1017,14 +1010,7 @@ HARD RULES (must address explicitly):
 5. Stock up >2% today + CALL = assess if already priced in.
 6. Wide spread (⚠WIDE) = avoid that strike.
 
-INFORMATIONAL (weigh but do not auto-block):
-- IV Percentile (session estimate — secondary signal only)
-- MACD, BB, S/R proximity within 5%, ATR, consecutive days
-
-IMPORTANT: Do NOT default to NEUTRAL for normal market conditions.
-Use all signals holistically. Single mild signals do not justify NEUTRAL.
-NEUTRAL is for when multiple hard rules fire or risk/reward is genuinely poor.
-
+Do NOT default to NEUTRAL for normal market conditions.
 Return ONLY JSON.`,
       messages: [{
         role: 'user',
@@ -1054,7 +1040,39 @@ Return JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reason
   }
 });
 
-// ─── Legacy Claude proxy (keep for backward compat) ───────────────────────────
+// ─── Watchlist background analysis ───────────────────────────────────────────
+
+app.post('/api/analyze/watchlist', async (req, res) => {
+  try {
+    const { ticker, price, ohlcv, fundamentals, news, ta } = req.body;
+    const categorized = categorizeNews(news).slice(0, 5);
+    const taCtx       = buildTAContext(ta, ticker);
+
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514', max_tokens: 800, temperature: 0,
+      system: `You are a quantitative trading analyst. Timeframe: Long Term (6-12 months).
+Focus: fundamentals, macro cycle, SMA200, analyst consensus.
+Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"thesis":"string (1 sentence)","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH"}`,
+      messages: [{
+        role: 'user',
+        content: `${ticker} @ $${price?.toFixed(2)} | LONG TERM (6-12 months)
+PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
+RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal}
+${taCtx}
+FUNDAMENTALS: P/E=${fundamentals?.pe} | EPS=$${fundamentals?.eps} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey}
+NEWS: ${categorized.slice(0, 4).join(' | ')}
+Return JSON only.`
+      }]
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('[analyze/watchlist]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Legacy Claude proxy ──────────────────────────────────────────────────────
 
 app.post('/api/analyze', (req, res) => {
   const body = JSON.stringify(req.body || {});
@@ -1077,152 +1095,97 @@ app.post('/api/analyze', (req, res) => {
   request.end();
 });
 
-// ─── BLOG ROUTES ─────────────────────────────────────────────────────────────
-// Add these routes to server.js before the app.listen() line
+// ─── Blog routes ──────────────────────────────────────────────────────────────
 
-// GET /blog — fetch all published posts
 app.get('/blog', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('blog_posts')
-      .select('id, slug, title, excerpt, category, tags, created_at')
-      .eq('published', true)
+      .from('blog_posts').select('id, slug, title, excerpt, category, tags, created_at')
+      .eq('published', true).order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) { console.error('[blog GET]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+app.get('/blog/admin/all', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('blog_posts').select('id, slug, title, excerpt, category, published, created_at')
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.json(data || []);
-  } catch (e) {
-    console.error('[blog GET]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /blog/:slug — fetch single post
 app.get('/blog/:slug', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('blog_posts')
-      .select('*')
-      .eq('slug', req.params.slug)
-      .eq('published', true)
-      .single();
+      .from('blog_posts').select('*').eq('slug', req.params.slug).eq('published', true).single();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Post not found' });
     res.json(data);
-  } catch (e) {
-    console.error('[blog slug GET]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('[blog slug GET]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-// POST /blog/generate — Claude generates a blog post
 app.post('/blog/generate', async (req, res) => {
   const { topic, ticker, category } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   try {
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 2000, temperature: 0.7,
-      system: `You are a quantitative trading analyst and financial writer for QuAInt Signal, an AI-powered trading platform. 
+      system: `You are a quantitative trading analyst and financial writer for QuAInt Signal.
 Write engaging, educational blog posts about trading, options, technical analysis, and market strategy.
-Posts should be practical, data-driven, and targeted at active traders.
-Always include actionable insights. Never give specific financial advice — frame everything as education.
+Always include actionable insights. Never give specific financial advice.
 Return ONLY valid JSON with no markdown or backticks.`,
       messages: [{
         role: 'user',
         content: `Write a blog post about: "${topic}"${ticker ? ` focused on ${ticker}` : ''}.
 Category: ${category || 'Market Analysis'}
-
-Return JSON:
-{
-  "title": "Engaging title under 70 chars",
-  "excerpt": "2-sentence summary under 160 chars, SEO-optimized",
-  "content": "Full HTML blog post, 600-900 words. Use <h2>, <p>, <ul>, <li>, <strong> tags. Include: intro, 2-3 main sections with headers, practical takeaways, conclusion. No inline styles.",
-  "tags": ["tag1", "tag2", "tag3"],
-  "slug": "url-friendly-slug-from-title"
-}`
+Return JSON: {"title":"string","excerpt":"string","content":"HTML string","tags":[""],"slug":"string"}`
       }]
     });
     res.json(result);
-  } catch (e) {
-    console.error('[blog generate]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('[blog generate]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-// POST /blog/publish — save post to Supabase
 app.post('/blog/publish', async (req, res) => {
   const { title, slug, excerpt, content, category, tags } = req.body;
   if (!title || !slug || !content) return res.status(400).json({ error: 'title, slug, content required' });
   try {
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .upsert({
-        slug, title, excerpt, content,
-        category: category || 'Market Analysis',
-        tags: tags || [],
-        published: true,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'slug' })
-      .select()
-      .single();
+    const { data, error } = await supabase.from('blog_posts')
+      .upsert({ slug, title, excerpt, content, category: category || 'Market Analysis', tags: tags || [], published: true, updated_at: new Date().toISOString() }, { onConflict: 'slug' })
+      .select().single();
     if (error) throw error;
     res.json(data);
-  } catch (e) {
-    console.error('[blog publish]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('[blog publish]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-// GET /blog/admin/all — fetch all posts including unpublished (admin only)
-app.get('/blog/admin/all', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .select('id, slug, title, excerpt, category, published, created_at')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    res.json(data || []);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// DELETE /blog/:slug — delete a post
 app.delete('/blog/:slug', async (req, res) => {
   try {
-    const { error } = await supabase
-      .from('blog_posts')
-      .delete()
-      .eq('slug', req.params.slug);
+    const { error } = await supabase.from('blog_posts').delete().eq('slug', req.params.slug);
     if (error) throw error;
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── WATCHLIST ROUTES ─────────────────────────────────────────────────────────
-// Add these routes to server.js before the app.listen() line
+// ─── Watchlist routes ─────────────────────────────────────────────────────────
 
-// GET /watchlist/:userId — fetch user's watchlist with live prices
 app.get('/watchlist/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('watchlist')
-      .select('ticker, added_at')
-      .eq('user_id', req.params.userId)
-      .order('added_at', { ascending: false });
+      .from('watchlist').select('ticker, added_at')
+      .eq('user_id', req.params.userId).order('added_at', { ascending: false });
     if (error) throw error;
     if (!data?.length) return res.json([]);
 
-    // Fetch live prices for all tickers in one Tradier call
-    const tickers = data.map(r => r.ticker).join(',');
-    const quotes  = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
-    const raw     = quotes?.quotes?.quote || [];
+    const tickers   = data.map(r => r.ticker).join(',');
+    const quotes    = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
+    const raw       = quotes?.quotes?.quote || [];
     const quoteList = Array.isArray(raw) ? raw : [raw];
     const quoteMap  = {};
     quoteList.forEach(q => { quoteMap[q.symbol] = q; });
 
-    const result = data.map(row => {
+    res.json(data.map(row => {
       const q = quoteMap[row.ticker];
       return {
         ticker:    row.ticker,
@@ -1232,103 +1195,27 @@ app.get('/watchlist/:userId', async (req, res) => {
         change:    q?.change ? parseFloat(q.change) : null,
         volume:    q?.volume ? parseInt(q.volume) : null,
       };
-    });
-    res.json(result);
+    }));
   } catch (e) {
     console.error('[watchlist GET]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// POST /watchlist/:userId — add ticker to watchlist
 app.post('/watchlist/:userId', async (req, res) => {
   const { ticker } = req.body;
   if (!ticker) return res.status(400).json({ error: 'ticker required' });
   try {
-    // Check free tier limit (10 items)
     const user = await getOrCreateUser(req.params.userId);
     if (user.plan !== 'pro') {
       const { count } = await supabase
-        .from('watchlist')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', req.params.userId);
-      if (count >= 10) return res.status(403).json({ error: 'Free tier limit: 10 watchlist items. Upgrade to Pro for unlimited.' });
-    }
-    const { data, error } = await supabase
-      .from('watchlist')
-      .insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() })
-      .select()
-      .single();
-    if (error) {
-      if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' });
-      throw error;
-    }
-    res.json(data);
-  } catch (e) {
-    console.error('[watchlist POST]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ─── WATCHLIST ROUTES ─────────────────────────────────────────────────────────
-// Add these routes to server.js before the app.listen() line
-
-// GET /watchlist/:userId — fetch user's watchlist with live prices
-app.get('/watchlist/:userId', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('watchlist')
-      .select('ticker, added_at')
-      .eq('user_id', req.params.userId)
-      .order('added_at', { ascending: false });
-    if (error) throw error;
-    if (!data?.length) return res.json([]);
-
-    // Fetch live prices for all tickers in one Tradier call
-    const tickers = data.map(r => r.ticker).join(',');
-    const quotes  = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
-    const raw     = quotes?.quotes?.quote || [];
-    const quoteList = Array.isArray(raw) ? raw : [raw];
-    const quoteMap  = {};
-    quoteList.forEach(q => { quoteMap[q.symbol] = q; });
-
-    const result = data.map(row => {
-      const q = quoteMap[row.ticker];
-      return {
-        ticker:    row.ticker,
-        added_at:  row.added_at,
-        price:     q?.last ? parseFloat(q.last) : null,
-        changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null,
-        change:    q?.change ? parseFloat(q.change) : null,
-        volume:    q?.volume ? parseInt(q.volume) : null,
-      };
-    });
-    res.json(result);
-  } catch (e) {
-    console.error('[watchlist GET]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// POST /watchlist/:userId — add ticker to watchlist
-app.post('/watchlist/:userId', async (req, res) => {
-  const { ticker } = req.body;
-  if (!ticker) return res.status(400).json({ error: 'ticker required' });
-  try {
-    // Check free tier limit (10 items)
-    const user = await getOrCreateUser(req.params.userId);
-    if (user.plan !== 'pro') {
-      const { count } = await supabase
-        .from('watchlist')
-        .select('*', { count: 'exact', head: true })
+        .from('watchlist').select('*', { count: 'exact', head: true })
         .eq('user_id', req.params.userId);
       if (count >= 5) return res.status(403).json({ error: 'Free tier limit: 5 watchlist items. Upgrade to Pro for unlimited.' });
     }
     const { data, error } = await supabase
-      .from('watchlist')
-      .insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() })
-      .select()
-      .single();
+      .from('watchlist').insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() })
+      .select().single();
     if (error) {
       if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' });
       throw error;
@@ -1340,55 +1227,16 @@ app.post('/watchlist/:userId', async (req, res) => {
   }
 });
 
-// DELETE /watchlist/:userId/:ticker — remove ticker from watchlist
 app.delete('/watchlist/:userId/:ticker', async (req, res) => {
   try {
     const { error } = await supabase
-      .from('watchlist')
-      .delete()
+      .from('watchlist').delete()
       .eq('user_id', req.params.userId)
       .eq('ticker', req.params.ticker.toUpperCase());
     if (error) throw error;
     res.json({ success: true });
   } catch (e) {
     console.error('[watchlist DELETE]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ─── WATCHLIST BACKGROUND ANALYSIS ───────────────────────────────────────────
-// Add this route to server.js before app.listen()
-// This is a lightweight long-term price signal — no usage tracking
-
-app.post('/api/analyze/watchlist', async (req, res) => {
-  try {
-    const { ticker, price, ohlcv, fundamentals, options, news,
-            bonds, macroNews, intlMarkets, calendar, ta } = req.body;
-
-    const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
-    const taCtx       = buildTAContext(ta, ticker, calendar);
-    const categorized = categorizeNews(news).slice(0, 5);
-
-    const result = await callClaudeAPI({
-      model: 'claude-sonnet-4-20250514', max_tokens: 800, temperature: 0,
-      system: `You are a quantitative trading analyst. Timeframe: Long Term (6-12 months).
-Focus: fundamentals, macro cycle, SMA200, analyst consensus.
-Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"thesis":"string (1 sentence)","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH"}`,
-      messages: [{
-        role: 'user',
-        content: `${ticker} @ $${price?.toFixed(2)} | LONG TERM (6-12 months)
-PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
-RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal}
-FUNDAMENTALS: P/E=${fundamentals?.pe} | EPS=$${fundamentals?.eps} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey}
-NEWS: ${categorized.slice(0, 4).join(' | ')}
-${macroCtx}
-Return JSON only.`
-      }]
-    });
-
-    res.json(result);
-  } catch (e) {
-    console.error('[analyze/watchlist]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
