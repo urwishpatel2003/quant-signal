@@ -12,6 +12,7 @@ import OptionsResults from '../components/OptionsResults';
 export default function OptionsTab({ macro, initialTicker }) {
   const [inputVal,       setInputVal]       = useState(initialTicker || '');
   const [ticker,         setTicker]         = useState('');
+  const [companyName,    setCompanyName]    = useState('');
   const [loading,        setLoading]        = useState(false);
   const [reanalyzing,    setReanalyzing]    = useState(false);
   const [stage,          setStage]          = useState('');
@@ -61,6 +62,7 @@ export default function OptionsTab({ macro, initialTicker }) {
     setOptionsSignal(null); setPriceSignal(null);
     setShowResults(false);
     setExpiryOpen(true);
+    setCompanyName('');
     try {
       const [q, p, exps] = await Promise.all([
         fetchTradierQuote(sym),
@@ -69,6 +71,7 @@ export default function OptionsTab({ macro, initialTicker }) {
       ]);
       if (!q && !p) throw new Error('Ticker not found');
       setQuote(q); setOhlcv(p);
+      if (q?.description) setCompanyName(q.description);
       setTa(calcIndicators(p));
       setExpirations(exps);
       if (exps.length > 0) setSelectedExpiry(exps[0]);
@@ -242,6 +245,12 @@ export default function OptionsTab({ macro, initialTicker }) {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, lineHeight: 1, color: '#fff' }}>
               {ticker}
             </div>
+            {companyName && (
+              <div style={{ fontSize: 12, color: '#c8d8f0', fontWeight: 500, marginTop: 2,
+                maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {companyName}
+              </div>
+            )}
             <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
               {isMarketClosed() ? 'MARKET CLOSED' : 'LIVE'}
             </div>

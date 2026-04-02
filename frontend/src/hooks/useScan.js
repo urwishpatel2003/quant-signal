@@ -64,6 +64,7 @@ export function useScan(macro) {
   const [news,         setNews]         = useState([]);
   const [analysis,     setAnalysis]     = useState(null);
   const [ta,           setTa]           = useState(null);
+  const [companyName,  setCompanyName]  = useState('');
   const terminalRef = useRef(null);
 
   const runScan = async (sym, tf = timeframe, market = 'US') => {
@@ -94,6 +95,20 @@ export function useScan(macro) {
       }
 
       setOhlcv(p); setQuote(q);
+      // Set company name — Tradier description for US, hardcoded map for India
+      if (isIndia) {
+        // Fetch from search endpoint which has NSE_NAMES
+        try {
+          const nr = await fetch(`${BASE}/india/search?q=${t}`);
+          const nd = await nr.json();
+          const match = nd.find(s => s.ticker === t);
+          if (match?.name) setCompanyName(match.name);
+        } catch { setCompanyName(t); }
+      } else {
+        // Tradier quote contains description field
+        const desc = q?.description || '';
+        setCompanyName(desc);
+      }
       const indicators = calcIndicators(p, tf);
       setTa(indicators);
       const livePrice = q?.last || p.current;
@@ -136,6 +151,7 @@ export function useScan(macro) {
     setError('');
     setOhlcv(null);
     setQuote(null);
+    setCompanyName('');
     setFundamentals(null);
     setOptions(null);
     setNews([]);
@@ -146,7 +162,7 @@ export function useScan(macro) {
   return {
     ticker, timeframe, setTimeframe,
     loading, stage, error,
-    ohlcv, quote, fundamentals, options, news, analysis, ta,
+    ohlcv, quote, fundamentals, options, news, analysis, ta, companyName,
     terminalRef, runScan, reset,
   };
 }

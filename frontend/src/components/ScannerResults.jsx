@@ -91,6 +91,12 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, lineHeight: 1, color: '#fff' }}>
             {scan.ticker}
           </div>
+          {companyName && (
+            <div style={{ fontSize: 12, color: '#c8d8f0', fontWeight: 500, marginTop: 2, maxWidth: 220,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {companyName}
+            </div>
+          )}
           <div style={{ fontSize: 10, color: '#6677aa', letterSpacing: '0.15em', marginTop: 2 }}>
             {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
           </div>
