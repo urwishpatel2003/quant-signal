@@ -100,7 +100,7 @@ app.post('/usage/:userId/track', async (req, res) => {
   try {
     const user     = await getOrCreateUser(req.params.userId);
     const { type } = req.body;
-    const updated = await trackUsage(req.params.userId, type);
+    const updated  = await trackUsage(req.params.userId, type);
     res.json({ ...updated, plan: user.plan });
   } catch (e) {
     console.error('[usage POST]', e.message);
@@ -167,9 +167,7 @@ app.post('/webhook', async (req, res) => {
       case 'checkout.session.completed': {
         const session = event.data.object;
         const userId  = session.metadata?.clerk_user_id;
-        if (userId) {
-          await supabase.from('users').update({ plan: 'pro', stripe_subscription_id: session.subscription }).eq('id', userId);
-        }
+        if (userId) await supabase.from('users').update({ plan: 'pro', stripe_subscription_id: session.subscription }).eq('id', userId);
         break;
       }
       case 'customer.subscription.deleted':
@@ -553,16 +551,16 @@ function buildIntradayContext(ohlcv, quote) {
     const dayChangePct = ((current - prevClose) / prevClose * 100);
     const abs = Math.abs(dayChangePct).toFixed(2);
     ctx += `TODAY: ${dayChangePct > 0 ? 'UP' : 'DOWN'} ${abs}% | prev $${prevClose.toFixed(2)} → $${current.toFixed(2)}\n`;
-    if      (dayChangePct <= -1.5)  ctx += `⚠ DOWN ${abs}% TODAY — put IV likely elevated.\n`;
-    else if (dayChangePct <= -0.75) ctx += `NOTE: Down ${abs}% today — put premiums slightly elevated.\n`;
-    else if (dayChangePct >= 1.5)   ctx += `⚠ UP ${abs}% TODAY — call IV likely elevated.\n`;
-    else if (dayChangePct >= 0.75)  ctx += `NOTE: Up ${abs}% today — call premiums slightly elevated.\n`;
+    if      (dayChangePct <= -1.5)  ctx += `⚠ DOWN ${abs}% TODAY\n`;
+    else if (dayChangePct <= -0.75) ctx += `NOTE: Down ${abs}% today\n`;
+    else if (dayChangePct >= 1.5)   ctx += `⚠ UP ${abs}% TODAY\n`;
+    else if (dayChangePct >= 0.75)  ctx += `NOTE: Up ${abs}% today\n`;
   }
-  if (current && open) ctx += `FROM OPEN: ${((current - open) / open * 100).toFixed(2)}% (open=$${open.toFixed(2)})\n`;
+  if (current && open) ctx += `FROM OPEN: ${((current - open) / open * 100).toFixed(2)}%\n`;
   if (ohlcv?.close?.length >= 5) {
     const closes   = ohlcv.close.slice(-5);
     const momentum = ((closes[4] - closes[0]) / closes[0] * 100).toFixed(2);
-    ctx += `5-SESSION: ${parseFloat(momentum) > 0 ? 'UP' : 'DOWN'} ${Math.abs(momentum)}% | ${closes.map(c => `$${c.toFixed(2)}`).join('→')}\n`;
+    ctx += `5-SESSION: ${parseFloat(momentum) > 0 ? 'UP' : 'DOWN'} ${Math.abs(momentum)}%\n`;
     let downDays = 0, upDays = 0;
     for (let i = closes.length - 1; i > 0; i--) { if (closes[i] < closes[i-1]) downDays++; else break; }
     for (let i = closes.length - 1; i > 0; i--) { if (closes[i] > closes[i-1]) upDays++;   else break; }
@@ -710,7 +708,7 @@ app.post('/api/analyze/combined', async (req, res) => {
     const putContradiction  = checkRSIContradiction(ta?.rsi14, 'PUT');
     const ep = calcEarningsProximity(calendar, ticker, expiry);
     const tfMeta = {
-      short:    { label: 'Short Term (1-5 days)',       indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+      short:    { label: 'Short Term (1-5 days)',       indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
       swing:    { label: 'Swing Trade (1-4 weeks)',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | ATR=${ta?.atr?.atr} | BB=${ta?.bb?.position} | Trend=${ta?.trendSignal}` },
       position: { label: 'Position Trade (1-3 months)', indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
       longterm: { label: 'Long Term (6-12 months)',      indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
@@ -719,23 +717,22 @@ app.post('/api/analyze/combined', async (req, res) => {
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
       system: `You are a quantitative trading analyst and expert options trader.
-HARD RULES: 1.RSI>70+CALL=overbought warning 2.RSI<30+PUT=oversold warning 3.StochRSI>90+CALL=extreme overbought 4.StochRSI<10+PUT=extreme oversold 5.Earnings BEFORE expiry+CRITICAL/HIGH=consider NEUTRAL 6.Stock down>2%+PUT=assess if priced in 7.Stock up>2%+CALL=assess if priced in 8.Wide spread=avoid
+HARD RULES: 1.RSI>70+CALL=overbought 2.RSI<30+PUT=oversold 3.StochRSI>90+CALL=extreme overbought 4.StochRSI<10+PUT=extreme oversold 5.Earnings BEFORE expiry+CRITICAL/HIGH=consider NEUTRAL 6.Down>2%+PUT=assess 7.Up>2%+CALL=assess 8.Wide spread=avoid
 NEUTRAL only when multiple HARD RULES fire. Do NOT default to NEUTRAL.
 Return ONLY JSON with keys "price" and "options". No markdown.`,
       messages: [{ role: 'user', content: `Analyze ${ticker} @ $${price?.toFixed(2)} | ${tf.label} | Expiry: ${expiry}
 Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'} | ${new Date().toLocaleDateString()}
 ${intradayCtx}${taCtx}${chainCtx}${sizingCtx}
-${callContradiction ? `RSI WARNING: ${callContradiction}` : ''}
-${putContradiction  ? `RSI WARNING: ${putContradiction}`  : ''}
+${callContradiction ? `RSI WARNING: ${callContradiction}` : ''}${putContradiction ? `RSI WARNING: ${putContradiction}` : ''}
 ${ep ? `EARNINGS RISK: ${ep.daysToEarnings}d | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
-FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe}
+FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey}
 OPTIONS FLOW: P/C OI=${chain?.putCallRatio?.toFixed(2)} | CallIV=${chain?.avgCallIV}% | PutIV=${chain?.avgPutIV}%
 PRICE (5): ${JSON.stringify(ohlcv?.close?.slice(-5))}
 ${hasUpgrade?'🟢 UPGRADE':''}${hasDowngrade?'🔴 DOWNGRADE':''}${hasTarget?'📊 TARGET':''}${hasFund?'🏦 INSTITUTIONAL':''}${hasShort?'⚠ SHORT ATTACK':''}
 NEWS: ${categorized.slice(0,6).join(' | ')}
 ${macroCtx}
-CALLS: ${calls.map(c=>`$${c.strike}|m$${c.mid}|IV${c.iv}%|d${c.delta}|OI${c.oi}|vol${c.volume}${c.unusualVolume?'🔥':''}${c.wideSpread?'⚠WIDE':''}`).join(' ')}
-PUTS:  ${puts.map(p=>`$${p.strike}|m$${p.mid}|IV${p.iv}%|d${p.delta}|OI${p.oi}|vol${p.volume}${p.unusualVolume?'🔥':''}${p.wideSpread?'⚠WIDE':''}`).join(' ')}
+CALLS: ${calls.map(c=>`$${c.strike}|m$${c.mid}|IV${c.iv}%|d${c.delta}|OI${c.oi}${c.unusualVolume?'🔥':''}${c.wideSpread?'⚠WIDE':''}`).join(' ')}
+PUTS:  ${puts.map(p=>`$${p.strike}|m$${p.mid}|IV${p.iv}%|d${p.delta}|OI${p.oi}${p.unusualVolume?'🔥':''}${p.wideSpread?'⚠WIDE':''}`).join(' ')}
 Return JSON: {"price":{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"},"options":{"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"Sell at $${callTarget}","maxLoss":0,"entryTiming":"string","exitRule":"Stop: $${callStop}. ATR: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"Sell at $${putTarget}","maxLoss":0,"entryTiming":"string","exitRule":"Stop: $${putStop}. ATR: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}}}` }]
     });
     res.json({ priceSignal: result.price, optionsSignal: result.options });
@@ -819,8 +816,7 @@ HARD RULES: 1.RSI>70+CALL=overbought 2.RSI<30+PUT=oversold 3.Earnings BEFORE exp
 Do NOT default to NEUTRAL. Return ONLY JSON.`,
       messages: [{ role: 'user', content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry} | ${isMarketClosed()?'CLOSED':'OPEN'}
 ${intradayCtx}${taCtx}${chainCtx}${sizingCtx}
-${callContradiction?`RSI WARNING: ${callContradiction}`:''}
-${putContradiction?`RSI WARNING: ${putContradiction}`:''}
+${callContradiction?`RSI WARNING: ${callContradiction}`:''}${putContradiction?`RSI WARNING: ${putContradiction}`:''}
 ${ep?`EARNINGS: ${ep.daysToEarnings}d | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}`:''}
 Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact}
 FUNDAMENTALS: Rec=${fundamentals?.recommendationKey?.toUpperCase()} | Target=$${fundamentals?.targetMeanPrice}
@@ -940,47 +936,97 @@ app.delete('/blog/:slug', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Watchlist routes ─────────────────────────────────────────────────────────
+// ─── Watchlist routes — Option B (separate per market) ───────────────────────
 
 app.get('/watchlist/:userId', async (req, res) => {
+  const market  = req.query.market || 'US';
+  const isIndia = market === 'INDIA';
   try {
-    const { data, error } = await supabase.from('watchlist').select('ticker,added_at').eq('user_id',req.params.userId).order('added_at',{ascending:false});
+    const { data, error } = await supabase
+      .from('watchlist').select('ticker,added_at,market')
+      .eq('user_id', req.params.userId)
+      .eq('market', market)
+      .order('added_at', { ascending: false });
     if (error) throw error;
     if (!data?.length) return res.json([]);
-    const tickers   = data.map(r => r.ticker).join(',');
-    const quotes    = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
-    const raw       = quotes?.quotes?.quote || [];
-    const quoteList = Array.isArray(raw) ? raw : [raw];
-    const quoteMap  = {};
-    quoteList.forEach(q => { quoteMap[q.symbol] = q; });
-    res.json(data.map(row => {
-      const q = quoteMap[row.ticker];
-      return { ticker: row.ticker, added_at: row.added_at, price: q?.last ? parseFloat(q.last) : null, changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null, change: q?.change ? parseFloat(q.change) : null, volume: q?.volume ? parseInt(q.volume) : null };
-    }));
-  } catch (e) { console.error('[watchlist GET]', e.message); res.status(500).json({ error: e.message }); }
+
+    const tickers = data.map(r => r.ticker);
+
+    if (isIndia) {
+      // Fetch India prices from Dhan
+      const validTickers = tickers.filter(t => nseInstrumentMap[t]);
+      if (!validTickers.length) return res.json(data.map(r => ({ ticker: r.ticker, added_at: r.added_at, market, price: null, changePct: null, change: null })));
+      const secIds    = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
+      const dhanData  = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: secIds });
+      const quotes    = dhanData?.data?.NSE_EQ || {};
+      return res.json(data.map(row => {
+        const inst      = nseInstrumentMap[row.ticker];
+        const q         = inst ? quotes[inst.securityId] : null;
+        const ltp       = q?.last_price || null;
+        const prevClose = q?.ohlc?.close || null;
+        const change    = ltp && prevClose ? parseFloat((ltp - prevClose).toFixed(2)) : null;
+        const changePct = change && prevClose ? parseFloat(((change / prevClose) * 100).toFixed(2)) : null;
+        return { ticker: row.ticker, added_at: row.added_at, market, price: ltp, changePct, change };
+      }));
+    } else {
+      // Fetch US prices from Tradier
+      const quotes    = await tradierGet(`/v1/markets/quotes?symbols=${tickers.join(',')}&greeks=false`);
+      const raw       = quotes?.quotes?.quote || [];
+      const quoteList = Array.isArray(raw) ? raw : [raw];
+      const quoteMap  = {};
+      quoteList.forEach(q => { quoteMap[q.symbol] = q; });
+      return res.json(data.map(row => {
+        const q = quoteMap[row.ticker];
+        return { ticker: row.ticker, added_at: row.added_at, market, price: q?.last ? parseFloat(q.last) : null, changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null, change: q?.change ? parseFloat(q.change) : null, volume: q?.volume ? parseInt(q.volume) : null };
+      }));
+    }
+  } catch (e) {
+    console.error('[watchlist GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/watchlist/:userId', async (req, res) => {
-  const { ticker } = req.body;
+  const { ticker, market = 'US' } = req.body;
   if (!ticker) return res.status(400).json({ error: 'ticker required' });
   try {
     const user = await getOrCreateUser(req.params.userId);
     if (user.plan !== 'pro') {
-      const { count } = await supabase.from('watchlist').select('*',{count:'exact',head:true}).eq('user_id',req.params.userId);
-      if (count >= 5) return res.status(403).json({ error: 'Free tier limit: 5 watchlist items. Upgrade to Pro for unlimited.' });
+      const { count } = await supabase
+        .from('watchlist').select('*', { count: 'exact', head: true })
+        .eq('user_id', req.params.userId)
+        .eq('market', market);
+      if (count >= 5) return res.status(403).json({ error: `Free tier limit: 5 ${market} watchlist items. Upgrade to Pro for unlimited.` });
     }
-    const { data, error } = await supabase.from('watchlist').insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() }).select().single();
-    if (error) { if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' }); throw error; }
+    const { data, error } = await supabase
+      .from('watchlist')
+      .insert({ user_id: req.params.userId, ticker: ticker.toUpperCase(), market })
+      .select().single();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' });
+      throw error;
+    }
     res.json(data);
-  } catch (e) { console.error('[watchlist POST]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('[watchlist POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.delete('/watchlist/:userId/:ticker', async (req, res) => {
+  const market = req.query.market || 'US';
   try {
-    const { error } = await supabase.from('watchlist').delete().eq('user_id',req.params.userId).eq('ticker',req.params.ticker.toUpperCase());
+    const { error } = await supabase
+      .from('watchlist').delete()
+      .eq('user_id', req.params.userId)
+      .eq('ticker', req.params.ticker.toUpperCase())
+      .eq('market', market);
     if (error) throw error;
     res.json({ success: true });
-  } catch (e) { console.error('[watchlist DELETE]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('[watchlist DELETE]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Dhan / India market ──────────────────────────────────────────────────────
@@ -1063,6 +1109,35 @@ function dhanPost(path, body) {
     req.end();
   });
 }
+
+// ─── Debug route — check Dhan CSV loading ────────────────────────────────────
+app.get('/india/debug', async (req, res) => {
+  try {
+    const csv = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'images.dhan.co',
+        path: '/api-data/api-scrip-master.csv',
+        method: 'GET',
+        headers: { 'Accept': 'text/csv' }
+      }, r => {
+        let raw = '';
+        r.on('data', c => raw += c);
+        r.on('end', () => resolve(raw));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    res.json({
+      length:     csv.length,
+      first500:   csv.slice(0, 500),
+      lineCount:  csv.split('\n').length,
+      firstLines: csv.split('\n').slice(0, 3),
+      mapLoaded:  Object.keys(nseInstrumentMap).length,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/india/instruments/status', (req, res) => {
   res.json({ loaded: Object.keys(nseInstrumentMap).length, sample: Object.keys(nseInstrumentMap).slice(0, 5) });
