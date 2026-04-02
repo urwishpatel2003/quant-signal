@@ -33,7 +33,6 @@ export default function App() {
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
 
-  // Secret admin access — click logo 5 times
   const handleLogoClick = () => {
     const clicks = logoClicks + 1;
     setLogoClicks(clicks);
@@ -70,13 +69,11 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: '#07070e', color: '#e8e8f0',
       fontFamily: "'IBM Plex Mono', monospace", display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── Modals ── */}
       {modal === 'terms'   && <TermsModal   onClose={() => setModal(null)} />}
       {modal === 'privacy' && <PrivacyModal onClose={() => setModal(null)} />}
       {modal === 'about'   && <AboutModal   onClose={() => setModal(null)} />}
       {modal === 'contact' && <ContactModal onClose={() => setModal(null)} />}
 
-      {/* ── Header ── */}
       <div className="app-header">
         <div className="app-header-logo">
           <div
@@ -100,7 +97,6 @@ export default function App() {
           loading={macro.loading}
         />
 
-        {/* ── Auth ── */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <SignedOut>
             <SignInButton mode="modal">
@@ -123,7 +119,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Nav Tabs — only TABS from constants, no blog/admin ── */}
       <div className="app-tabs">
         {TABS.map(tab => {
           const id       = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
@@ -145,11 +140,9 @@ export default function App() {
         })}
       </div>
 
-      {/* ── Content ── */}
       <ErrorBoundary>
         <div className="app-content" style={{ flex: 1 }}>
 
-          {/* Public tabs — no auth required */}
           {activeTab === 'help'  && <HelpTab />}
           {activeTab === 'blog'  && <BlogTab />}
           {activeTab === 'admin' && <BlogAdmin />}
@@ -171,9 +164,8 @@ export default function App() {
             </div>
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
               <WatchlistTab
-               plan={scan.plan}
-               onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
-                 onOpenOptions={ticker => { setOptionsTicker(ticker); setActiveTab('options'); }}
+                onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
+                onOpenOptions={ticker => { setOptionsTicker(ticker); setActiveTab('options'); }}
               />
             </div>
           </SignedIn>
@@ -202,7 +194,6 @@ export default function App() {
         </div>
       </ErrorBoundary>
 
-      {/* ── Footer ── */}
       <div style={{
         borderTop: '1px solid #1e1e30',
         padding: '16px 24px',

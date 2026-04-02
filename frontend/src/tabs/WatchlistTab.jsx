@@ -1,10 +1,11 @@
 // src/tabs/WatchlistTab.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
+import { useUsage } from '../hooks/useUsage';
 import UpgradeModal from '../components/UpgradeModal';
 
 const BASE = import.meta.env.VITE_API_BASE;
-const FREE_LIMIT = 10;
+const FREE_LIMIT = 5;
 
 function fmtPrice(p) {
   if (!p) return '—';
@@ -14,9 +15,10 @@ function fmtPrice(p) {
   return `$${p.toFixed(6)}`;
 }
 
-export default function WatchlistTab({ onOpenScanner, onOpenOptions, plan }) {
+export default function WatchlistTab({ onOpenScanner, onOpenOptions }) {
   const { user } = useUser();
   const userId   = user?.id;
+  const { plan, refreshUsage } = useUsage();
 
   const [items,       setItems]       = useState([]);
   const [loading,     setLoading]     = useState(true);
