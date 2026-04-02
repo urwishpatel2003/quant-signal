@@ -92,7 +92,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#07070e', color: '#e8e8f0',
-      fontFamily: "'IBM Plex Mono', monospace", display: 'flex', flexDirection: 'column' }}>
+      fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
 
       {modal === 'terms'   && <TermsModal   onClose={() => setModal(null)} />}
       {modal === 'privacy' && <PrivacyModal onClose={() => setModal(null)} />}

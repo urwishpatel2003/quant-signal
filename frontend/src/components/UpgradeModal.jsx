@@ -50,7 +50,7 @@ export default function UpgradeModal({ type = 'scan', onClose }) {
         borderTop: `3px solid ${accentColor}`,
         borderRadius: 6, padding: 'clamp(24px,4vw,40px)',
         maxWidth: 480, width: '100%',
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'Inter', sans-serif",
       }}>
         {/* Header */}
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(22px,4vw,30px)',

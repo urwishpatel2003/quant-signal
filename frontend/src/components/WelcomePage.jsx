@@ -95,7 +95,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
       minHeight: '100vh', background: '#08080f',
       display: 'flex', flexDirection: 'column',
       opacity: visible ? 1 : 0, transition: 'opacity 0.5s ease',
-      fontFamily: "'IBM Plex Mono', monospace",
+      fontFamily: "'Inter', sans-serif",
     }}>
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }

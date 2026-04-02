@@ -24,7 +24,7 @@ export default class ErrorBoundary extends Component {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontFamily: 'IBM Plex Mono, monospace',
+          fontFamily: 'Inter, sans-serif',
           padding: '24px'
         }}>
           <div style={{
@@ -64,7 +64,7 @@ export default class ErrorBoundary extends Component {
                 borderRadius: '4px',
                 padding: '10px 24px',
                 fontSize: '12px',
-                fontFamily: 'IBM Plex Mono, monospace',
+                fontFamily: 'Inter, sans-serif',
                 letterSpacing: '1px',
                 cursor: 'pointer',
                 marginRight: '8px'
@@ -79,7 +79,7 @@ export default class ErrorBoundary extends Component {
                 borderRadius: '4px',
                 padding: '10px 24px',
                 fontSize: '12px',
-                fontFamily: 'IBM Plex Mono, monospace',
+                fontFamily: 'Inter, sans-serif',
                 letterSpacing: '1px',
                 cursor: 'pointer'
               }}

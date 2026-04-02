@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ── Base ── */
 html { font-size: 16px; }
@@ -6,7 +6,7 @@ html { font-size: 16px; }
 
 body {
   margin: 0;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   color: #e8e8f0;
   background: #07070e;
@@ -44,7 +44,7 @@ input, select, textarea {
 /* ── Buttons ── */
 .btn {
   background: #ffaa00; color: #0a0a0f; border: none;
-  font-family: inherit; font-size: 13px; font-weight: 700;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
   letter-spacing: 0.15em; text-transform: uppercase;
   padding: 11px 22px; cursor: pointer;
 }
@@ -53,7 +53,7 @@ input, select, textarea {
 
 .btn-sm {
   background: #1a1a2e; color: #c8c8e0; border: 1px solid #3a3a5e;
-  font-family: inherit; font-size: 11px; padding: 6px 12px;
+  font-family: 'Inter', sans-serif; font-size: 11px; padding: 6px 12px;
   cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase;
   font-weight: 500;
 }
@@ -71,7 +71,7 @@ input, select, textarea {
 /* ── Input ── */
 .input {
   background: #0f0f1a; border: 1px solid #3a3a5e;
-  color: #ffffff; font-family: inherit; font-size: 14px;
+  color: #ffffff; font-family: 'Inter', sans-serif; font-size: 14px;
   padding: 10px 14px; outline: none; width: 100%;
 }
 .input::placeholder { color: #6677aa; }
@@ -87,9 +87,9 @@ input, select, textarea {
 .kv-key {
   color: #99aacc;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .kv-value {
   color: #e8e8f0;
@@ -107,7 +107,7 @@ input, select, textarea {
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 14px 24px;
   cursor: pointer;
@@ -197,6 +197,14 @@ input, select, textarea {
 .label-sm {
   font-size: 10px; color: #6677aa;
   letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+/* Use JetBrains Mono for numbers, tickers, prices, and code */
+.font-mono,
+.tab-btn,
+.kv-value,
+.tag {
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* ── 1024px ── */
@@ -331,9 +339,9 @@ input, select, textarea {
 
   /* Base font + readability improvements for desktop */
   body {
-    font-size: 16px;
-    line-height: 1.6;
-    letter-spacing: 0.01em;
+    font-size: 15px;
+    line-height: 1.65;
+    letter-spacing: 0em;
   }
 
   /* Override inline font sizes on desktop — bump everything up for readability */
