@@ -12,7 +12,7 @@ async function fetchIndiaHistory(symbol, range = '3mo') {
   const result = data?.chart?.result?.[0];
   if (!result) return null;
   const quote  = result.indicators?.quote?.[0] || {};
-  const closes = quote.close || [];
+  const closes = (quote.close || []).filter(c => c != null);
   if (!closes.length) return null;
   return {
     close: quote.close, open: quote.open, high: quote.high,
@@ -29,9 +29,17 @@ async function fetchIndiaQuote(symbol) {
   return await res.json();
 }
 
+async function fetchIndiaFundamentals(symbol) {
+  try {
+    const res = await fetch(`${BASE}/india/fundamentals/${symbol}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
 async function fetchIndiaNews(symbol) {
   try {
-    const res  = await fetch(`${BASE}/india/news/${symbol}`);
+    const res = await fetch(`${BASE}/india/news/${symbol}`);
     if (!res.ok) return [];
     return await res.json();
   } catch { return []; }
@@ -85,7 +93,8 @@ export function useScan(macro) {
       const livePrice = q?.last || p.current;
 
       setStage('fundamentals');
-      const f = await fetchFundamentals(t);
+      // Use India-specific fundamentals for NSE stocks (Yahoo .NS)
+      const f = isIndia ? await fetchIndiaFundamentals(t) : await fetchFundamentals(t);
       setFundamentals(f);
 
       setStage('options');
@@ -99,7 +108,6 @@ export function useScan(macro) {
       }
 
       setStage('news');
-      // Use India-specific news endpoint for NSE stocks
       const n = isIndia ? await fetchIndiaNews(t) : await fetchStockNews(t);
       setNews(n);
 

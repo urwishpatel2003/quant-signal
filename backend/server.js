@@ -1351,6 +1351,48 @@ app.get('/india/news/:symbol', async (req, res) => {
   }
 });
 
+// ─── GET /india/fundamentals/:symbol ─────────────────────────────────────────
+app.get('/india/fundamentals/:symbol', async (req, res) => {
+  const symbol  = req.params.symbol.toUpperCase();
+  const ySymbol = `${symbol}.NS`;
+  try {
+    // Fetch from Yahoo Finance using .NS suffix
+    let result = null;
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const data = await httpsGet(
+          host,
+          `/v10/finance/quoteSummary/${encodeURIComponent(ySymbol)}?modules=financialData,defaultKeyStatistics,summaryDetail`,
+          YAHOO_HEADERS
+        );
+        const r = data?.quoteSummary?.result?.[0];
+        if (!r) continue;
+        result = {
+          pe:                r.summaryDetail?.trailingPE?.raw         || null,
+          eps:               r.defaultKeyStatistics?.trailingEps?.raw || null,
+          beta:              r.summaryDetail?.beta?.raw               || null,
+          fiftyTwoWeekHigh:  r.summaryDetail?.fiftyTwoWeekHigh?.raw   || null,
+          fiftyTwoWeekLow:   r.summaryDetail?.fiftyTwoWeekLow?.raw    || null,
+          averageVolume:     r.summaryDetail?.averageVolume?.raw      || null,
+          roe:               r.financialData?.returnOnEquity?.raw     || null,
+          debtToEquity:      r.financialData?.debtToEquity?.raw       || null,
+          revenueGrowth:     r.financialData?.revenueGrowth?.raw      || null,
+          grossMargins:      r.financialData?.grossMargins?.raw       || null,
+          targetMeanPrice:   r.financialData?.targetMeanPrice?.raw    || null,
+          recommendationKey: r.financialData?.recommendationKey       || null,
+          numberOfAnalystOpinions: r.financialData?.numberOfAnalystOpinions?.raw || null,
+        };
+        break;
+      } catch { continue; }
+    }
+    if (!result) return res.status(404).json({ error: `No fundamentals for ${ySymbol}` });
+    res.json(result);
+  } catch (e) {
+    console.error('[india/fundamentals]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
