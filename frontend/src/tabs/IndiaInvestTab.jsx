@@ -337,33 +337,28 @@ function AIPortfolioRecommender({ sipAmount }) {
   const getAIRecommendation = async () => {
     setAiLoading(true);
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const horizonMap  = { 1: '<1yr', 2: '1-3yrs', 3: '3-7yrs', 4: '7+yrs' };
+      const reactionMap = { 1: 'panic sell', 2: 'partial sell', 3: 'hold', 4: 'buy more' };
+      const goalMap     = { 1: 'capital preservation', 2: 'regular income', 3: 'balanced growth', 4: 'maximum growth' };
+
+      const res = await fetch(`${BASE}/api/analyze/portfolio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: `You are an Indian investment advisor specializing in ETFs and mutual funds. 
-Give practical, specific SIP recommendations for Indian retail investors.
-Return ONLY JSON: {"summary":"string","topPicks":[{"name":"string","type":"ETF|MF","symbol":"string","allocation":number,"reason":"string"}],"monthlyPlan":{"total":number,"breakdown":[{"instrument":"string","amount":number}]},"advice":"string"}`,
-          messages: [{
-            role: 'user',
-            content: `Risk profile: ${riskProfile?.label} (score ${totalScore}/16)
-Monthly SIP budget: ₹${sipAmount?.toLocaleString('en-IN') || '10,000'}
-Investment horizon: ${answers[0] === 1 ? '<1yr' : answers[0] === 2 ? '1-3yrs' : answers[0] === 3 ? '3-7yrs' : '7+yrs'}
-Market reaction: ${answers[1] === 1 ? 'panic sell' : answers[1] === 2 ? 'partial sell' : answers[1] === 3 ? 'hold' : 'buy more'}
-Goal: ${answers[2] === 1 ? 'capital preservation' : answers[2] === 2 ? 'regular income' : answers[2] === 3 ? 'balanced growth' : 'maximum growth'}
-Suggest 3-5 specific NSE ETFs or Indian mutual funds with exact allocation percentages. Focus on low-cost index ETFs and diversification.`,
-          }],
+          riskProfile: riskProfile?.label,
+          score:       totalScore,
+          sipAmount,
+          horizon:     horizonMap[answers[0]],
+          reaction:    reactionMap[answers[1]],
+          goal:        goalMap[answers[2]],
         }),
       });
       const data = await res.json();
-      const text = data.content?.[0]?.text || '';
-      const clean = text.replace(/```json|```/g, '').trim();
-      setAiResult(JSON.parse(clean));
+      if (data.error) throw new Error(data.error);
+      setAiResult(data);
       setStep(1);
     } catch (e) {
-      console.error(e);
+      console.error('[portfolio]', e.message);
     }
     setAiLoading(false);
   };

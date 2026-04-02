@@ -1702,6 +1702,33 @@ app.get('/india/fundamentals/:symbol', async (req, res) => {
   }
 });
 
+// ─── POST /api/analyze/portfolio ─────────────────────────────────────────────
+app.post('/api/analyze/portfolio', async (req, res) => {
+  const { riskProfile, score, sipAmount, horizon, reaction, goal } = req.body;
+  try {
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514', max_tokens: 1000, temperature: 0,
+      system: `You are an Indian investment advisor specializing in ETFs and mutual funds for retail investors.
+Give practical, specific SIP recommendations using NSE-listed ETFs and popular Indian mutual funds.
+THESIS RULE: Be specific with fund names and NSE symbols. Focus on low-cost index ETFs.
+Return ONLY JSON: {"summary":"string","topPicks":[{"name":"string","type":"ETF|MF","symbol":"string","allocation":number,"reason":"string"}],"monthlyPlan":{"total":number,"breakdown":[{"instrument":"string","amount":number}]},"advice":"string"}`,
+      messages: [{
+        role: 'user',
+        content: `Risk profile: ${riskProfile} (score ${score}/16)
+Monthly SIP budget: ₹${sipAmount?.toLocaleString('en-IN') || '10,000'}
+Investment horizon: ${horizon}
+Market reaction: ${reaction}
+Goal: ${goal}
+Suggest 3-5 specific NSE ETFs or Indian mutual funds with exact allocation percentages. Focus on low-cost index ETFs and diversification. Keep monthly amounts adding up to the total budget.`,
+      }],
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[portfolio]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
