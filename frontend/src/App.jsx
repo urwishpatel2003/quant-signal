@@ -46,7 +46,7 @@ export default function App() {
       .catch(() => {});
   }, [user?.id]);
 
-  const { scans: watchlistScans } = useWatchlistScans(watchlistTickers);
+  const { scans: watchlistScans } = useWatchlistScans(watchlistTickers, market);
 
   const openOptions    = ticker => { setOptionsTicker(ticker); setActiveTab('options'); };
   const handleNavigate = tab    => setActiveTab(tab);
