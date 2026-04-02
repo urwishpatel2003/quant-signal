@@ -93,7 +93,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
         </div>
 
         {/* Price + change */}
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: 160 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>
             {fmtPrice(item.price)}
           </div>
@@ -105,7 +105,7 @@ function WatchlistItem({ item, onRemove, removing, onOpenOptions, preloadedScan 
         </div>
 
         {/* Signal badge or loading */}
-        <div style={{ flexShrink: 0, minWidth: 80, textAlign: 'center' }}>
+        <div style={{ flexShrink: 0, width: 90, textAlign: 'center' }}>
           {scanning ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
               <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #ffaa0022', borderTop: '2px solid #ffaa00', animation: 'spin 0.8s linear infinite' }} />
