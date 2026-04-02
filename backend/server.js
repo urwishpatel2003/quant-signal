@@ -15,7 +15,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ─── Raw body for Stripe webhooks ─────────────────────────────────────────────
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 
@@ -33,8 +32,6 @@ const POLYGON_KEY   = process.env.POLYGON_API_KEY;
 const TRADIER_TOKEN = process.env.TRADIER_TOKEN;
 const FINNHUB_TOKEN = process.env.FINNHUB_TOKEN;
 
-// ─── Rate limiting ────────────────────────────────────────────────────────────
-
 const claudeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 100,
   message: { error: 'Too many AI requests.' },
@@ -49,8 +46,6 @@ const dataLimiter = rateLimit({
 app.use('/api/analyze', claudeLimiter);
 app.use('/yahoo',       dataLimiter);
 app.use('/tradier',     dataLimiter);
-
-// ─── Supabase helpers ─────────────────────────────────────────────────────────
 
 async function getOrCreateUser(userId, email = null) {
   const { data, error } = await supabase
@@ -90,8 +85,6 @@ async function trackUsage(userId, type) {
   return { scans: updated.scans, options: updated.options };
 }
 
-// ─── Usage routes ─────────────────────────────────────────────────────────────
-
 app.get('/usage/:userId', async (req, res) => {
   try {
     const user  = await getOrCreateUser(req.params.userId);
@@ -107,17 +100,13 @@ app.post('/usage/:userId/track', async (req, res) => {
   try {
     const user     = await getOrCreateUser(req.params.userId);
     const { type } = req.body;
-    console.log(`[track] userId=${req.params.userId} type=${type} plan=${user.plan}`);
     const updated = await trackUsage(req.params.userId, type);
-    console.log(`[track] result:`, updated);
     res.json({ ...updated, plan: user.plan });
   } catch (e) {
     console.error('[usage POST]', e.message);
     res.json({ scans: 0, options: 0, plan: 'free' });
   }
 });
-
-// ─── Stripe checkout ──────────────────────────────────────────────────────────
 
 app.post('/stripe/checkout', async (req, res) => {
   const { userId, email } = req.body;
@@ -147,8 +136,6 @@ app.post('/stripe/checkout', async (req, res) => {
   }
 });
 
-// ─── Stripe billing portal ────────────────────────────────────────────────────
-
 app.post('/stripe/portal', async (req, res) => {
   const { userId } = req.body;
   try {
@@ -167,15 +154,12 @@ app.post('/stripe/portal', async (req, res) => {
   }
 });
 
-// ─── Stripe webhook ───────────────────────────────────────────────────────────
-
 app.post('/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (e) {
-    console.error('[webhook] signature error:', e.message);
     return res.status(400).send(`Webhook Error: ${e.message}`);
   }
   try {
@@ -185,7 +169,6 @@ app.post('/webhook', async (req, res) => {
         const userId  = session.metadata?.clerk_user_id;
         if (userId) {
           await supabase.from('users').update({ plan: 'pro', stripe_subscription_id: session.subscription }).eq('id', userId);
-          console.log(`[webhook] upgraded ${userId} to pro`);
         }
         break;
       }
@@ -193,22 +176,20 @@ app.post('/webhook', async (req, res) => {
       case 'customer.subscription.paused': {
         const sub = event.data.object;
         const { data: user } = await supabase.from('users').select('id').eq('stripe_customer_id', sub.customer).single();
-        if (user) { await supabase.from('users').update({ plan: 'free' }).eq('id', user.id); }
+        if (user) await supabase.from('users').update({ plan: 'free' }).eq('id', user.id);
         break;
       }
       case 'customer.subscription.updated': {
         const sub    = event.data.object;
         const active = sub.status === 'active' || sub.status === 'trialing';
         const { data: user } = await supabase.from('users').select('id').eq('stripe_customer_id', sub.customer).single();
-        if (user) { await supabase.from('users').update({ plan: active ? 'pro' : 'free' }).eq('id', user.id); }
+        if (user) await supabase.from('users').update({ plan: active ? 'pro' : 'free' }).eq('id', user.id);
         break;
       }
     }
   } catch (e) { console.error('[webhook] handler error:', e.message); }
   res.json({ received: true });
 });
-
-// ─── httpsGet helper ──────────────────────────────────────────────────────────
 
 function httpsGet(hostname, path, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -228,15 +209,13 @@ function httpsGet(hostname, path, headers = {}) {
   });
 }
 
-const polygonGet  = path =>
+const polygonGet = path =>
   httpsGet('api.polygon.io', `${path}${path.includes('?') ? '&' : '?'}apiKey=${POLYGON_KEY}`);
-const tradierGet  = path =>
+const tradierGet = path =>
   httpsGet('api.tradier.com', path, { Authorization: `Bearer ${TRADIER_TOKEN}` });
-const finnhubGet  = path =>
+const finnhubGet = path =>
   httpsGet('finnhub.io', `/api/v1${path}&token=${FINNHUB_TOKEN}`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ─── Tradier history ──────────────────────────────────────────────────────────
 
 async function tradierHistory(sym, range = '3mo') {
   try {
@@ -257,8 +236,6 @@ async function tradierHistory(sym, range = '3mo') {
     };
   } catch (e) { return null; }
 }
-
-// ─── Polygon aggs ─────────────────────────────────────────────────────────────
 
 async function polygonAggs(ticker, days = 10) {
   try {
@@ -289,8 +266,6 @@ async function polygonBatch(symbols, days = 10) {
   return results;
 }
 
-// ─── Stock history ────────────────────────────────────────────────────────────
-
 app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
   const { ticker } = req.params;
   const range = req.query.range || '3mo';
@@ -303,8 +278,6 @@ app.get('/yahoo/v8/finance/chart/:ticker', async (req, res) => {
     }] } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ─── Fundamentals ─────────────────────────────────────────────────────────────
 
 app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   const { ticker } = req.params;
@@ -336,8 +309,6 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Stock news — Finnhub ─────────────────────────────────────────────────────
-
 app.get('/yahoo/v1/finance/search', async (req, res) => {
   const q = req.query.q || '';
   if (!q) return res.json({ news: [] });
@@ -345,36 +316,17 @@ app.get('/yahoo/v1/finance/search', async (req, res) => {
     const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const to   = new Date().toISOString().split('T')[0];
     const data = await finnhubGet(`/company-news?symbol=${encodeURIComponent(q)}&from=${from}&to=${to}`);
-
     if (!Array.isArray(data) || data.length === 0) {
-      // Fallback: general market news
       const general  = await finnhubGet(`/news?category=general`);
       const fallback = Array.isArray(general) ? general : [];
-      return res.json({
-        news: fallback.slice(0, 8).map(n => ({
-          title:               n.headline,
-          publisher:           n.source || '',
-          providerPublishTime: n.datetime,
-          link:                n.url,
-        }))
-      });
+      return res.json({ news: fallback.slice(0, 8).map(n => ({ title: n.headline, publisher: n.source || '', providerPublishTime: n.datetime, link: n.url })) });
     }
-
-    res.json({
-      news: data.slice(0, 8).map(n => ({
-        title:               n.headline,
-        publisher:           n.source || '',
-        providerPublishTime: n.datetime,
-        link:                n.url,
-      }))
-    });
+    res.json({ news: data.slice(0, 8).map(n => ({ title: n.headline, publisher: n.source || '', providerPublishTime: n.datetime, link: n.url })) });
   } catch (e) {
     console.error('[news]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
-
-// ─── Ticker search ────────────────────────────────────────────────────────────
 
 app.get('/search', async (req, res) => {
   const q = req.query.q || '';
@@ -400,8 +352,6 @@ app.get('/search', async (req, res) => {
     res.json(results.slice(0, 8));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ─── Movers ───────────────────────────────────────────────────────────────────
 
 app.get('/movers', async (req, res) => {
   try {
@@ -442,40 +392,6 @@ app.get('/movers', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Crypto ───────────────────────────────────────────────────────────────────
-
-app.get('/crypto', async (req, res) => {
-  try {
-    const COINS = [
-      'bitcoin','ethereum','solana','ripple','binancecoin',
-      'dogecoin','cardano','avalanche-2','chainlink','matic-network',
-      'polkadot','shiba-inu','tron','litecoin','uniswap',
-      'stellar','monero','internet-computer','aptos','arbitrum',
-      'optimism','near','the-graph','injective-protocol','sui',
-    ];
-    const data = await httpsGet(
-      'api.coingecko.com',
-      `/api/v3/coins/markets?vs_currency=usd&ids=${COINS.join(',')}&order=market_cap_desc&per_page=25&page=1&price_change_percentage=24h`,
-      { 'Accept': 'application/json', 'User-Agent': 'QuAIntSignal/1.0' }
-    );
-    if (!Array.isArray(data)) return res.json({ gainers: [], losers: [], volume: [] });
-    const list = data.map(c => ({
-      ticker: c.symbol?.toUpperCase(), name: c.name,
-      price: c.current_price || 0, change: c.price_change_24h || 0,
-      changePct: c.price_change_percentage_24h || 0,
-      volume: c.total_volume || 0, marketCap: c.market_cap || 0, type: 'crypto',
-    }));
-    const sorted = [...list].sort((a, b) => b.changePct - a.changePct);
-    res.json({
-      gainers: sorted.filter(c => c.changePct > 0).slice(0, 10),
-      losers:  [...list].sort((a, b) => a.changePct - b.changePct).filter(c => c.changePct < 0).slice(0, 10),
-      volume:  [...list].sort((a, b) => b.volume - a.volume).slice(0, 10),
-    });
-  } catch (e) { res.json({ gainers: [], losers: [], volume: [] }); }
-});
-
-// ─── Tradier routes ───────────────────────────────────────────────────────────
-
 app.get('/tradier/expirations/:ticker', async (req, res) => {
   try {
     const data = await tradierGet(`/v1/markets/options/expirations?symbol=${req.params.ticker}&includeAllRoots=true&strikes=false`);
@@ -497,8 +413,6 @@ app.get('/tradier/quote/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Bonds ────────────────────────────────────────────────────────────────────
-
 app.get('/bonds', async (req, res) => {
   try {
     const symbols = [
@@ -509,8 +423,6 @@ app.get('/bonds', async (req, res) => {
     res.json(await polygonBatch(symbols, 10));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ─── International ────────────────────────────────────────────────────────────
 
 app.get('/international', async (req, res) => {
   try {
@@ -525,8 +437,6 @@ app.get('/international', async (req, res) => {
     res.json(await polygonBatch(symbols, 10));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ─── Calendar ─────────────────────────────────────────────────────────────────
 
 app.get('/calendar', async (req, res) => {
   const topics = [
@@ -549,25 +459,19 @@ app.get('/calendar', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Indicator helpers ────────────────────────────────────────────────────────
-
 function checkRSIContradiction(rsi14, recommendation) {
   if (!rsi14 || !recommendation) return null;
-  if (recommendation === 'CALL' && rsi14 > 70)
-    return `⚠ RSI CONTRADICTION: RSI=${rsi14} OVERBOUGHT but recommending CALLs — mean reversion risk HIGH`;
-  if (recommendation === 'PUT' && rsi14 < 30)
-    return `⚠ RSI CONTRADICTION: RSI=${rsi14} OVERSOLD but recommending PUTs — bounce risk HIGH`;
-  if (recommendation === 'CALL' && rsi14 > 65)
-    return `CAUTION: RSI=${rsi14} approaching overbought for CALL entry`;
-  if (recommendation === 'PUT' && rsi14 < 35)
-    return `CAUTION: RSI=${rsi14} approaching oversold for PUT entry`;
+  if (recommendation === 'CALL' && rsi14 > 70) return `⚠ RSI CONTRADICTION: RSI=${rsi14} OVERBOUGHT but recommending CALLs — mean reversion risk HIGH`;
+  if (recommendation === 'PUT'  && rsi14 < 30) return `⚠ RSI CONTRADICTION: RSI=${rsi14} OVERSOLD but recommending PUTs — bounce risk HIGH`;
+  if (recommendation === 'CALL' && rsi14 > 65) return `CAUTION: RSI=${rsi14} approaching overbought for CALL entry`;
+  if (recommendation === 'PUT'  && rsi14 < 35) return `CAUTION: RSI=${rsi14} approaching oversold for PUT entry`;
   return null;
 }
 
 function calcDeltaAdjustedSize(delta, premium, budget = 1500) {
   if (!delta || !premium || premium <= 0) return null;
-  const absDelta  = Math.abs(parseFloat(delta));
-  const contracts = Math.max(1, Math.floor(budget / (premium * 100)));
+  const absDelta    = Math.abs(parseFloat(delta));
+  const contracts   = Math.max(1, Math.floor(budget / (premium * 100)));
   const dollarDelta = contracts * 100 * absDelta;
   let sizeAdvice;
   if      (absDelta >= 0.7)  sizeAdvice = `High delta (${absDelta}) — deep ITM, 1-2 contracts for defined risk`;
@@ -593,15 +497,11 @@ function calcEarningsProximity(calendar, ticker, selectedExpiry = null) {
   const next           = upcoming[0];
   const daysToEarnings = Math.round((next.date - now) / (1000 * 60 * 60 * 24));
   const earningsBeforeExpiry = selectedExpiry ? next.date < new Date(selectedExpiry).getTime() : false;
-  const risk =
-    daysToEarnings <= 3  ? 'CRITICAL' :
-    daysToEarnings <= 7  ? 'HIGH'     :
-    daysToEarnings <= 14 ? 'MEDIUM'   : 'LOW';
-  const advice =
-    daysToEarnings <= 3  ? 'Earnings <3 days away — IV crush risk extreme. Avoid buying options.' :
-    daysToEarnings <= 7  ? 'Earnings within 1 week — IV elevated, premium expensive.' :
-    daysToEarnings <= 14 ? 'Earnings within 2 weeks — factor IV expansion into cost.' :
-                           'No imminent earnings risk.';
+  const risk   = daysToEarnings <= 3 ? 'CRITICAL' : daysToEarnings <= 7 ? 'HIGH' : daysToEarnings <= 14 ? 'MEDIUM' : 'LOW';
+  const advice = daysToEarnings <= 3 ? 'Earnings <3 days away — IV crush risk extreme. Avoid buying options.'
+    : daysToEarnings <= 7  ? 'Earnings within 1 week — IV elevated, premium expensive.'
+    : daysToEarnings <= 14 ? 'Earnings within 2 weeks — factor IV expansion into cost.'
+    : 'No imminent earnings risk.';
   return { daysToEarnings, earningsDate: new Date(next.date).toISOString().split('T')[0], earningsBeforeExpiry, risk, advice };
 }
 
@@ -617,28 +517,20 @@ function isMarketClosed() {
 function categorizeNews(headlines) {
   return (headlines || []).map(n => {
     const t = n.title?.toLowerCase() || '';
-    if (t.includes('upgrade') || t.includes('outperform') || t.includes('buy rating') || t.includes('overweight') || t.includes('initiated'))
-      return `[UPGRADE] ${n.title}`;
-    if (t.includes('downgrade') || t.includes('underperform') || t.includes('sell rating') || t.includes('underweight') || t.includes('cuts to'))
-      return `[DOWNGRADE] ${n.title}`;
-    if (t.includes('price target') || t.includes('raises target') || t.includes('lowers target') || t.includes('pt raised') || t.includes('pt cut'))
-      return `[ANALYST TARGET] ${n.title}`;
-    if (t.includes('13f') || t.includes('insider') || t.includes('stake') || t.includes('buffett') || t.includes('bought shares') || t.includes('sold shares'))
-      return `[INSIDER/FUND] ${n.title}`;
-    if (t.includes('earnings') || t.includes('eps') || t.includes('revenue') || t.includes('beat') || t.includes('miss') || t.includes('guidance'))
-      return `[EARNINGS] ${n.title}`;
-    if (t.includes('fda') || t.includes('approval') || t.includes('lawsuit') || t.includes('sec') || t.includes('merger') || t.includes('acquisition'))
-      return `[REGULATORY/EVENT] ${n.title}`;
-    if (t.includes('short seller') || t.includes('hindenburg') || t.includes('citron'))
-      return `[SHORT ATTACK] ${n.title}`;
+    if (t.includes('upgrade') || t.includes('outperform') || t.includes('buy rating') || t.includes('overweight') || t.includes('initiated')) return `[UPGRADE] ${n.title}`;
+    if (t.includes('downgrade') || t.includes('underperform') || t.includes('sell rating') || t.includes('underweight') || t.includes('cuts to')) return `[DOWNGRADE] ${n.title}`;
+    if (t.includes('price target') || t.includes('raises target') || t.includes('lowers target') || t.includes('pt raised') || t.includes('pt cut')) return `[ANALYST TARGET] ${n.title}`;
+    if (t.includes('13f') || t.includes('insider') || t.includes('stake') || t.includes('buffett') || t.includes('bought shares') || t.includes('sold shares')) return `[INSIDER/FUND] ${n.title}`;
+    if (t.includes('earnings') || t.includes('eps') || t.includes('revenue') || t.includes('beat') || t.includes('miss') || t.includes('guidance')) return `[EARNINGS] ${n.title}`;
+    if (t.includes('fda') || t.includes('approval') || t.includes('lawsuit') || t.includes('sec') || t.includes('merger') || t.includes('acquisition')) return `[REGULATORY/EVENT] ${n.title}`;
+    if (t.includes('short seller') || t.includes('hindenburg') || t.includes('citron')) return `[SHORT ATTACK] ${n.title}`;
     return `[NEWS] ${n.title}`;
   });
 }
 
 function buildMacroContext(bonds, macroNews, intlMarkets, calendar) {
   let ctx = '\n=== MACRO ===\n';
-  if (bonds)
-    ctx += `BONDS: 10Y=${bonds.tnx?.current?.toFixed(2)}% | 2Y=${bonds.irx?.current?.toFixed(2)}% | Curve=${bonds.yieldCurve}% ${bonds.inverted ? '⚠ INVERTED' : ''} | TLT=$${bonds.tlt?.current?.toFixed(2)}\n`;
+  if (bonds) ctx += `BONDS: 10Y=${bonds.tnx?.current?.toFixed(2)}% | 2Y=${bonds.irx?.current?.toFixed(2)}% | Curve=${bonds.yieldCurve}% ${bonds.inverted ? '⚠ INVERTED' : ''} | TLT=$${bonds.tlt?.current?.toFixed(2)}\n`;
   if (intlMarkets?.length) {
     const find = sym => intlMarkets.find(m => m.symbol === sym);
     const pct  = m => m?.changePct != null ? `${m.changePct > 0 ? '+' : ''}${m.changePct.toFixed(2)}%` : 'N/A';
@@ -661,13 +553,12 @@ function buildIntradayContext(ohlcv, quote) {
     const dayChangePct = ((current - prevClose) / prevClose * 100);
     const abs = Math.abs(dayChangePct).toFixed(2);
     ctx += `TODAY: ${dayChangePct > 0 ? 'UP' : 'DOWN'} ${abs}% | prev $${prevClose.toFixed(2)} → $${current.toFixed(2)}\n`;
-    if      (dayChangePct <= -1.5)  ctx += `⚠ DOWN ${abs}% TODAY — put IV likely elevated, assess if move already priced in.\n`;
+    if      (dayChangePct <= -1.5)  ctx += `⚠ DOWN ${abs}% TODAY — put IV likely elevated.\n`;
     else if (dayChangePct <= -0.75) ctx += `NOTE: Down ${abs}% today — put premiums slightly elevated.\n`;
-    else if (dayChangePct >= 1.5)   ctx += `⚠ UP ${abs}% TODAY — call IV likely elevated, assess if move already priced in.\n`;
+    else if (dayChangePct >= 1.5)   ctx += `⚠ UP ${abs}% TODAY — call IV likely elevated.\n`;
     else if (dayChangePct >= 0.75)  ctx += `NOTE: Up ${abs}% today — call premiums slightly elevated.\n`;
   }
-  if (current && open)
-    ctx += `FROM OPEN: ${((current - open) / open * 100).toFixed(2)}% (open=$${open.toFixed(2)})\n`;
+  if (current && open) ctx += `FROM OPEN: ${((current - open) / open * 100).toFixed(2)}% (open=$${open.toFixed(2)})\n`;
   if (ohlcv?.close?.length >= 5) {
     const closes   = ohlcv.close.slice(-5);
     const momentum = ((closes[4] - closes[0]) / closes[0] * 100).toFixed(2);
@@ -675,8 +566,8 @@ function buildIntradayContext(ohlcv, quote) {
     let downDays = 0, upDays = 0;
     for (let i = closes.length - 1; i > 0; i--) { if (closes[i] < closes[i-1]) downDays++; else break; }
     for (let i = closes.length - 1; i > 0; i--) { if (closes[i] > closes[i-1]) upDays++;   else break; }
-    if (downDays >= 4) ctx += `⚠ ${downDays} CONSECUTIVE DOWN SESSIONS — extended move, bounce risk elevated.\n`;
-    if (upDays   >= 4) ctx += `⚠ ${upDays} CONSECUTIVE UP SESSIONS — extended move, pullback risk elevated.\n`;
+    if (downDays >= 4) ctx += `⚠ ${downDays} CONSECUTIVE DOWN SESSIONS\n`;
+    if (upDays   >= 4) ctx += `⚠ ${upDays} CONSECUTIVE UP SESSIONS\n`;
   }
   return ctx;
 }
@@ -686,41 +577,41 @@ function buildTAContext(ta, ticker = '', calendar = null, selectedExpiry = null)
   let ctx = '\n=== TECHNICAL ANALYSIS ===\n';
   if (ta.macd) {
     ctx += `MACD: Line=${ta.macd.macdLine} | Signal=${ta.macd.signalLine} | Hist=${ta.macd.histogram} | ${ta.macd.trend} | ${ta.macd.cross}\n`;
-    if (ta.macd.cross === 'BULLISH_CROSS') ctx += `✅ MACD BULLISH CROSS — momentum turning up\n`;
-    if (ta.macd.cross === 'BEARISH_CROSS') ctx += `🔴 MACD BEARISH CROSS — momentum turning down\n`;
+    if (ta.macd.cross === 'BULLISH_CROSS') ctx += `✅ MACD BULLISH CROSS\n`;
+    if (ta.macd.cross === 'BEARISH_CROSS') ctx += `🔴 MACD BEARISH CROSS\n`;
   }
   if (ta.bb) {
     ctx += `BB: Upper=$${ta.bb.upper} | Mid=$${ta.bb.middle} | Lower=$${ta.bb.lower} | Width=${ta.bb.bWidth}% | %B=${ta.bb.bPct} | ${ta.bb.position}\n`;
-    if (ta.bb.squeeze)                   ctx += `🔥 BB SQUEEZE — breakout likely soon\n`;
-    if (ta.bb.position === 'NEAR_UPPER') ctx += `NOTE: Price near BB upper band — slightly extended\n`;
-    if (ta.bb.position === 'NEAR_LOWER') ctx += `NOTE: Price near BB lower band — potential support\n`;
+    if (ta.bb.squeeze)                   ctx += `🔥 BB SQUEEZE\n`;
+    if (ta.bb.position === 'NEAR_UPPER') ctx += `NOTE: Price near BB upper band\n`;
+    if (ta.bb.position === 'NEAR_LOWER') ctx += `NOTE: Price near BB lower band\n`;
   }
   if (ta.atr) {
     ctx += `ATR(14): ${ta.atr.atr} (${ta.atr.atrPct}% of price) | Volatility=${ta.atr.volatility}\n`;
     ctx += `ATR STOPS: Long=$${ta.atr.atr1Stop} (1x) / $${ta.atr.atr2Stop} (2x) | Short=$${ta.atr.shortStop}\n`;
     ctx += `ATR TARGETS: 1x=$${ta.atr.atr1Target} | 2x=$${ta.atr.atr2Target}\n`;
-    if (ta.atr.volatility === 'HIGH') ctx += `⚠ HIGH ATR — wide price swings, size down accordingly\n`;
-    if (ta.atr.volatility === 'LOW')  ctx += `ℹ LOW ATR — tight range, options may be cheap\n`;
+    if (ta.atr.volatility === 'HIGH') ctx += `⚠ HIGH ATR\n`;
+    if (ta.atr.volatility === 'LOW')  ctx += `ℹ LOW ATR\n`;
   }
   if (ta.stochRSI) {
     ctx += `STOCH RSI: K=${ta.stochRSI.k} | D=${ta.stochRSI.d} | ${ta.stochRSI.signal}${ta.stochRSI.crossover ? ` | ${ta.stochRSI.crossover}` : ''}\n`;
-    if (ta.stochRSI.signal === 'OVERBOUGHT') ctx += `⚠ STOCH RSI EXTREME OVERBOUGHT (K=${ta.stochRSI.k} >90) — strong mean reversion warning\n`;
-    if (ta.stochRSI.signal === 'OVERSOLD')   ctx += `✅ STOCH RSI EXTREME OVERSOLD (K=${ta.stochRSI.k} <10) — strong bounce signal\n`;
-    if (ta.stochRSI.crossover === 'BULLISH_CROSS') ctx += `✅ STOCH RSI BULLISH CROSS — short-term momentum turning up\n`;
-    if (ta.stochRSI.crossover === 'BEARISH_CROSS') ctx += `🔴 STOCH RSI BEARISH CROSS — short-term momentum turning down\n`;
+    if (ta.stochRSI.signal === 'OVERBOUGHT') ctx += `⚠ STOCH RSI EXTREME OVERBOUGHT\n`;
+    if (ta.stochRSI.signal === 'OVERSOLD')   ctx += `✅ STOCH RSI EXTREME OVERSOLD\n`;
+    if (ta.stochRSI.crossover === 'BULLISH_CROSS') ctx += `✅ STOCH RSI BULLISH CROSS\n`;
+    if (ta.stochRSI.crossover === 'BEARISH_CROSS') ctx += `🔴 STOCH RSI BEARISH CROSS\n`;
   }
   if (ta.sr) {
     ctx += `SUPPORT: ${ta.sr.supportLevels.map(s => `$${s}`).join(', ') || 'none'} | Nearest=$${ta.sr.nearestSupport} (${ta.sr.distToSupport}% below)\n`;
     ctx += `RESISTANCE: ${ta.sr.resistanceLevels.map(r => `$${r}`).join(', ') || 'none'} | Nearest=$${ta.sr.nearestResistance} (${ta.sr.distToResistance}% above)\n`;
     ctx += `S/R Ratio=${ta.sr.srRatio} | Period High=$${ta.sr.periodHigh} | Period Low=$${ta.sr.periodLow}\n`;
-    if (ta.sr.distToResistance < 5)         ctx += `NOTE: Within 5% of resistance ($${ta.sr.nearestResistance}) — factor into CALL target\n`;
-    if (ta.sr.distToSupport    < 5)         ctx += `NOTE: Within 5% of support ($${ta.sr.nearestSupport}) — factor into PUT target\n`;
-    if (ta.sr.srRatio && ta.sr.srRatio > 2) ctx += `✅ GOOD LONG SETUP: ${ta.sr.distToResistance}% to resistance vs ${ta.sr.distToSupport}% to support\n`;
+    if (ta.sr.distToResistance < 5) ctx += `NOTE: Within 5% of resistance\n`;
+    if (ta.sr.distToSupport    < 5) ctx += `NOTE: Within 5% of support\n`;
+    if (ta.sr.srRatio && ta.sr.srRatio > 2) ctx += `✅ GOOD LONG SETUP\n`;
   }
   if (ta.priceVsSma20 != null)
     ctx += `SMA DIST: vs SMA20=${ta.priceVsSma20}% | vs SMA50=${ta.priceVsSma50 ?? 'N/A'}% | vs SMA200=${ta.priceVsSma200 ?? 'N/A'}%\n`;
   if (ta.priceVsSma200 && Math.abs(parseFloat(ta.priceVsSma200)) > 15)
-    ctx += `⚠ Price ${ta.priceVsSma200}% from SMA200 — very extended, mean reversion risk\n`;
+    ctx += `⚠ Price ${ta.priceVsSma200}% from SMA200 — very extended\n`;
   if (ticker && calendar) {
     const ep = calcEarningsProximity(calendar, ticker, selectedExpiry);
     if (ep) {
@@ -735,15 +626,15 @@ function buildChainContext(chain) {
   if (!chain) return '';
   let ctx = '\n=== OPTIONS INTELLIGENCE ===\n';
   ctx += `IV SKEW: ${chain.ivSkewPct}% (${chain.ivSkewLabel})\n`;
-  ctx += `IV PERCENTILE (session estimate): ${chain.ivPercentile}% — ${chain.ivPctLabel} (note: rough estimate, use as secondary signal only)\n`;
+  ctx += `IV PERCENTILE: ${chain.ivPercentile}% — ${chain.ivPctLabel}\n`;
   ctx += `VOL/OI: Calls=${chain.callVolOIRatio} | Puts=${chain.putVolOIRatio} | P/C Vol=${parseFloat(chain.putCallVolRatio)?.toFixed(2)}\n`;
   if (chain.unusualCalls?.length) ctx += `🔥 UNUSUAL CALL VOL: ${chain.unusualCalls.join(', ')}\n`;
   if (chain.unusualPuts?.length)  ctx += `🔥 UNUSUAL PUT VOL: ${chain.unusualPuts.join(', ')}\n`;
   if (chain.highGammaStrike) ctx += `GAMMA PIN: $${chain.highGammaStrike}\n`;
   const wideCalls = (chain.topCalls || []).filter(c => c.wideSpread).map(c => `$${c.strike}`);
   const widePuts  = (chain.topPuts  || []).filter(p => p.wideSpread).map(p => `$${p.strike}`);
-  if (wideCalls.length) ctx += `⚠ WIDE SPREAD CALLS (illiquid): ${wideCalls.join(', ')}\n`;
-  if (widePuts.length)  ctx += `⚠ WIDE SPREAD PUTS (illiquid): ${widePuts.join(', ')}\n`;
+  if (wideCalls.length) ctx += `⚠ WIDE SPREAD CALLS: ${wideCalls.join(', ')}\n`;
+  if (widePuts.length)  ctx += `⚠ WIDE SPREAD PUTS: ${widePuts.join(', ')}\n`;
   return ctx;
 }
 
@@ -788,13 +679,10 @@ async function callClaudeAPI(body) {
   });
 }
 
-// ─── Combined analysis ────────────────────────────────────────────────────────
-
 app.post('/api/analyze/combined', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, chain, news, bonds, macroNews,
             intlMarkets, calendar, ta, expiry, timeframeKey = 'swing', quote } = req.body;
-
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const intradayCtx = buildIntradayContext(ohlcv, quote);
     const taCtx       = buildTAContext(ta, ticker, calendar, expiry);
@@ -803,108 +691,53 @@ app.post('/api/analyze/combined', async (req, res) => {
     const calls       = chain?.topCalls?.slice(0, 5) || [];
     const puts        = chain?.topPuts?.slice(0, 5)  || [];
     const sizingCtx   = buildSizingContext(calls, puts);
-
     const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
     const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
     const hasTarget    = categorized.some(n => n.startsWith('[ANALYST TARGET]'));
     const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
     const hasShort     = categorized.some(n => n.startsWith('[SHORT ATTACK]'));
-
     const callMid       = calls[0]?.mid || 0;
     const putMid        = puts[0]?.mid  || 0;
     const callContracts = calcDeltaAdjustedSize(calls[0]?.delta, callMid)?.contracts || Math.max(1, Math.floor(1500 / (callMid * 100)));
     const putContracts  = calcDeltaAdjustedSize(puts[0]?.delta,  putMid)?.contracts  || Math.max(1, Math.floor(1500 / (putMid  * 100)));
-    const callStop      = (callMid * 0.50).toFixed(2);
-    const callTarget    = (callMid * 2.00).toFixed(2);
-    const putStop       = (putMid  * 0.50).toFixed(2);
-    const putTarget     = (putMid  * 2.00).toFixed(2);
-
+    const callStop   = (callMid * 0.50).toFixed(2);
+    const callTarget = (callMid * 2.00).toFixed(2);
+    const putStop    = (putMid  * 0.50).toFixed(2);
+    const putTarget  = (putMid  * 2.00).toFixed(2);
     const prevClose    = ohlcv?.prev || quote?.prevClose;
     const dayChangePct = price && prevClose ? ((price - prevClose) / prevClose * 100) : 0;
     const callContradiction = checkRSIContradiction(ta?.rsi14, 'CALL');
     const putContradiction  = checkRSIContradiction(ta?.rsi14, 'PUT');
     const ep = calcEarningsProximity(calendar, ticker, expiry);
-
     const tfMeta = {
-      short:    { label: 'Short Term (1-5 days)',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
-      swing:    { label: 'Swing Trade (1-4 weeks)',     indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | ATR=${ta?.atr?.atr} | BB=${ta?.bb?.position} | Trend=${ta?.trendSignal}` },
+      short:    { label: 'Short Term (1-5 days)',       indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+      swing:    { label: 'Swing Trade (1-4 weeks)',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | ATR=${ta?.atr?.atr} | BB=${ta?.bb?.position} | Trend=${ta?.trendSignal}` },
       position: { label: 'Position Trade (1-3 months)', indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
-      longterm: { label: 'Long Term (6-12 months)',     indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
+      longterm: { label: 'Long Term (6-12 months)',      indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
     };
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
-
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
       system: `You are a quantitative trading analyst and expert options trader.
-
-HARD RULES:
-1. RSI >70 + CALL: Must explicitly address overbought risk.
-2. RSI <30 + PUT: Must explicitly address oversold/bounce risk.
-3. StochRSI >90 + CALL: Extreme overbought — strong warning.
-4. StochRSI <10 + PUT: Extreme oversold — strong warning.
-5. Earnings BEFORE expiry + CRITICAL/HIGH risk: Strongly consider NEUTRAL due to IV crush.
-6. Stock down >2% today + PUT: Assess if move already priced in.
-7. Stock up >2% today + CALL: Assess if move already priced in.
-8. Wide spread contracts (⚠WIDE): Avoid — recommend liquid alternatives.
-
-INFORMATIONAL SIGNALS:
-- IV Percentile (session estimate — secondary signal only)
-- StochRSI between 10-90: Informational trend signal only
-- MACD cross, BB position, S/R proximity, ATR, consecutive days, SMA200 distance
-
-NEUTRAL is valid when multiple HARD RULES fire simultaneously.
-Do NOT default to NEUTRAL for normal market conditions.
+HARD RULES: 1.RSI>70+CALL=overbought warning 2.RSI<30+PUT=oversold warning 3.StochRSI>90+CALL=extreme overbought 4.StochRSI<10+PUT=extreme oversold 5.Earnings BEFORE expiry+CRITICAL/HIGH=consider NEUTRAL 6.Stock down>2%+PUT=assess if priced in 7.Stock up>2%+CALL=assess if priced in 8.Wide spread=avoid
+NEUTRAL only when multiple HARD RULES fire. Do NOT default to NEUTRAL.
 Return ONLY JSON with keys "price" and "options". No markdown.`,
-      messages: [{
-        role: 'user',
-        content: `Analyze ${ticker} @ $${price?.toFixed(2)} | ${tf.label} | Expiry: ${expiry}
+      messages: [{ role: 'user', content: `Analyze ${ticker} @ $${price?.toFixed(2)} | ${tf.label} | Expiry: ${expiry}
 Market: ${isMarketClosed() ? 'CLOSED' : 'OPEN'} | ${new Date().toLocaleDateString()}
-${intradayCtx}
-${taCtx}
-${chainCtx}
-${sizingCtx}
+${intradayCtx}${taCtx}${chainCtx}${sizingCtx}
 ${callContradiction ? `RSI WARNING: ${callContradiction}` : ''}
 ${putContradiction  ? `RSI WARNING: ${putContradiction}`  : ''}
-${ep ? `EARNINGS RISK: ${ep.daysToEarnings}d away | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
+${ep ? `EARNINGS RISK: ${ep.daysToEarnings}d | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
 FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe}
-OPTIONS FLOW: P/C OI=${chain?.putCallRatio?.toFixed(2)} | P/C Vol=${parseFloat(chain?.putCallVolRatio)?.toFixed(2)} | CallIV=${chain?.avgCallIV}% | PutIV=${chain?.avgPutIV}%
-PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
-${hasUpgrade ? '🟢 UPGRADE' : ''}${hasDowngrade ? '🔴 DOWNGRADE' : ''}${hasTarget ? '📊 TARGET' : ''}${hasFund ? '🏦 INSTITUTIONAL' : ''}${hasShort ? '⚠ SHORT ATTACK' : ''}
-NEWS: ${categorized.slice(0, 6).join(' | ')}
+OPTIONS FLOW: P/C OI=${chain?.putCallRatio?.toFixed(2)} | CallIV=${chain?.avgCallIV}% | PutIV=${chain?.avgPutIV}%
+PRICE (5): ${JSON.stringify(ohlcv?.close?.slice(-5))}
+${hasUpgrade?'🟢 UPGRADE':''}${hasDowngrade?'🔴 DOWNGRADE':''}${hasTarget?'📊 TARGET':''}${hasFund?'🏦 INSTITUTIONAL':''}${hasShort?'⚠ SHORT ATTACK':''}
+NEWS: ${categorized.slice(0,6).join(' | ')}
 ${macroCtx}
-ATM CALLS: ${calls.map(c => `$${c.strike}|b$${c.bid}|a$${c.ask}|m$${c.mid}|IV${c.iv}%|d${c.delta}|g${c.gamma}|OI${c.oi}|vol${c.volume}|sprd${c.spreadPct}%${c.unusualVolume ? '🔥' : ''}${c.wideSpread ? '⚠WIDE' : ''}`).join(' ')}
-ATM PUTS:  ${puts.map(p => `$${p.strike}|b$${p.bid}|a$${p.ask}|m$${p.mid}|IV${p.iv}%|d${p.delta}|g${p.gamma}|OI${p.oi}|vol${p.volume}|sprd${p.spreadPct}%${p.unusualVolume ? '🔥' : ''}${p.wideSpread ? '⚠WIDE' : ''}`).join(' ')}
-DECISION SUMMARY:
-- Today: ${dayChangePct >= 0 ? 'UP' : 'DOWN'} ${Math.abs(dayChangePct).toFixed(2)}%
-- RSI: ${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI: K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}]
-- MACD: ${ta?.macd?.cross || 'N/A'} | BB: ${ta?.bb?.position || 'N/A'}
-- ATR: ${ta?.atr?.atr} (${ta?.atr?.volatility}) | ATR stop: $${ta?.atr?.atr1Stop}
-- Resistance: $${ta?.sr?.nearestResistance} (${ta?.sr?.distToResistance}% away)
-- Support: $${ta?.sr?.nearestSupport} (${ta?.sr?.distToSupport}% away)
-- Earnings: ${ep ? `${ep.daysToEarnings}d [${ep.risk}]${ep.earningsBeforeExpiry ? ' BEFORE EXPIRY ⚠' : ''}` : 'none'}
-- IV Pct (estimate): ${chain?.ivPercentile}% | Skew: ${chain?.ivSkewLabel}
-- Unusual vol: ${[...(chain?.unusualCalls || []), ...(chain?.unusualPuts || [])].length > 0 ? 'YES' : 'NONE'}
-Return JSON:
-{
-  "price": {
-    "signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,
-    "timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],
-    "riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL",
-    "bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"
-  },
-  "options": {
-    "recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,
-    "reasoning":"Address the key signals: today's move, RSI, MACD, BB, S/R, ATR, earnings if any.",
-    "ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string",
-    "positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string",
-    "bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"Sell at $${callTarget} — profit $${((parseFloat(callTarget)-callMid)*100*callContracts).toFixed(0)}","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${callTarget} (100% gain). Stop: $${callStop} (50% loss). ATR stop: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},
-    "bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"Sell at $${putTarget} — profit $${((parseFloat(putTarget)-putMid)*100*putContracts).toFixed(0)}","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${putTarget} (100% gain). Stop: $${putStop} (50% loss). ATR stop: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}
-  }
-}
-RULES: Exact bid/ask/mid only. Avoid wide-spread strikes. OI>50. Return JSON only.`
-      }]
+CALLS: ${calls.map(c=>`$${c.strike}|m$${c.mid}|IV${c.iv}%|d${c.delta}|OI${c.oi}|vol${c.volume}${c.unusualVolume?'🔥':''}${c.wideSpread?'⚠WIDE':''}`).join(' ')}
+PUTS:  ${puts.map(p=>`$${p.strike}|m$${p.mid}|IV${p.iv}%|d${p.delta}|OI${p.oi}|vol${p.volume}${p.unusualVolume?'🔥':''}${p.wideSpread?'⚠WIDE':''}`).join(' ')}
+Return JSON: {"price":{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"},"options":{"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"Sell at $${callTarget}","maxLoss":0,"entryTiming":"string","exitRule":"Stop: $${callStop}. ATR: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"Sell at $${putTarget}","maxLoss":0,"entryTiming":"string","exitRule":"Stop: $${putStop}. ATR: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}}}` }]
     });
-
     res.json({ priceSignal: result.price, optionsSignal: result.options });
   } catch (e) {
     console.error('[analyze/combined]', e.message);
@@ -912,50 +745,39 @@ RULES: Exact bid/ask/mid only. Avoid wide-spread strikes. OI>50. Return JSON onl
   }
 });
 
-// ─── Price only analysis ──────────────────────────────────────────────────────
-
 app.post('/api/analyze/price', async (req, res) => {
   try {
-    const { ticker, price, ohlcv, fundamentals, options, news,
-            bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing' } = req.body;
-
+    const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing' } = req.body;
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const taCtx       = buildTAContext(ta, ticker, calendar);
     const categorized = categorizeNews(news).slice(0, 8);
     const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
     const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
     const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
-
     const tfMeta = {
-      short:    { label: 'Short Term (1-5 days)',      focus: 'momentum, RSI, StochRSI, volume, news.',      indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
-      swing:    { label: 'Swing Trade (1-4 weeks)',     focus: 'trend, SMA20/50, MACD, BB, S/R, ATR stops.', indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | BB=${ta?.bb?.position} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
-      position: { label: 'Position Trade (1-3 months)', focus: 'SMA50/200, fundamentals, ATR, macro.',        indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
-      longterm: { label: 'Long Term (6-12 months)',     focus: 'fundamentals, macro cycle, analyst consensus.',indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
+      short:    { label: 'Short Term (1-5 days)',       focus: 'momentum, RSI, StochRSI, volume, news.',       indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x)` },
+      swing:    { label: 'Swing Trade (1-4 weeks)',      focus: 'trend, SMA20/50, MACD, BB, S/R, ATR stops.',  indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | BB=${ta?.bb?.position} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
+      position: { label: 'Position Trade (1-3 months)', focus: 'SMA50/200, fundamentals, ATR, macro.',         indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal}` },
+      longterm: { label: 'Long Term (6-12 months)',      focus: 'fundamentals, macro cycle, analyst consensus.', indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | Target=$${fundamentals?.targetMeanPrice}` },
     };
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
-
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
       system: `You are a quantitative trading analyst. Timeframe: ${tf.label}. Focus: ${tf.focus}
 [UPGRADE]/[INSIDER/FUND]=bullish. [DOWNGRADE]/[SHORT ATTACK]=bearish.
-Use ATR for stop/target sizing. Use S/R levels as natural price targets.
-SMA200 dist >15% = extended, factor mean reversion into thesis.
+Use ATR for stop/target sizing. SMA200 dist >15% = extended.
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
-      messages: [{
-        role: 'user',
-        content: `${ticker} @ $${price?.toFixed(2)} | ${tf.label}
-PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
+      messages: [{ role: 'user', content: `${ticker} @ $${price?.toFixed(2)} | ${tf.label}
+PRICE (5): ${JSON.stringify(ohlcv?.close?.slice(-5))}
 TECHNICALS: ${tf.indicators}
 ${taCtx}
-FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe} | RevGrowth=${fundamentals?.revenueGrowth}
-OPTIONS FLOW: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%
-${hasUpgrade ? '🟢 UPGRADE' : ''}${hasDowngrade ? '🔴 DOWNGRADE' : ''}${hasFund ? '🏦 INSTITUTIONAL' : ''}
-NEWS: ${categorized.slice(0, 6).join(' | ')}
+FUNDAMENTALS: P/E=${fundamentals?.pe} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe}
+OPTIONS: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%
+${hasUpgrade?'🟢 UPGRADE':''}${hasDowngrade?'🔴 DOWNGRADE':''}${hasFund?'🏦 INSTITUTIONAL':''}
+NEWS: ${categorized.slice(0,6).join(' | ')}
 ${macroCtx}
-Return JSON only.`
-      }]
+Return JSON only.` }]
     });
-
     res.json(result);
   } catch (e) {
     console.error('[analyze/price]', e.message);
@@ -963,13 +785,9 @@ Return JSON only.`
   }
 });
 
-// ─── Options only analysis ────────────────────────────────────────────────────
-
 app.post('/api/analyze/options', async (req, res) => {
   try {
-    const { ticker, price, expiry, chain, fundamentals, news, priceSignal,
-            bonds, macroNews, intlMarkets, calendar, ta, quote } = req.body;
-
+    const { ticker, price, expiry, chain, fundamentals, news, priceSignal, bonds, macroNews, intlMarkets, calendar, ta, quote } = req.body;
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const intradayCtx = buildIntradayContext(null, quote);
     const taCtx       = buildTAContext(ta, ticker, calendar, expiry);
@@ -978,61 +796,41 @@ app.post('/api/analyze/options', async (req, res) => {
     const calls       = chain?.topCalls?.slice(0, 5) || [];
     const puts        = chain?.topPuts?.slice(0, 5)  || [];
     const sizingCtx   = buildSizingContext(calls, puts);
-
     const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
     const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
     const hasTarget    = categorized.some(n => n.startsWith('[ANALYST TARGET]'));
     const hasFund      = categorized.some(n => n.startsWith('[INSIDER/FUND]'));
     const hasShort     = categorized.some(n => n.startsWith('[SHORT ATTACK]'));
-
     const callMid       = calls[0]?.mid || 0;
     const putMid        = puts[0]?.mid  || 0;
     const callContracts = calcDeltaAdjustedSize(calls[0]?.delta, callMid)?.contracts || Math.max(1, Math.floor(1500 / (callMid * 100)));
     const putContracts  = calcDeltaAdjustedSize(puts[0]?.delta,  putMid)?.contracts  || Math.max(1, Math.floor(1500 / (putMid  * 100)));
-    const callStop      = (callMid * 0.50).toFixed(2);
-    const callTarget    = (callMid * 2.00).toFixed(2);
-    const putStop       = (putMid  * 0.50).toFixed(2);
-    const putTarget     = (putMid  * 2.00).toFixed(2);
-
+    const callStop   = (callMid * 0.50).toFixed(2);
+    const callTarget = (callMid * 2.00).toFixed(2);
+    const putStop    = (putMid  * 0.50).toFixed(2);
+    const putTarget  = (putMid  * 2.00).toFixed(2);
     const callContradiction = checkRSIContradiction(ta?.rsi14, 'CALL');
     const putContradiction  = checkRSIContradiction(ta?.rsi14, 'PUT');
     const ep = calcEarningsProximity(calendar, ticker, expiry);
-
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
       system: `You are an expert options trader.
-
-HARD RULES:
-1. RSI >70 + CALL = overbought warning. RSI <30 + PUT = oversold warning.
-2. StochRSI >90 + CALL = extreme overbought. StochRSI <10 + PUT = extreme oversold.
-3. Earnings BEFORE expiry + HIGH/CRITICAL risk = IV crush warning, consider NEUTRAL.
-4. Stock down >2% today + PUT = assess if already priced in.
-5. Stock up >2% today + CALL = assess if already priced in.
-6. Wide spread (⚠WIDE) = avoid that strike.
-
-Do NOT default to NEUTRAL for normal market conditions.
-Return ONLY JSON.`,
-      messages: [{
-        role: 'user',
-        content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry} | ${isMarketClosed() ? 'CLOSED' : 'OPEN'}
-${intradayCtx}
-${taCtx}
-${chainCtx}
-${sizingCtx}
-${callContradiction ? `RSI WARNING: ${callContradiction}` : ''}
-${putContradiction  ? `RSI WARNING: ${putContradiction}`  : ''}
-${ep ? `EARNINGS: ${ep.daysToEarnings}d | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}` : ''}
-Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact} | Global: ${priceSignal?.globalMarketTrend}
+HARD RULES: 1.RSI>70+CALL=overbought 2.RSI<30+PUT=oversold 3.Earnings BEFORE expiry+HIGH/CRITICAL=IV crush 4.Down>2%+PUT=assess 5.Up>2%+CALL=assess 6.Wide spread=avoid
+Do NOT default to NEUTRAL. Return ONLY JSON.`,
+      messages: [{ role: 'user', content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry} | ${isMarketClosed()?'CLOSED':'OPEN'}
+${intradayCtx}${taCtx}${chainCtx}${sizingCtx}
+${callContradiction?`RSI WARNING: ${callContradiction}`:''}
+${putContradiction?`RSI WARNING: ${putContradiction}`:''}
+${ep?`EARNINGS: ${ep.daysToEarnings}d | Before expiry: ${ep.earningsBeforeExpiry} | ${ep.risk} | ${ep.advice}`:''}
+Price Signal: ${priceSignal?.signal} ${priceSignal?.confidence}% | Macro: ${priceSignal?.macroImpact}
 FUNDAMENTALS: Rec=${fundamentals?.recommendationKey?.toUpperCase()} | Target=$${fundamentals?.targetMeanPrice}
-${hasUpgrade ? '🟢 UPGRADE' : ''}${hasDowngrade ? '🔴 DOWNGRADE' : ''}${hasTarget ? '📊 TARGET' : ''}${hasFund ? '🏦 INSTITUTIONAL' : ''}${hasShort ? '⚠ SHORT ATTACK' : ''}
-NEWS: ${categorized.slice(0, 6).join(' | ')}
-CALLS: ${calls.map(c => `$${c.strike}|b$${c.bid}|a$${c.ask}|m$${c.mid}|IV${c.iv}%|d${c.delta}|g${c.gamma}|OI${c.oi}|vol${c.volume}|sprd${c.spreadPct}%${c.unusualVolume ? '🔥' : ''}${c.wideSpread ? '⚠' : ''}`).join(' ')}
-PUTS:  ${puts.map(p => `$${p.strike}|b$${p.bid}|a$${p.ask}|m$${p.mid}|IV${p.iv}%|d${p.delta}|g${p.gamma}|OI${p.oi}|vol${p.volume}|sprd${p.spreadPct}%${p.unusualVolume ? '🔥' : ''}${p.wideSpread ? '⚠' : ''}`).join(' ')}
+${hasUpgrade?'🟢':''}${hasDowngrade?'🔴':''}${hasTarget?'📊':''}${hasFund?'🏦':''}${hasShort?'⚠':''}
+NEWS: ${categorized.slice(0,6).join(' | ')}
+CALLS: ${calls.map(c=>`$${c.strike}|m$${c.mid}|IV${c.iv}%|d${c.delta}|OI${c.oi}${c.unusualVolume?'🔥':''}${c.wideSpread?'⚠':''}`).join(' ')}
+PUTS:  ${puts.map(p=>`$${p.strike}|m$${p.mid}|IV${p.iv}%|d${p.delta}|OI${p.oi}${p.unusualVolume?'🔥':''}${p.wideSpread?'⚠':''}`).join(' ')}
 ${macroCtx}
-Return JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"Explain overall picture — RSI (${ta?.rsi14}), StochRSI (K=${ta?.stochRSI?.k}), MACD (${ta?.macd?.cross}), BB (${ta?.bb?.position}), S/R (res $${ta?.sr?.nearestResistance} ${ta?.sr?.distToResistance}% away), ATR (${ta?.atr?.volatility}), earnings (${ep ? ep.risk : 'none'}), intraday move, unusual vol","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${callTarget} (100% gain). Stop: $${callStop}. ATR stop: $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Sell at $${putTarget} (100% gain). Stop: $${putStop}. ATR stop: $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}}`
-      }]
+Return JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reasoning":"string","ivRank":"LOW"|"MEDIUM"|"HIGH","ivComment":"string","macroSetup":"string","calendarWarning":"string","positionSizing":"string","keyRisks":["","",""],"catalysts":["","",""],"macroRisks":["",""],"globalMarketRisk":"string","bestCall":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${callContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Stop $${callStop}. ATR $${ta?.atr?.atr1Stop}","thesis":"string","delta":"string","iv":"string"},"bestPut":{"strike":0,"expiry":"${expiry}","bid":0,"ask":0,"mid":0,"estimatedPremium":0,"maxContracts":${putContracts},"totalCost":0,"targetReturn":"string","maxLoss":0,"entryTiming":"string","exitRule":"Stop $${putStop}. ATR $${ta?.atr?.shortStop}","thesis":"string","delta":"string","iv":"string"}}` }]
     });
-
     res.json(result);
   } catch (e) {
     console.error('[analyze/options]', e.message);
@@ -1040,31 +838,24 @@ Return JSON: {"recommendation":"CALL"|"PUT"|"NEUTRAL","confidence":0-100,"reason
   }
 });
 
-// ─── Watchlist background analysis ───────────────────────────────────────────
-
 app.post('/api/analyze/watchlist', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, news, ta } = req.body;
     const categorized = categorizeNews(news).slice(0, 5);
     const taCtx       = buildTAContext(ta, ticker);
-
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 800, temperature: 0,
       system: `You are a quantitative trading analyst. Timeframe: Long Term (6-12 months).
 Focus: fundamentals, macro cycle, SMA200, analyst consensus.
-Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"thesis":"string (1 sentence)","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH"}`,
-      messages: [{
-        role: 'user',
-        content: `${ticker} @ $${price?.toFixed(2)} | LONG TERM (6-12 months)
-PRICE (5 closes): ${JSON.stringify(ohlcv?.close?.slice(-5))}
+Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH"}`,
+      messages: [{ role: 'user', content: `${ticker} @ $${price?.toFixed(2)} | LONG TERM
+PRICE (5): ${JSON.stringify(ohlcv?.close?.slice(-5))}
 RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal}
 ${taCtx}
-FUNDAMENTALS: P/E=${fundamentals?.pe} | EPS=$${fundamentals?.eps} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey}
-NEWS: ${categorized.slice(0, 4).join(' | ')}
-Return JSON only.`
-      }]
+FUNDAMENTALS: P/E=${fundamentals?.pe} | EPS=$${fundamentals?.eps} | Beta=${fundamentals?.beta} | Target=$${fundamentals?.targetMeanPrice}
+NEWS: ${categorized.slice(0,4).join(' | ')}
+Return JSON only.` }]
     });
-
     res.json(result);
   } catch (e) {
     console.error('[analyze/watchlist]', e.message);
@@ -1072,23 +863,15 @@ Return JSON only.`
   }
 });
 
-// ─── Legacy Claude proxy ──────────────────────────────────────────────────────
-
 app.post('/api/analyze', (req, res) => {
   const body = JSON.stringify(req.body || {});
   const request = https.request({
     hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
-      'content-type': 'application/json', 'content-length': Buffer.byteLength(body),
-    }
+    headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) }
   }, response => {
     let data = '';
     response.on('data', c => (data += c));
-    response.on('end', () => {
-      try { res.json(JSON.parse(data)); }
-      catch { res.status(500).json({ error: 'Parse error', raw: data }); }
-    });
+    response.on('end', () => { try { res.json(JSON.parse(data)); } catch { res.status(500).json({ error: 'Parse error' }); } });
   });
   request.on('error', e => res.status(500).json({ error: e.message }));
   request.write(body);
@@ -1099,19 +882,15 @@ app.post('/api/analyze', (req, res) => {
 
 app.get('/blog', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('blog_posts').select('id, slug, title, excerpt, category, tags, created_at')
-      .eq('published', true).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('blog_posts').select('id,slug,title,excerpt,category,tags,created_at').eq('published',true).order('created_at',{ascending:false});
     if (error) throw error;
     res.json(data || []);
-  } catch (e) { console.error('[blog GET]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/blog/admin/all', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('blog_posts').select('id, slug, title, excerpt, category, published, created_at')
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('blog_posts').select('id,slug,title,excerpt,category,published,created_at').order('created_at',{ascending:false});
     if (error) throw error;
     res.json(data || []);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1119,12 +898,11 @@ app.get('/blog/admin/all', async (req, res) => {
 
 app.get('/blog/:slug', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('blog_posts').select('*').eq('slug', req.params.slug).eq('published', true).single();
+    const { data, error } = await supabase.from('blog_posts').select('*').eq('slug',req.params.slug).eq('published',true).single();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Post not found' });
     res.json(data);
-  } catch (e) { console.error('[blog slug GET]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/blog/generate', async (req, res) => {
@@ -1133,19 +911,13 @@ app.post('/blog/generate', async (req, res) => {
   try {
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 2000, temperature: 0.7,
-      system: `You are a quantitative trading analyst and financial writer for QuAInt Signal.
-Write engaging, educational blog posts about trading, options, technical analysis, and market strategy.
-Always include actionable insights. Never give specific financial advice.
-Return ONLY valid JSON with no markdown or backticks.`,
-      messages: [{
-        role: 'user',
-        content: `Write a blog post about: "${topic}"${ticker ? ` focused on ${ticker}` : ''}.
-Category: ${category || 'Market Analysis'}
-Return JSON: {"title":"string","excerpt":"string","content":"HTML string","tags":[""],"slug":"string"}`
-      }]
+      system: `You are a financial writer for QuAInt Signal. Write educational blog posts about trading. Return ONLY valid JSON.`,
+      messages: [{ role: 'user', content: `Write a blog post about: "${topic}"${ticker?` focused on ${ticker}`:''}.
+Category: ${category||'Market Analysis'}
+Return JSON: {"title":"string","excerpt":"string","content":"HTML string","tags":[""],"slug":"string"}` }]
     });
     res.json(result);
-  } catch (e) { console.error('[blog generate]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/blog/publish', async (req, res) => {
@@ -1153,11 +925,11 @@ app.post('/blog/publish', async (req, res) => {
   if (!title || !slug || !content) return res.status(400).json({ error: 'title, slug, content required' });
   try {
     const { data, error } = await supabase.from('blog_posts')
-      .upsert({ slug, title, excerpt, content, category: category || 'Market Analysis', tags: tags || [], published: true, updated_at: new Date().toISOString() }, { onConflict: 'slug' })
+      .upsert({ slug, title, excerpt, content, category: category||'Market Analysis', tags: tags||[], published: true, updated_at: new Date().toISOString() }, { onConflict: 'slug' })
       .select().single();
     if (error) throw error;
     res.json(data);
-  } catch (e) { console.error('[blog publish]', e.message); res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/blog/:slug', async (req, res) => {
@@ -1172,34 +944,20 @@ app.delete('/blog/:slug', async (req, res) => {
 
 app.get('/watchlist/:userId', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('watchlist').select('ticker, added_at')
-      .eq('user_id', req.params.userId).order('added_at', { ascending: false });
+    const { data, error } = await supabase.from('watchlist').select('ticker,added_at').eq('user_id',req.params.userId).order('added_at',{ascending:false});
     if (error) throw error;
     if (!data?.length) return res.json([]);
-
     const tickers   = data.map(r => r.ticker).join(',');
     const quotes    = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
     const raw       = quotes?.quotes?.quote || [];
     const quoteList = Array.isArray(raw) ? raw : [raw];
     const quoteMap  = {};
     quoteList.forEach(q => { quoteMap[q.symbol] = q; });
-
     res.json(data.map(row => {
       const q = quoteMap[row.ticker];
-      return {
-        ticker:    row.ticker,
-        added_at:  row.added_at,
-        price:     q?.last ? parseFloat(q.last) : null,
-        changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null,
-        change:    q?.change ? parseFloat(q.change) : null,
-        volume:    q?.volume ? parseInt(q.volume) : null,
-      };
+      return { ticker: row.ticker, added_at: row.added_at, price: q?.last ? parseFloat(q.last) : null, changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null, change: q?.change ? parseFloat(q.change) : null, volume: q?.volume ? parseInt(q.volume) : null };
     }));
-  } catch (e) {
-    console.error('[watchlist GET]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('[watchlist GET]', e.message); res.status(500).json({ error: e.message }); }
 });
 
 app.post('/watchlist/:userId', async (req, res) => {
@@ -1208,72 +966,26 @@ app.post('/watchlist/:userId', async (req, res) => {
   try {
     const user = await getOrCreateUser(req.params.userId);
     if (user.plan !== 'pro') {
-      const { count } = await supabase
-        .from('watchlist').select('*', { count: 'exact', head: true })
-        .eq('user_id', req.params.userId);
+      const { count } = await supabase.from('watchlist').select('*',{count:'exact',head:true}).eq('user_id',req.params.userId);
       if (count >= 5) return res.status(403).json({ error: 'Free tier limit: 5 watchlist items. Upgrade to Pro for unlimited.' });
     }
-    const { data, error } = await supabase
-      .from('watchlist').insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() })
-      .select().single();
-    if (error) {
-      if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' });
-      throw error;
-    }
+    const { data, error } = await supabase.from('watchlist').insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() }).select().single();
+    if (error) { if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' }); throw error; }
     res.json(data);
-  } catch (e) {
-    console.error('[watchlist POST]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('[watchlist POST]', e.message); res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/watchlist/:userId/:ticker', async (req, res) => {
   try {
-    const { error } = await supabase
-      .from('watchlist').delete()
-      .eq('user_id', req.params.userId)
-      .eq('ticker', req.params.ticker.toUpperCase());
+    const { error } = await supabase.from('watchlist').delete().eq('user_id',req.params.userId).eq('ticker',req.params.ticker.toUpperCase());
     if (error) throw error;
     res.json({ success: true });
-  } catch (e) {
-    console.error('[watchlist DELETE]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('[watchlist DELETE]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-// ─── DHAN API — INDIA MARKET ──────────────────────────────────────────────────
-// Add these constants near the top of server.js with other API keys:
-// const DHAN_TOKEN     = process.env.DHAN_TOKEN;
-// const DHAN_CLIENT_ID = process.env.DHAN_CLIENT_ID;
+// ─── Dhan / India market ──────────────────────────────────────────────────────
 
-// Add this helper alongside polygonGet / tradierGet:
-// const dhanPost = (path, body) => httpsPost('api.dhan.co', path, body, {
-//   'access-token': DHAN_TOKEN,
-//   'client-id':    DHAN_CLIENT_ID,
-// });
-
-// ─── Dhan httpsPost helper (add alongside httpsGet in server.js) ──────────────
-// function httpsPost(hostname, path, body, headers = {}) {
-//   return new Promise((resolve, reject) => {
-//     const bodyStr = JSON.stringify(body);
-//     const req = https.request({
-//       hostname, path, method: 'POST',
-//       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
-//         'Content-Length': Buffer.byteLength(bodyStr), ...headers }
-//     }, res => {
-//       let data = '';
-//       res.on('data', c => data += c);
-//       res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); } });
-//     });
-//     req.on('error', reject);
-//     req.write(bodyStr);
-//     req.end();
-//   });
-// }
-
-// ─── NSE Instrument master — loaded at startup ────────────────────────────────
-// Symbol → { securityId, name } map, refreshed daily
-let nseInstrumentMap = {}; // { 'RELIANCE': { securityId: '2885', name: 'RELIANCE INDUSTRIES' }, ... }
+let nseInstrumentMap = {};
 
 async function loadNSEInstruments() {
   try {
@@ -1292,33 +1004,34 @@ async function loadNSEInstruments() {
       req.end();
     });
 
-    // Compact CSV columns:
-    // SEM_EXM_EXCH_ID, SEM_SEGMENT, SEM_SMST_SECURITY_ID, SEM_INSTRUMENT_NAME,
-    // SM_SYMBOL_NAME, SEM_LOT_UNITS, SEM_CUSTOM_SYMBOL, SEM_EXPIRY_DATE,
-    // SEM_STRIKE_PRICE, SEM_OPTION_TYPE, SEM_SERIES, SEM_TICK_SIZE, SEM_EXPIRY_FLAG
     const lines = csv.split('\n').slice(1);
-    const map = {};
+    const map   = {};
     for (const line of lines) {
       if (!line.trim()) continue;
-      const cols    = line.split(',');
-      const exchange   = cols[0]?.trim(); // NSE, BSE, MCX
-      const segment    = cols[1]?.trim(); // E = Equity
+      const cols       = line.split(',');
+      const exchange   = cols[0]?.trim();
+      const segment    = cols[1]?.trim();
       const securityId = cols[2]?.trim();
-      const instrument = cols[3]?.trim(); // EQUITY, FUTIDX etc
-      const symbolName = cols[4]?.trim(); // SM_SYMBOL_NAME
-      const customSymbol = cols[6]?.trim(); // SEM_CUSTOM_SYMBOL / display name
-      const series     = cols[10]?.trim(); // EQ series
-
-      // Only NSE Equity in EQ series
+      const instrument = cols[3]?.trim();
+      const symbolName = cols[4]?.trim();
+      const customSym  = cols[6]?.trim();
+      const series     = cols[10]?.trim();
       if (exchange === 'NSE' && segment === 'E' && instrument === 'EQUITY' && series === 'EQ') {
         if (securityId && symbolName) {
-          map[symbolName] = { securityId, name: customSymbol || symbolName };
+          map[symbolName] = { securityId, name: customSym || symbolName };
+        }
+      }
+    }
+    nseInstrumentMap = map;
+    console.log(`[Dhan] Loaded ${Object.keys(map).length} NSE EQ instruments`);
+  } catch (e) {
+    console.error('[Dhan] Failed to load instruments:', e.message);
+  }
+}
 
-// Load on startup and refresh daily
 loadNSEInstruments();
 setInterval(loadNSEInstruments, 24 * 60 * 60 * 1000);
 
-// ─── Nifty 50 tickers ─────────────────────────────────────────────────────────
 const NIFTY50 = [
   'RELIANCE','TCS','HDFCBANK','BHARTIARTL','ICICIBANK','INFOSYS','SBIN','HINDUNILVR',
   'ITC','BAJFINANCE','LT','KOTAKBANK','HCLTECH','AXISBANK','ASIANPAINT','MARUTI',
@@ -1329,7 +1042,6 @@ const NIFTY50 = [
   'TATASTEEL','UPL','ADANIENT','SHRIRAMFIN',
 ];
 
-// ─── Dhan post helper ─────────────────────────────────────────────────────────
 function dhanPost(path, body) {
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
@@ -1344,10 +1056,7 @@ function dhanPost(path, body) {
     }, res => {
       let data = '';
       res.on('data', c => data += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); }
-      });
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: 'Parse error', raw: data.slice(0,200) }); } });
     });
     req.on('error', reject);
     req.write(bodyStr);
@@ -1355,141 +1064,79 @@ function dhanPost(path, body) {
   });
 }
 
-// ─── GET /india/search ────────────────────────────────────────────────────────
-app.get('/india/search', (req, res) => {
-  const q = (req.query.q || '').toUpperCase().trim();
-  if (!q || q.length < 1) return res.json([]);
-  const results = Object.entries(nseInstrumentMap)
-    .filter(([sym]) => sym.startsWith(q))
-    .slice(0, 10)
-    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
-  // Also include fuzzy matches
-  const fuzzy = Object.entries(nseInstrumentMap)
-    .filter(([sym, info]) => !sym.startsWith(q) && (sym.includes(q) || info.name?.toUpperCase().includes(q)))
-    .slice(0, 5)
-    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
-  const seen = new Set(results.map(r => r.ticker));
-  res.json([...results, ...fuzzy.filter(f => !seen.has(f.ticker))].slice(0, 10));
+app.get('/india/instruments/status', (req, res) => {
+  res.json({ loaded: Object.keys(nseInstrumentMap).length, sample: Object.keys(nseInstrumentMap).slice(0, 5) });
 });
 
-// ─── GET /india/quote/:symbol ─────────────────────────────────────────────────
+app.get('/india/search', (req, res) => {
+  const q = (req.query.q || '').toUpperCase().trim();
+  if (!q) return res.json([]);
+  const results = Object.entries(nseInstrumentMap)
+    .filter(([sym]) => sym.startsWith(q)).slice(0, 8)
+    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
+  const seen  = new Set(results.map(r => r.ticker));
+  const fuzzy = Object.entries(nseInstrumentMap)
+    .filter(([sym, info]) => !seen.has(sym) && (sym.includes(q) || info.name?.toUpperCase().includes(q)))
+    .slice(0, 4)
+    .map(([sym, info]) => ({ ticker: sym, name: info.name, securityId: info.securityId, exchange: 'NSE' }));
+  res.json([...results, ...fuzzy].slice(0, 10));
+});
+
 app.get('/india/quote/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const inst   = nseInstrumentMap[symbol];
-  if (!inst) return res.status(404).json({ error: `Symbol ${symbol} not found in NSE instruments` });
+  if (!inst) return res.status(404).json({ error: `${symbol} not found in NSE instruments` });
   try {
-    const data = await dhanPost('/v2/marketfeed/quote', {
-      NSE_EQ: [parseInt(inst.securityId)],
-    });
-    const q = data?.data?.NSE_EQ?.[inst.securityId];
+    const data = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: [parseInt(inst.securityId)] });
+    const q    = data?.data?.NSE_EQ?.[inst.securityId];
     if (!q) return res.status(404).json({ error: 'No quote data' });
     const ltp       = q.last_price;
     const prevClose = q.ohlc?.close;
     const change    = ltp && prevClose ? ltp - prevClose : null;
     const changePct = change && prevClose ? (change / prevClose) * 100 : null;
-    res.json({
-      symbol, securityId: inst.securityId, name: inst.name,
-      price: ltp, open: q.ohlc?.open, high: q.ohlc?.high, low: q.ohlc?.low,
-      prevClose, change: change ? parseFloat(change.toFixed(2)) : null,
-      changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
-      volume: q.volume, oi: q.oi,
-    });
-  } catch (e) {
-    console.error('[india/quote]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+    res.json({ symbol, securityId: inst.securityId, name: inst.name, price: ltp, open: q.ohlc?.open, high: q.ohlc?.high, low: q.ohlc?.low, prevClose, change: change ? parseFloat(change.toFixed(2)) : null, changePct: changePct ? parseFloat(changePct.toFixed(2)) : null, volume: q.volume });
+  } catch (e) { console.error('[india/quote]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-// ─── GET /india/history/:symbol ───────────────────────────────────────────────
 app.get('/india/history/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const range  = req.query.range || '3mo';
   const inst   = nseInstrumentMap[symbol];
-  if (!inst) return res.status(404).json({ error: `Symbol ${symbol} not found` });
-
+  if (!inst) return res.status(404).json({ error: `${symbol} not found` });
   const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
   const days    = daysMap[range] || 90;
   const toDate  = new Date().toISOString().split('T')[0];
   const fromDate= new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
   try {
-    const data = await dhanPost('/v2/charts/historical', {
-      securityId:      inst.securityId,
-      exchangeSegment: 'NSE_EQ',
-      instrument:      'EQUITY',
-      expiryCode:      0,
-      oi:              false,
-      fromDate,
-      toDate,
-    });
-
+    const data = await dhanPost('/v2/charts/historical', { securityId: inst.securityId, exchangeSegment: 'NSE_EQ', instrument: 'EQUITY', expiryCode: 0, oi: false, fromDate, toDate });
     if (!data?.open?.length) return res.status(404).json({ error: 'No history data' });
-
-    const closes = data.close || [];
-    res.json({
-      chart: { result: [{
-        meta: { symbol, currency: 'INR' },
-        timestamp: data.timestamp,
-        indicators: { quote: [{
-          open:   data.open,
-          high:   data.high,
-          low:    data.low,
-          close:  data.close,
-          volume: data.volume,
-        }] }
-      }] }
-    });
-  } catch (e) {
-    console.error('[india/history]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+    res.json({ chart: { result: [{ meta: { symbol, currency: 'INR' }, timestamp: data.timestamp, indicators: { quote: [{ open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume }] } }] } });
+  } catch (e) { console.error('[india/history]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-// ─── GET /india/movers ────────────────────────────────────────────────────────
 app.get('/india/movers', async (req, res) => {
   try {
-    // Get security IDs for all Nifty 50
     const validTickers = NIFTY50.filter(t => nseInstrumentMap[t]);
-    const secIds = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
-
-    const data = await dhanPost('/v2/marketfeed/quote', {
-      NSE_EQ: secIds,
-    });
-
-    const quotes = data?.data?.NSE_EQ || {};
+    const secIds       = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
+    const data         = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: secIds });
+    const quotes       = data?.data?.NSE_EQ || {};
     const list = validTickers.map(ticker => {
-      const inst = nseInstrumentMap[ticker];
-      const q    = quotes[inst.securityId];
+      const inst      = nseInstrumentMap[ticker];
+      const q         = quotes[inst.securityId];
       if (!q) return null;
       const ltp       = q.last_price;
       const prevClose = q.ohlc?.close;
       const change    = ltp && prevClose ? ltp - prevClose : 0;
       const changePct = change && prevClose ? (change / prevClose) * 100 : 0;
-      return {
-        ticker, name: inst.name, price: ltp,
-        change: parseFloat(change.toFixed(2)),
-        changePct: parseFloat(changePct.toFixed(2)),
-        volume: q.volume || 0,
-        open: q.ohlc?.open, high: q.ohlc?.high, low: q.ohlc?.low,
-      };
+      return { ticker, name: inst.name, price: ltp, change: parseFloat(change.toFixed(2)), changePct: parseFloat(changePct.toFixed(2)), volume: q.volume || 0 };
     }).filter(Boolean);
-
     const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
-    const gainers = sorted.filter(s => s.changePct > 0).slice(0, 10);
-    const losers  = [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10);
-    const volume  = [...list].sort((a, b) => b.volume - a.volume).slice(0, 10);
-
-    res.json({ gainers, losers, volume });
-  } catch (e) {
-    console.error('[india/movers]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ─── GET /india/instruments/status ───────────────────────────────────────────
-// Health check — how many instruments loaded
-app.get('/india/instruments/status', (req, res) => {
-  res.json({ loaded: Object.keys(nseInstrumentMap).length, sample: Object.keys(nseInstrumentMap).slice(0, 5) });
+    res.json({
+      gainers: sorted.filter(s => s.changePct > 0).slice(0, 10),
+      losers:  [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
+      volume:  [...list].sort((a, b) => b.volume - a.volume).slice(0, 10),
+    });
+  } catch (e) { console.error('[india/movers]', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
