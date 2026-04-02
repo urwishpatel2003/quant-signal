@@ -208,7 +208,7 @@ export default function App() {
               <ScannerTab
                 scan={scan} macro={macro}
                 onOpenOptions={openOptions}
-                onAddToWatchlist={() => {}}
+                onAddToWatchlist={ticker => setWatchlistTickers(prev => [...new Set([...prev, ticker])])}
                 market={market}
               />
             </div>
