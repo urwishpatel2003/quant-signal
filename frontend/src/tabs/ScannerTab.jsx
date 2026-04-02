@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { SC, MC, GC, RC } from '../utils/constants';
-import { useScan } from '../hooks/useScan';
 import { TIMEFRAMES } from '../utils/indicators';
 import { useUsage } from '../hooks/useUsage';
 import MiniChart      from '../components/MiniChart';
@@ -49,7 +48,7 @@ function fmtPrice(p) {
   return `$${p.toFixed(6)}`;
 }
 
-export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
+export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlist }) {
   const [inputVal,     setInputVal]     = useState('');
   const [suggestions,  setSuggestions]  = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -69,7 +68,6 @@ export default function ScannerTab({ macro, onOpenOptions, onAddToWatchlist }) {
   const skipSearch  = useRef(false);
   const searchCache = useRef({});
 
-  const scan = useScan(macro);
   const { usage, limits, plan, canScan, canOptions, trackScan } = useUsage();
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;

@@ -5,6 +5,7 @@ import {
 } from '@clerk/clerk-react';
 import { TABS } from './utils/constants';
 import { useMacroData } from './hooks/useMacroData';
+import { useScan } from './hooks/useScan';
 import MacroBar    from './components/MacroBar';
 import ScannerTab  from './tabs/ScannerTab';
 import OptionsTab  from './tabs/OptionsTab';
@@ -24,6 +25,7 @@ export default function App() {
   const [logoClicks,    setLogoClicks]    = useState(0);
 
   const macro                    = useMacroData();
+  const scan                     = useScan(macro);
   const { user }                 = useUser();
   const { isLoaded, isSignedIn } = useAuth();
 
@@ -152,20 +154,20 @@ export default function App() {
           {activeTab === 'admin' && <BlogAdmin />}
 
           <SignedIn>
-            {activeTab === 'scanner' && (
-              <ScannerTab macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
-            )}
-            {activeTab === 'options' && (
+            <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
+              <ScannerTab scan={scan} macro={macro} onOpenOptions={openOptions} onAddToWatchlist={() => {}} />
+            </div>
+            <div style={{ display: activeTab === 'options' ? 'block' : 'none' }}>
               <OptionsTab macro={macro} initialTicker={optionsTicker} />
-            )}
-            {activeTab === 'markets' && (
+            </div>
+            <div style={{ display: activeTab === 'markets' ? 'block' : 'none' }}>
               <MarketsTab
                 intlMarkets={macro.intlMarkets}
                 bonds={macro.bonds}
                 macroNews={macro.macroNews}
                 calendar={macro.calendar}
               />
-            )}
+            </div>
           </SignedIn>
 
           {activeTab !== 'help' && activeTab !== 'blog' && activeTab !== 'admin' && (
