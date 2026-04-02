@@ -1063,59 +1063,118 @@ const NSE_NAMES = {
 };
 
 // Fetch Yahoo Finance quote for a single NSE stock
+// ─── NSE quote/history cache (5 min TTL for quotes, 30 min for history) ───────
+const nseQuoteCache   = new Map(); // symbol → { data, ts }
+const nseHistoryCache = new Map(); // `${symbol}:${range}` → { data, ts }
+const NSE_QUOTE_TTL   = 5  * 60 * 1000;
+const NSE_HISTORY_TTL = 30 * 60 * 1000;
+
+const YAHOO_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
+
 async function yahooNSEQuote(symbol) {
+  // Return cached if fresh
+  const cached = nseQuoteCache.get(symbol);
+  if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL) return cached.data;
+
   try {
     const ySymbol = `${symbol}.NS`;
-    const data = await httpsGet(
-      'query1.finance.yahoo.com',
-      `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d`,
-      { 'User-Agent': 'Mozilla/5.0' }
-    );
-    const meta   = data?.chart?.result?.[0]?.meta;
-    const quotes = data?.chart?.result?.[0]?.indicators?.quote?.[0];
-    const closes = data?.chart?.result?.[0]?.timestamp;
-    if (!meta?.regularMarketPrice) return null;
-    const price     = meta.regularMarketPrice;
-    const prevClose = meta.previousClose || meta.chartPreviousClose;
-    const change    = price && prevClose ? price - prevClose : null;
-    const changePct = change && prevClose ? (change / prevClose) * 100 : null;
-    const volume    = meta.regularMarketVolume || 0;
-    return {
-      price, prevClose,
-      change:    change    ? parseFloat(change.toFixed(2))    : null,
-      changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
-      volume, open: meta.regularMarketOpen || null,
-      high: meta.regularMarketDayHigh || null,
-      low:  meta.regularMarketDayLow  || null,
-    };
-  } catch (e) { return null; }
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const data = await httpsGet(
+          host,
+          `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
+          YAHOO_HEADERS
+        );
+        const meta = data?.chart?.result?.[0]?.meta;
+        if (!meta?.regularMarketPrice) continue;
+        const price     = meta.regularMarketPrice;
+        const prevClose = meta.previousClose || meta.chartPreviousClose;
+        const change    = price && prevClose ? price - prevClose : null;
+        const changePct = change && prevClose ? (change / prevClose) * 100 : null;
+        const result = {
+          price, prevClose,
+          change:    change    ? parseFloat(change.toFixed(2))    : null,
+          changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
+          volume: meta.regularMarketVolume || 0,
+          open:   meta.regularMarketOpen   || null,
+          high:   meta.regularMarketDayHigh || null,
+          low:    meta.regularMarketDayLow  || null,
+        };
+        // Cache successful result
+        nseQuoteCache.set(symbol, { data: result, ts: Date.now() });
+        return result;
+      } catch { continue; }
+    }
+    // Return stale cache if available (better than nothing)
+    if (cached) { console.warn(`[NSE] Using stale cache for ${symbol}`); return cached.data; }
+    return null;
+  } catch (e) {
+    if (cached) return cached.data;
+    return null;
+  }
 }
 
-// Fetch Yahoo Finance history for NSE stock
 async function yahooNSEHistory(symbol, range = '3mo') {
+  const cacheKey = `${symbol}:${range}`;
+  const cached   = nseHistoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < NSE_HISTORY_TTL) return cached.data;
+
   try {
-    const ySymbol  = `${symbol}.NS`;
+    const ySymbol     = `${symbol}.NS`;
     const intervalMap = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1wk' };
-    const interval = intervalMap[range] || '1d';
-    const data = await httpsGet(
-      'query1.finance.yahoo.com',
-      `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}`,
-      { 'User-Agent': 'Mozilla/5.0' }
-    );
-    const result = data?.chart?.result?.[0];
-    if (!result) return null;
-    const timestamps = result.timestamp || [];
-    const quote      = result.indicators?.quote?.[0] || {};
-    const closes     = quote.close || [];
-    if (!closes.length) return null;
-    return {
-      close: quote.close, open: quote.open, high: quote.high,
-      low: quote.low, volume: quote.volume, timestamps,
-      current: closes[closes.length - 1],
-      prev:    closes[closes.length - 2],
-    };
-  } catch (e) { return null; }
+    const interval    = intervalMap[range] || '1d';
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const data = await httpsGet(
+          host,
+          `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}&includePrePost=false`,
+          YAHOO_HEADERS
+        );
+        const chartResult = data?.chart?.result?.[0];
+        if (!chartResult) continue;
+        const quote  = chartResult.indicators?.quote?.[0] || {};
+        const closes = quote.close || [];
+        if (!closes.length) continue;
+        const result = {
+          close: quote.close, open: quote.open, high: quote.high,
+          low: quote.low, volume: quote.volume,
+          timestamps: chartResult.timestamp || [],
+          current: closes[closes.length - 1],
+          prev:    closes[closes.length - 2],
+        };
+        nseHistoryCache.set(cacheKey, { data: result, ts: Date.now() });
+        return result;
+      } catch { continue; }
+    }
+    if (cached) { console.warn(`[NSE] Using stale history cache for ${symbol}:${range}`); return cached.data; }
+    return null;
+  } catch (e) {
+    if (cached) return cached.data;
+    return null;
+  }
 }
+
+// ─── GET /india/debug/:symbol — test Yahoo Finance NSE ───────────────────────
+app.get('/india/debug/:symbol', async (req, res) => {
+  const symbol  = req.params.symbol.toUpperCase();
+  const ySymbol = `${symbol}.NS`;
+  try {
+    const data = await httpsGet(
+      'query2.finance.yahoo.com',
+      `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
+      {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, */*',
+      }
+    );
+    res.json({ ySymbol, status: data?.chart?.result ? 'ok' : 'no data', meta: data?.chart?.result?.[0]?.meta, error: data?.chart?.error });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ─── GET /india/search ────────────────────────────────────────────────────────
 app.get('/india/search', (req, res) => {
@@ -1160,19 +1219,22 @@ app.get('/india/history/:symbol', async (req, res) => {
 // ─── GET /india/movers ────────────────────────────────────────────────────────
 app.get('/india/movers', async (req, res) => {
   try {
-    // Fetch all Nifty 50 quotes in parallel batches of 10
     const batchSize = 10;
     const results   = [];
     for (let i = 0; i < NIFTY50.length; i += batchSize) {
       const batch = NIFTY50.slice(i, i + batchSize);
-      const batchResults = await Promise.all(batch.map(async ticker => {
+      const batchResults = await Promise.allSettled(batch.map(async ticker => {
         const q = await yahooNSEQuote(ticker);
         if (!q || q.price == null) return null;
         return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
       }));
-      results.push(...batchResults.filter(Boolean));
-      if (i + batchSize < NIFTY50.length) await sleep(200);
+      for (const r of batchResults) {
+        if (r.status === 'fulfilled' && r.value) results.push(r.value);
+      }
+      if (i + batchSize < NIFTY50.length) await sleep(300);
     }
+
+    if (!results.length) return res.json({ gainers: [], losers: [], volume: [], error: 'No data available' });
 
     const sorted  = [...results].sort((a, b) => b.changePct - a.changePct);
     res.json({
