@@ -1,11 +1,35 @@
 import { useState, useRef } from 'react';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
-import { fetchIndiaHistory, fetchIndiaQuote } from '../api/india';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain } from '../api/tradier';
 import { runPriceAnalysis } from '../api/claude';
 import { calcIndicators, TIMEFRAMES } from '../utils/indicators';
 
 const BASE = import.meta.env.VITE_API_BASE;
+
+// Fetch India price history from our backend (Yahoo Finance .NS)
+async function fetchIndiaHistory(symbol, range = '3mo') {
+  const res  = await fetch(`${BASE}/india/history/${symbol}?range=${range}`);
+  const data = await res.json();
+  const result = data?.chart?.result?.[0];
+  if (!result) return null;
+  const quote  = result.indicators?.quote?.[0] || {};
+  const closes = quote.close || [];
+  if (!closes.length) return null;
+  return {
+    close: quote.close, open: quote.open, high: quote.high,
+    low: quote.low, volume: quote.volume,
+    timestamps: result.timestamp,
+    current: closes[closes.length - 1],
+    prev:    closes[closes.length - 2],
+  };
+}
+
+// Fetch India quote from our backend (Yahoo Finance .NS)
+async function fetchIndiaQuote(symbol) {
+  const res  = await fetch(`${BASE}/india/quote/${symbol}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
 
 export function useScan(macro) {
   const [ticker,       setTicker]       = useState('');
@@ -35,13 +59,12 @@ export function useScan(macro) {
 
       let p, q;
       if (isIndia) {
-        // Use Dhan for Indian stocks
         [p, q] = await Promise.all([
           fetchIndiaHistory(t, tfConfig.range),
           fetchIndiaQuote(t),
         ]);
         if (!p) throw new Error(`${t} not found on NSE. Check the ticker symbol.`);
-        // Normalize Indian quote to match Tradier format
+        // Normalize to match Tradier quote format
         q = q ? { last: q.price, open: q.open, change: q.change, change_percentage: q.changePct } : null;
       } else {
         [p, q] = await Promise.all([
@@ -63,7 +86,6 @@ export function useScan(macro) {
       setStage('options');
       let optData = null;
       if (!isIndia) {
-        // Options only for US market
         const exps = await fetchTradierExpirations(t);
         if (exps.length > 0) {
           optData = await fetchTradierChain(t, exps[0], livePrice);
