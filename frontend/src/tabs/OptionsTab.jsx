@@ -71,7 +71,13 @@ export default function OptionsTab({ macro, initialTicker }) {
       ]);
       if (!q && !p) throw new Error('Ticker not found');
       setQuote(q); setOhlcv(p);
-      if (q?.description) setCompanyName(q.description);
+      // Fetch company name from Polygon search
+      try {
+        const nr = await fetch(`${import.meta.env.VITE_API_BASE}/search?q=${encodeURIComponent(sym)}`);
+        const nd = await nr.json();
+        const match = (nd || []).find(s => s.ticker === sym);
+        if (match?.name) setCompanyName(match.name);
+      } catch { /* non-critical */ }
       setTa(calcIndicators(p));
       setExpirations(exps);
       if (exps.length > 0) setSelectedExpiry(exps[0]);

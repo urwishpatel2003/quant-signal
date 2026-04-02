@@ -212,8 +212,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
           }}
           currency={currency}
           market={market}
-          market={market}
-          companyName={scan.companyName || ""}
+          companyName={scan.companyName}
         />
       )}
 
