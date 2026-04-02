@@ -150,6 +150,17 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               </div>
             ))}
           </div>
+
+          {/* Thesis — inline so user sees it immediately */}
+          {scan.analysis.thesis && (
+            <div style={{
+              fontSize: 12, color: '#d0d8f0', lineHeight: 1.8,
+              borderLeft: `3px solid ${sigColor}55`, paddingLeft: 12,
+              fontStyle: 'italic',
+            }}>
+              {scan.analysis.thesis}
+            </div>
+          )}
         </div>
       </AccordionCard>
 
@@ -157,17 +168,72 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
       <AccordionCard
         id="signal" activeId={activeId} setActiveId={setActiveId}
         label="SIGNAL OVERVIEW"
-        preview={`▲ ${scan.analysis.bullFactors?.length} bull · ▼ ${scan.analysis.bearFactors?.length} bear · ${scan.analysis.thesis?.slice(0, 60)}...`}
+        preview={`▲ ${scan.analysis.bullFactors?.length} bull factors · ▼ ${scan.analysis.bearFactors?.length} bear factors`}
       >
         <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {scan.analysis.thesis && (
-            <div style={{
-              fontSize: 13, color: '#d0d8f0', lineHeight: 1.8,
-              borderLeft: `3px solid ${sigColor}55`, paddingLeft: 14, fontStyle: 'italic',
-            }}>
-              {scan.analysis.thesis}
-            </div>
-          )}
+
+          {/* Auto-generated technical narrative from TA data */}
+          {scan.ta && (() => {
+            const ta = scan.ta;
+            const parts = [];
+            // Trend
+            if (ta.trendSignal && ta.trendSignal !== 'UNKNOWN') {
+              const trendDesc = ta.trendSignal === 'BULLISH'
+                ? `Price is in a ${ta.sma20 && ta.sma50 ? 'bullish structure with SMA20 above SMA50' : 'bullish trend above SMA20'}`
+                : `Price is in a ${ta.sma20 && ta.sma50 ? 'bearish structure with SMA20 below SMA50' : 'bearish trend below SMA20'}`;
+              parts.push(trendDesc);
+            }
+            // RSI
+            if (ta.rsi14) {
+              if (ta.rsi14 > 70)      parts.push(`RSI at ${ta.rsi14} is overbought — mean reversion risk elevated`);
+              else if (ta.rsi14 < 30) parts.push(`RSI at ${ta.rsi14} is oversold — potential bounce setup`);
+              else                    parts.push(`RSI at ${ta.rsi14} is neutral with room to run`);
+            }
+            // MACD
+            if (ta.macd?.cross) {
+              if (ta.macd.cross === 'BULLISH_CROSS') parts.push('MACD has made a bullish crossover signaling momentum shift upward');
+              else                                    parts.push('MACD shows a bearish crossover indicating weakening momentum');
+            }
+            // BB
+            if (ta.bb?.position) {
+              if (ta.bb.position === 'NEAR_UPPER') parts.push('price is near the upper Bollinger Band suggesting extended conditions');
+              else if (ta.bb.position === 'NEAR_LOWER') parts.push('price is near the lower Bollinger Band suggesting potential support');
+              else if (ta.bb.squeeze) parts.push('Bollinger Band squeeze detected — breakout likely imminent');
+            }
+            // StochRSI
+            if (ta.stochRSI?.signal === 'OVERBOUGHT') parts.push('StochRSI is extremely overbought above 90');
+            else if (ta.stochRSI?.signal === 'OVERSOLD') parts.push('StochRSI is extremely oversold below 10 — high probability bounce zone');
+            // Volume
+            if (ta.volumeSignal === 'HIGH') parts.push(`volume is running ${ta.volumeRatio}x average confirming the move`);
+            // ATR volatility
+            if (ta.atr?.volatility === 'HIGH') parts.push(`ATR indicates high volatility — size positions accordingly`);
+            // S/R
+            if (ta.sr?.nearestResistance && ta.sr.distToResistance < 5)
+              parts.push(`key resistance at ${fmt(ta.sr.nearestResistance)} just ${ta.sr.distToResistance}% away`);
+            if (ta.sr?.nearestSupport && ta.sr.distToSupport < 5)
+              parts.push(`key support at ${fmt(ta.sr.nearestSupport)} just ${ta.sr.distToSupport}% below`);
+
+            if (!parts.length) return null;
+
+            // Build narrative: first part capitalized, rest joined with commas/semicolons
+            const narrative = parts[0].charAt(0).toUpperCase() + parts[0].slice(1) +
+              (parts.length > 1 ? '; ' + parts.slice(1).join(', ') : '') + '.';
+
+            return (
+              <div style={{
+                fontSize: 12, color: '#b0c8e8', lineHeight: 1.8,
+                background: '#070710', borderRadius: 4,
+                padding: '12px 14px',
+                borderLeft: '3px solid #4488ff55',
+              }}>
+                <div style={{ fontSize: 9, color: '#4488ff', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 6 }}>
+                  TECHNICAL READING
+                </div>
+                {narrative}
+              </div>
+            );
+          })()}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ background: '#070e0a', border: '1px solid #00ff8822', borderRadius: 4, padding: '12px' }}>
               <div style={{ fontSize: 11, color: '#00ff88', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>▲ BULL FACTORS</div>
