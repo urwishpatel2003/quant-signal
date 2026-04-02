@@ -8,18 +8,24 @@ const BASE = import.meta.env.VITE_API_BASE;
 
 async function fetchIndiaHistory(symbol, range = '3mo') {
   const res  = await fetch(`${BASE}/india/history/${symbol}?range=${range}`);
+  if (!res.ok) return null;
   const data = await res.json();
   const result = data?.chart?.result?.[0];
   if (!result) return null;
   const quote  = result.indicators?.quote?.[0] || {};
-  const closes = (quote.close || []).filter(c => c != null);
+  const close  = quote.close || [];
+  // Filter only valid (non-null) closes
+  const closes = close.filter(c => c != null && !isNaN(c));
   if (!closes.length) return null;
   return {
-    close: quote.close, open: quote.open, high: quote.high,
-    low: quote.low, volume: quote.volume,
+    close:      quote.close,
+    open:       quote.open,
+    high:       quote.high,
+    low:        quote.low,
+    volume:     quote.volume,
     timestamps: result.timestamp,
-    current: closes[closes.length - 1],
-    prev:    closes[closes.length - 2],
+    current:    closes[closes.length - 1],
+    prev:       closes[closes.length - 2] ?? closes[closes.length - 1],
   };
 }
 

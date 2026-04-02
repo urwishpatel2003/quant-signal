@@ -1270,9 +1270,31 @@ app.get('/india/history/:symbol', async (req, res) => {
   try {
     const data = await getNSEHistory(symbol, range);
     if (!data) return res.status(404).json({ error: `No history for ${symbol}.NS` });
+
+    // Filter out null/undefined rows — keep only indices where close is valid
+    const close  = data.close      || [];
+    const open   = data.open       || [];
+    const high   = data.high       || [];
+    const low    = data.low        || [];
+    const volume = data.volume     || [];
+    const ts     = data.timestamps || [];
+
+    const validIndices = close.map((c, i) => i).filter(i => close[i] != null && !isNaN(close[i]));
+
+    if (!validIndices.length) return res.status(404).json({ error: `No valid OHLCV data for ${symbol}` });
+
+    const pick = (arr) => validIndices.map(i => arr[i] ?? null);
+
+    const cleanClose  = pick(close);
+    const cleanOpen   = pick(open);
+    const cleanHigh   = pick(high);
+    const cleanLow    = pick(low);
+    const cleanVolume = pick(volume);
+    const cleanTs     = pick(ts);
+
     res.json({ chart: { result: [{ meta: { symbol, currency: 'INR' },
-      timestamp: data.timestamps,
-      indicators: { quote: [{ open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume }] }
+      timestamp: cleanTs,
+      indicators: { quote: [{ open: cleanOpen, high: cleanHigh, low: cleanLow, close: cleanClose, volume: cleanVolume }] }
     }] } });
   } catch (e) {
     console.error('[india/history]', e.message);
