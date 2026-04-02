@@ -11,18 +11,18 @@ async function callAnalyze(endpoint, payload) {
   return data;
 }
 
-export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, chain, news, bonds, macroNews, intlMarkets, calendar, ta, expiry, timeframeKey = 'swing', quote = null) {
+export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, chain, news, bonds, macroNews, intlMarkets, calendar, ta, expiry, timeframeKey = 'swing', quote = null, market = 'US') {
   return callAnalyze('/api/analyze/combined', {
     ticker, price, ohlcv, fundamentals, chain, news,
     bonds, macroNews, intlMarkets, calendar, ta, expiry,
-    timeframeKey, quote,
+    timeframeKey, quote, market,
   });
 }
 
-export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing') {
+export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US') {
   return callAnalyze('/api/analyze/price', {
     ticker, price, ohlcv, fundamentals, options, news,
-    bonds, macroNews, intlMarkets, calendar, ta, timeframeKey,
+    bonds, macroNews, intlMarkets, calendar, ta, timeframeKey, market,
   });
 }
 
@@ -33,4 +33,4 @@ export async function runOptionsAnalysis(ticker, price, expiry, chain, fundament
   });
 }
 
-export function buildMacroContext() { return ''; } // kept for import compatibility
+export function buildMacroContext() { return ''; }

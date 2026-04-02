@@ -65,7 +65,7 @@ async function runWatchlistScan(ticker, market = 'US') {
   ]);
   const res = await fetch(`${BASE}/api/analyze/watchlist`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker, price: livePrice, ohlcv: p, fundamentals: f, news: n, ta }),
+    body: JSON.stringify({ ticker, price: livePrice, ohlcv: p, fundamentals: f, news: n, ta, market }),
   });
   const analysis = await res.json();
   if (analysis.error) throw new Error(analysis.error);

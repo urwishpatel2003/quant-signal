@@ -121,7 +121,7 @@ export function useScan(macro) {
       const a = await runPriceAnalysis(
         t, livePrice, p, f, optData, n,
         macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar,
-        indicators, tf
+        indicators, tf, market
       );
       setAnalysis(a);
       setStage('done');
