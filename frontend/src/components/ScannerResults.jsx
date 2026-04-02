@@ -52,7 +52,7 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
 }
 
 export default function ScannerResults({ scan, macro, onBack, onOpenOptions }) {
-  const [activeId, setActiveId] = useState('ticker');
+  const [activeId, setActiveId] = useState(null);
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
   const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
@@ -61,16 +61,12 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions }) {
   const sigColor = SC[scan.analysis.signal];
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 12,
-      paddingTop: 8,
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
       {/* ── Top bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 12, flexWrap: 'wrap',
-        paddingTop: 'max(8px, env(safe-area-inset-top))',
       }}>
         <button
           onClick={onBack}
@@ -111,19 +107,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions }) {
             {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ marginLeft: 'auto' }}>
           <MiniChart data={scan.ohlcv} />
-          <div style={{
-            background: sigColor + '11', border: `1px solid ${sigColor}44`,
-            padding: '8px 16px', borderRadius: 4, textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: sigColor, lineHeight: 1 }}>
-              {scan.analysis.signal}
-            </div>
-            <div style={{ fontSize: 11, color: '#b0c0dd', marginTop: 2 }}>
-              {scan.analysis.confidence}%
-            </div>
-          </div>
         </div>
       </div>
 
@@ -228,7 +213,103 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions }) {
         </div>
       </AccordionCard>
 
-      {/* ── Accordion 3: News ── */}
+      {/* ── Accordion 3: Fundamentals & Technicals ── */}
+      <AccordionCard
+        id="fundamentals"
+        activeId={activeId}
+        setActiveId={setActiveId}
+        label="FUNDAMENTALS & TECHNICALS"
+        preview={[
+          scan.fundamentals?.pe    ? `P/E ${scan.fundamentals.pe?.toFixed(1)}` : null,
+          scan.fundamentals?.eps   ? `EPS $${scan.fundamentals.eps?.toFixed(2)}` : null,
+          scan.ta?.rsi14           ? `RSI ${scan.ta.rsi14}` : null,
+          scan.ta?.trendSignal     ? scan.ta.trendSignal : null,
+        ].filter(Boolean).join(' · ') || 'Fundamentals and technical indicators'}
+      >
+        <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Fundamentals */}
+          {scan.fundamentals && (
+            <div>
+              <div style={{ fontSize: 10, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
+                FUNDAMENTALS
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  ['P/E Ratio',    scan.fundamentals.pe?.toFixed(1)],
+                  ['EPS',          scan.fundamentals.eps ? `$${scan.fundamentals.eps.toFixed(2)}` : null],
+                  ['Beta',         scan.fundamentals.beta?.toFixed(2)],
+                  ['52W High',     scan.fundamentals.fiftyTwoWeekHigh ? `$${scan.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : null],
+                  ['52W Low',      scan.fundamentals.fiftyTwoWeekLow  ? `$${scan.fundamentals.fiftyTwoWeekLow.toFixed(2)}`  : null],
+                  ['ROE',          scan.fundamentals.roe ? `${(scan.fundamentals.roe * 100).toFixed(1)}%` : null],
+                  ['Gross Margin', scan.fundamentals.grossMargins ? `${(scan.fundamentals.grossMargins * 100).toFixed(1)}%` : null],
+                  ['Rev Growth',   scan.fundamentals.revenueGrowth ? `${(scan.fundamentals.revenueGrowth * 100).toFixed(1)}%` : null],
+                  ['D/E Ratio',    scan.fundamentals.debtToEquity?.toFixed(2)],
+                  ['Analyst Target', scan.fundamentals.targetMeanPrice ? `$${scan.fundamentals.targetMeanPrice.toFixed(2)}` : null],
+                ].filter(([, v]) => v != null).map(([k, v]) => (
+                  <div key={k} style={{ background: '#070710', padding: '8px 10px', borderRadius: 4 }}>
+                    <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8f0' }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Technical Indicators */}
+          {scan.ta && (
+            <div>
+              <div style={{ fontSize: 10, color: '#4488ff', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
+                TECHNICAL INDICATORS
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  ['RSI (14)',    scan.ta.rsi14,            scan.ta.rsi14 > 70 ? '#ff4444' : scan.ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
+                  ['Trend',      scan.ta.trendSignal,       scan.ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
+                  ['Volume',     `${scan.ta.volumeRatio}x`, scan.ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
+                  ['MACD',       scan.ta.macd?.cross,       scan.ta.macd?.cross === 'BULLISH_CROSS' ? '#00ff88' : scan.ta.macd?.cross === 'BEARISH_CROSS' ? '#ff4444' : '#e8e8f0'],
+                  ['SMA 20',     scan.ta.sma20 ? `$${scan.ta.sma20}` : null, '#e8e8f0'],
+                  ['SMA 50',     scan.ta.sma50 ? `$${scan.ta.sma50}` : null, '#e8e8f0'],
+                  ['SMA 200',    scan.ta.sma200 ? `$${scan.ta.sma200}` : null, '#e8e8f0'],
+                  ['ATR (14)',   scan.ta.atr?.atr,          scan.ta.atr?.volatility === 'HIGH' ? '#ffaa00' : '#e8e8f0'],
+                  ['BB Position',scan.ta.bb?.position,      scan.ta.bb?.position === 'NEAR_UPPER' ? '#ff4444' : scan.ta.bb?.position === 'NEAR_LOWER' ? '#00ff88' : '#e8e8f0'],
+                  ['StochRSI K', scan.ta.stochRSI?.k,       scan.ta.stochRSI?.k > 90 ? '#ff4444' : scan.ta.stochRSI?.k < 10 ? '#00ff88' : '#ffaa00'],
+                  ['Support',    scan.ta.sr?.nearestSupport ? `$${scan.ta.sr.nearestSupport}` : null, '#00ff88'],
+                  ['Resistance', scan.ta.sr?.nearestResistance ? `$${scan.ta.sr.nearestResistance}` : null, '#ff4444'],
+                ].filter(([, v]) => v != null).map(([k, v, c]) => (
+                  <div key={k} style={{ background: '#070710', padding: '8px 10px', borderRadius: 4 }}>
+                    <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Options Flow */}
+          {scan.options && (
+            <div>
+              <div style={{ fontSize: 10, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
+                OPTIONS FLOW <span style={{ color: '#00ff8866', fontSize: 9 }}>⚡ LIVE</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                {[
+                  ['Put/Call', scan.options.putCallRatio?.toFixed(2), scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88'],
+                  ['Call IV',  `${scan.options.avgCallIV}%`,          '#ffaa00'],
+                  ['Put IV',   `${scan.options.avgPutIV}%`,           '#ffaa00'],
+                ].map(([k, v, c]) => (
+                  <div key={k} style={{ background: '#070710', padding: '8px 10px', borderRadius: 4, textAlign: 'center' }}>
+                    <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </AccordionCard>
+
+      {/* ── Accordion 4: News ── */}
       <AccordionCard
         id="news"
         activeId={activeId}

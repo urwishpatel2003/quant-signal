@@ -56,7 +56,7 @@ export default function OptionsResults({
   ta, macro, selectedExpiry,
   onBack,
 }) {
-  const [activeId,     setActiveId]     = useState('ai');
+  const [activeId,     setActiveId]     = useState(null);
   const [selectedSide, setSelectedSide] = useState(null);
 
   const recColor   = optionsSignal.recommendation === 'CALL' ? '#00ff88'
@@ -67,16 +67,12 @@ export default function OptionsResults({
   const activeSignal = { ...optionsSignal, recommendation: activeSide };
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 12,
-      paddingTop: 8,
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
       {/* ── Top bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 12, flexWrap: 'wrap',
-        paddingTop: 'max(8px, env(safe-area-inset-top))',
       }}>
         <button
           onClick={onBack}
@@ -111,17 +107,8 @@ export default function OptionsResults({
             {changePct !== null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : '—'}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ marginLeft: 'auto' }}>
           <MiniChart data={ohlcv} />
-          <div style={{
-            background: recColor + '11', border: `1px solid ${recColor}44`,
-            padding: '8px 14px', borderRadius: 4, textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: recColor, lineHeight: 1 }}>
-              {optionsSignal.recommendation === 'NEUTRAL' ? 'NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
-            </div>
-            <div style={{ fontSize: 11, color: '#99aacc', marginTop: 2 }}>{optionsSignal.confidence}%</div>
-          </div>
         </div>
       </div>
 
@@ -189,7 +176,7 @@ export default function OptionsResults({
         activeId={activeId}
         setActiveId={setActiveId}
         label="CONTRACT PLAYS"
-        preview={`CALL $${optionsSignal.bestCall?.strike} ~$${optionsSignal.bestCall?.mid?.toFixed(2)} · PUT $${optionsSignal.bestPut?.strike} ~$${optionsSignal.bestPut?.mid?.toFixed(2)}`}
+        preview={`CALL $${optionsSignal.bestCall?.strike} ~$${optionsSignal.bestCall?.premium} · PUT $${optionsSignal.bestPut?.strike} ~$${optionsSignal.bestPut?.premium}`}
       >
         <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="options-contracts">
