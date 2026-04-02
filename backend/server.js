@@ -1163,9 +1163,17 @@ app.get('/india/quote/:symbol', async (req, res) => {
   const inst   = nseInstrumentMap[symbol];
   if (!inst) return res.status(404).json({ error: `${symbol} not found in NSE instruments` });
   try {
+    // Dhan expects array of integer security IDs
     const data = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: [parseInt(inst.securityId)] });
-    const q    = data?.data?.NSE_EQ?.[inst.securityId];
-    if (!q) return res.status(404).json({ error: 'No quote data' });
+
+    // Debug: return raw response to diagnose key format
+    if (req.query.debug) return res.json({ raw: data, securityId: inst.securityId, inst });
+
+    // Try both string and integer key lookup
+    const nseData = data?.data?.NSE_EQ || {};
+    const q = nseData[inst.securityId] || nseData[parseInt(inst.securityId)] || Object.values(nseData)[0];
+    if (!q) return res.status(404).json({ error: 'No quote data', raw: data, securityId: inst.securityId });
+
     const ltp       = q.last_price;
     const prevClose = q.ohlc?.close;
     const change    = ltp && prevClose ? ltp - prevClose : null;
@@ -1195,10 +1203,10 @@ app.get('/india/movers', async (req, res) => {
     const validTickers = NIFTY50.filter(t => nseInstrumentMap[t]);
     const secIds       = validTickers.map(t => parseInt(nseInstrumentMap[t].securityId));
     const data         = await dhanPost('/v2/marketfeed/quote', { NSE_EQ: secIds });
-    const quotes       = data?.data?.NSE_EQ || {};
+    const quotes = data?.data?.NSE_EQ || {};
     const list = validTickers.map(ticker => {
       const inst      = nseInstrumentMap[ticker];
-      const q         = quotes[inst.securityId];
+      const q         = quotes[inst.securityId] || quotes[parseInt(inst.securityId)];
       if (!q) return null;
       const ltp       = q.last_price;
       const prevClose = q.ohlc?.close;
