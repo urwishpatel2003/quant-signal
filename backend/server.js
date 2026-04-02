@@ -338,13 +338,39 @@ app.get('/yahoo/v10/finance/quoteSummary/:ticker', async (req, res) => {
 app.get('/yahoo/v1/finance/search', async (req, res) => {
   const q = req.query.q || '';
   try {
-    const data = await polygonGet(`/v2/reference/news?ticker=${q}&limit=8&order=desc&sort=published_utc`);
-    res.json({ news: (data.results || []).map(n => ({
-      title: n.title, publisher: n.publisher?.name || '',
-      providerPublishTime: Math.floor(new Date(n.published_utc).getTime() / 1000),
-      link: n.article_url,
-    })) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    // Try ticker-specific news first
+    const data = await polygonGet(
+      `/v2/reference/news?ticker=${encodeURIComponent(q)}&limit=8&order=desc&sort=published_utc`
+    );
+    const results = data.results || [];
+
+    // If Polygon returns no results (free tier limitation), fall back to general market news
+    if (results.length === 0) {
+      const fallback = await polygonGet(
+        `/v2/reference/news?limit=8&order=desc&sort=published_utc`
+      );
+      const fallbackResults = fallback.results || [];
+      return res.json({
+        news: fallbackResults.map(n => ({
+          title:               n.title,
+          publisher:           n.publisher?.name || '',
+          providerPublishTime: Math.floor(new Date(n.published_utc).getTime() / 1000),
+          link:                n.article_url,
+        }))
+      });
+    }
+
+    res.json({
+      news: results.map(n => ({
+        title:               n.title,
+        publisher:           n.publisher?.name || '',
+        providerPublishTime: Math.floor(new Date(n.published_utc).getTime() / 1000),
+        link:                n.article_url,
+      }))
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Ticker search ────────────────────────────────────────────────────────────
@@ -1170,6 +1196,92 @@ app.delete('/blog/:slug', async (req, res) => {
     if (error) throw error;
     res.json({ success: true });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── WATCHLIST ROUTES ─────────────────────────────────────────────────────────
+// Add these routes to server.js before the app.listen() line
+
+// GET /watchlist/:userId — fetch user's watchlist with live prices
+app.get('/watchlist/:userId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('watchlist')
+      .select('ticker, added_at')
+      .eq('user_id', req.params.userId)
+      .order('added_at', { ascending: false });
+    if (error) throw error;
+    if (!data?.length) return res.json([]);
+
+    // Fetch live prices for all tickers in one Tradier call
+    const tickers = data.map(r => r.ticker).join(',');
+    const quotes  = await tradierGet(`/v1/markets/quotes?symbols=${tickers}&greeks=false`);
+    const raw     = quotes?.quotes?.quote || [];
+    const quoteList = Array.isArray(raw) ? raw : [raw];
+    const quoteMap  = {};
+    quoteList.forEach(q => { quoteMap[q.symbol] = q; });
+
+    const result = data.map(row => {
+      const q = quoteMap[row.ticker];
+      return {
+        ticker:    row.ticker,
+        added_at:  row.added_at,
+        price:     q?.last ? parseFloat(q.last) : null,
+        changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null,
+        change:    q?.change ? parseFloat(q.change) : null,
+        volume:    q?.volume ? parseInt(q.volume) : null,
+      };
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[watchlist GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /watchlist/:userId — add ticker to watchlist
+app.post('/watchlist/:userId', async (req, res) => {
+  const { ticker } = req.body;
+  if (!ticker) return res.status(400).json({ error: 'ticker required' });
+  try {
+    // Check free tier limit (10 items)
+    const user = await getOrCreateUser(req.params.userId);
+    if (user.plan !== 'pro') {
+      const { count } = await supabase
+        .from('watchlist')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', req.params.userId);
+      if (count >= 10) return res.status(403).json({ error: 'Free tier limit: 10 watchlist items. Upgrade to Pro for unlimited.' });
+    }
+    const { data, error } = await supabase
+      .from('watchlist')
+      .insert({ user_id: req.params.userId, ticker: ticker.toUpperCase() })
+      .select()
+      .single();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Already in watchlist' });
+      throw error;
+    }
+    res.json(data);
+  } catch (e) {
+    console.error('[watchlist POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /watchlist/:userId/:ticker — remove ticker from watchlist
+app.delete('/watchlist/:userId/:ticker', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('watchlist')
+      .delete()
+      .eq('user_id', req.params.userId)
+      .eq('ticker', req.params.ticker.toUpperCase());
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[watchlist DELETE]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

@@ -10,6 +10,7 @@ import MacroBar    from './components/MacroBar';
 import ScannerTab  from './tabs/ScannerTab';
 import OptionsTab  from './tabs/OptionsTab';
 import MarketsTab  from './tabs/MarketsTab';
+import WatchlistTab from './tabs/WatchlistTab';
 import HelpTab     from './tabs/HelpTab';
 import WelcomePage from './components/WelcomePage';
 import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
@@ -166,6 +167,13 @@ export default function App() {
                 bonds={macro.bonds}
                 macroNews={macro.macroNews}
                 calendar={macro.calendar}
+              />
+            </div>
+            <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
+              <WatchlistTab
+               plan={scan.plan}
+               onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
+                 onOpenOptions={ticker => { setOptionsTicker(ticker); setActiveTab('options'); }}
               />
             </div>
           </SignedIn>
