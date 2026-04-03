@@ -3,12 +3,19 @@ import { useUser } from '@clerk/clerk-react';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
-function fmtCurrency(n, sym = '$') {
+function fmtCurrency(n, sym = '$', isInr = false) {
   if (n == null) return '—';
   const abs = Math.abs(n);
-  const s   = abs >= 1000
-    ? abs.toLocaleString(undefined, { maximumFractionDigits: 0 })
-    : abs.toFixed(2);
+  let s;
+  if (isInr) {
+    if (abs >= 1e7)  s = `${(abs / 1e7).toFixed(2)} Cr`;
+    else if (abs >= 1e5) s = `${(abs / 1e5).toFixed(2)} L`;
+    else s = abs.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  } else {
+    s = abs >= 1000
+      ? abs.toLocaleString(undefined, { maximumFractionDigits: 0 })
+      : abs.toFixed(2);
+  }
   return `${n < 0 ? '-' : ''}${sym}${s}`;
 }
 
@@ -25,7 +32,7 @@ function PnlBadge({ value, pct, size = 'sm' }) {
       padding: size === 'lg' ? '4px 10px' : '2px 7px',
       fontSize: size === 'lg' ? 14 : 12, fontWeight: 700, color: col,
     }}>
-      {pos ? '▲' : '▼'} {fmtCurrency(Math.abs(value))}
+      {pos ? '▲' : '▼'} {fmtCurrency(Math.abs(value), currency, false)}
       {pct != null && <span style={{ fontSize: size === 'lg' ? 12 : 10, opacity: 0.8 }}>({pct > 0 ? '+' : ''}{pct.toFixed(2)}%)</span>}
     </span>
   );
@@ -119,7 +126,10 @@ function CloseModal({ position, currentPrice, onConfirm, onClose }) {
 
 export default function SimulatorTab({ market = 'US' }) {
   const { user, isLoaded } = useUser();
-  const currency = market === 'INDIA' ? '₹' : '$';
+  const currency       = market === 'INDIA' ? '₹' : '$';
+  const isInr          = market === 'INDIA';
+  const startingBal    = isInr ? 1000000 : 10000;
+  const startingLabel  = isInr ? '₹10,00,000' : '$10,000';
 
   const [account,    setAccount]    = useState(null);
   const [positions,  setPositions]  = useState([]);
@@ -166,7 +176,7 @@ export default function SimulatorTab({ market = 'US' }) {
   };
 
   const handleReset = async () => {
-    if (!window.confirm('Reset simulator? All positions will be deleted and balance reset to $10,000.')) return;
+    if (!window.confirm(`Reset ${market} simulator? All positions will be deleted and balance reset to ${startingLabel}.`)) return;
     setResetting(true);
     await fetch(`${BASE}/sim/${user.id}/reset?market=${market}`, { method: 'POST' });
     setResetting(false);
@@ -250,26 +260,26 @@ export default function SimulatorTab({ market = 'US' }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         <StatCard
           label="VIRTUAL CASH"
-          value={fmtCurrency(account?.balance)}
+          value={fmtCurrency(account?.balance, currency, isInr)}
           border="#aa66ff33"
           color="#aa66ff"
         />
         <StatCard
           label="TOTAL EQUITY"
-          value={fmtCurrency(totalEquity)}
+          value={fmtCurrency(totalEquity, currency, isInr)}
           color="#e8e8f0"
           border="#2a2a40"
         />
         <StatCard
           label="TOTAL RETURN"
-          value={`${totalReturn >= 0 ? '+' : ''}${fmtCurrency(totalReturn)}`}
+          value={`${totalReturn >= 0 ? '+' : ''}${fmtCurrency(totalReturn, currency, isInr)}`}
           sub={`${totalReturnPct >= 0 ? '+' : ''}${totalReturnPct.toFixed(2)}%`}
           color={totalReturn >= 0 ? '#00ff88' : '#ff4444'}
           border={totalReturn >= 0 ? '#00ff8833' : '#ff444433'}
         />
         <StatCard
           label="UNREALIZED P&L"
-          value={`${unrealizedPnl >= 0 ? '+' : ''}${fmtCurrency(unrealizedPnl)}`}
+          value={`${unrealizedPnl >= 0 ? '+' : ''}${fmtCurrency(unrealizedPnl, currency, isInr)}`}
           color={unrealizedPnl >= 0 ? '#00ff8888' : '#ff444488'}
           border="#2a2a40"
         />
@@ -360,7 +370,7 @@ export default function SimulatorTab({ market = 'US' }) {
                           {pos.quantity} shares · entered {sym}{pos.entry_price.toFixed(2)} · {new Date(pos.opened_at).toLocaleDateString()}
                         </div>
                       </div>
-                      <PnlBadge value={pnl} pct={pct} size="lg" />
+                      <PnlBadge value={pnl} pct={pct} size="lg" currency={currency} isInr={isInr} />
                     </div>
 
                     {/* Price bar */}
@@ -449,7 +459,7 @@ export default function SimulatorTab({ market = 'US' }) {
                         {pos.signal} {pos.confidence}%
                       </div>
                     )}
-                    <PnlBadge value={pos.realized_pnl} pct={pos.realized_pct} />
+                    <PnlBadge value={pos.realized_pnl} pct={pos.realized_pct} currency={sym} isInr={pos.market === 'INDIA'} />
                   </div>
                 );
               })}
@@ -464,7 +474,7 @@ export default function SimulatorTab({ market = 'US' }) {
                   {avgWin  != null && ` · Avg win: +${avgWin.toFixed(1)}%`}
                   {avgLoss != null && ` · Avg loss: ${avgLoss.toFixed(1)}%`}
                 </div>
-                <PnlBadge value={totalRealizedPnl} size="lg" />
+                <PnlBadge value={totalRealizedPnl} size="lg" currency={currency} isInr={isInr} />
               </div>
             </div>
           )}
@@ -482,7 +492,7 @@ export default function SimulatorTab({ market = 'US' }) {
       )}
 
       <div style={{ fontSize: 10, color: '#2a2a3e', textAlign: 'center', marginTop: 8 }}>
-        Virtual paper trading only · No real money involved · Prices from live market data
+        `${isInr ? '₹10,00,000' : '$10,000'} virtual balance · ${isInr ? 'NSE India' : 'US Market'} · No real money`
       </div>
     </div>
   );
