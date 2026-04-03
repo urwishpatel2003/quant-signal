@@ -202,22 +202,21 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
       </AccordionCard>
 
       {/* ── Accordion 2: Quarterly Financials ── */}
-      {scan.financials && (
-        <AccordionCard
-          id="financials" activeId={activeId} setActiveId={setActiveId}
-          label="QUARTERLY FINANCIALS"
-          preview={[
-            scan.financials.growth?.revenueYoY != null ? `Rev YoY ${scan.financials.growth.revenueYoY > 0 ? '+' : ''}${scan.financials.growth.revenueYoY}%` : null,
-            scan.financials.growth?.netIncomeYoY != null ? `NI YoY ${scan.financials.growth.netIncomeYoY > 0 ? '+' : ''}${scan.financials.growth.netIncomeYoY}%` : null,
-            scan.financials.epsHistory?.length ? `EPS ${scan.financials.epsHistory[0]?.beat ? 'BEAT' : 'MISS'} last qtr` : null,
-            scan.financials.nextEarnings ? `Earnings ${scan.financials.nextEarnings}` : null,
-          ].filter(Boolean).join(' · ') || 'Revenue, EPS, margins'}
-        >
-          <div style={{ paddingTop: 16 }}>
-            <FinancialsPanel ticker={scan.ticker} market={market} />
-          </div>
-        </AccordionCard>
-      )}
+      <AccordionCard
+        id="financials" activeId={activeId} setActiveId={setActiveId}
+        label="QUARTERLY FINANCIALS"
+        preview={scan.financials ? [
+          scan.financials.yoy?.revenueYoY != null ? `Rev YoY ${scan.financials.yoy.revenueYoY > 0 ? '+' : ''}${scan.financials.yoy.revenueYoY}%` : null,
+          scan.financials.yoy?.netIncomeYoY != null ? `NI YoY ${scan.financials.yoy.netIncomeYoY > 0 ? '+' : ''}${scan.financials.yoy.netIncomeYoY}%` : null,
+          scan.financials.epsHistory?.length ? `EPS ${scan.financials.epsHistory[0]?.beat ? 'BEAT' : 'MISS'} last qtr` : null,
+          scan.financials.nextEarnings ? `Earnings ${scan.financials.nextEarnings}` : null,
+        ].filter(Boolean).join(' · ') || 'Revenue, EPS, margins'
+        : 'Revenue · Net Income · Diluted EPS · Net Margin'}
+      >
+        <div style={{ paddingTop: 16 }}>
+          <FinancialsPanel ticker={scan.ticker} market={market} />
+        </div>
+      </AccordionCard>
 
       {/* ── Accordion 3: Signal Overview ── */}
       <AccordionCard
