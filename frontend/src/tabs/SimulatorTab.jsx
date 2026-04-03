@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
 
+import ShareModal from '../components/ShareModal';
+
 const BASE = import.meta.env.VITE_API_BASE;
 
 function fmtCurrency(n, sym = '$', isInr = false) {
@@ -51,79 +53,6 @@ function StatCard({ label, value, sub, color = '#e8e8f0', border }) {
   );
 }
 
-function CloseModal({ position, currentPrice, onConfirm, onClose }) {
-  const currency   = position.market === 'INDIA' ? '₹' : '$';
-  const [exitPrice, setExitPrice] = useState(currentPrice?.toFixed(2) || position.entry_price.toFixed(2));
-  const [loading, setLoading]     = useState(false);
-  const exit   = parseFloat(exitPrice) || 0;
-  const pnl    = position.direction === 'LONG'
-    ? (exit - position.entry_price) * position.quantity
-    : (position.entry_price - exit) * position.quantity;
-  const pct    = position.direction === 'LONG'
-    ? ((exit - position.entry_price) / position.entry_price * 100)
-    : ((position.entry_price - exit) / position.entry_price * 100);
-  const isPos  = pnl >= 0;
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-      zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-    }} onClick={onClose}>
-      <div style={{
-        background: '#0f0f1a', border: '1px solid #aa66ff44',
-        borderRadius: 10, padding: 24, width: '100%', maxWidth: 340,
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#aa66ff', marginBottom: 16 }}>
-          CLOSE POSITION — {position.ticker}
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>EXIT PRICE</div>
-          <input type="number" value={exitPrice} onChange={e => setExitPrice(e.target.value)}
-            style={{
-              width: '100%', boxSizing: 'border-box',
-              background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6,
-              color: '#e8e8f0', fontSize: 18, fontWeight: 700, fontFamily: 'inherit',
-              padding: '10px 14px', textAlign: 'right',
-            }} />
-        </div>
-        <div style={{ background: '#0a0a14', borderRadius: 6, padding: '12px 14px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>Entry</span>
-            <span style={{ fontSize: 13, color: '#e8e8f0' }}>{currency}{position.entry_price.toFixed(2)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>Exit</span>
-            <span style={{ fontSize: 13, color: '#e8e8f0' }}>{currency}{exit.toFixed(2)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid #1a1a2a' }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>P&L</span>
-            <span style={{ fontSize: 16, fontWeight: 700, color: isPos ? '#00ff88' : '#ff4444' }}>
-              {isPos ? '+' : ''}{currency}{pnl.toFixed(2)} ({pct > 0 ? '+' : ''}{pct.toFixed(2)}%)
-            </span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{
-            flex: 1, padding: '12px', borderRadius: 6, cursor: 'pointer',
-            background: 'none', border: '1px solid #2a2a3e', color: '#556677', fontFamily: 'inherit', fontSize: 13,
-          }}>CANCEL</button>
-          <button onClick={async () => { setLoading(true); await onConfirm(exit, 'MANUAL'); setLoading(false); }}
-            disabled={loading} style={{
-              flex: 2, padding: '12px', borderRadius: 6, cursor: 'pointer',
-              background: isPos ? '#00ff8822' : '#ff444422',
-              border: `1px solid ${isPos ? '#00ff88' : '#ff4444'}`,
-              color: isPos ? '#00ff88' : '#ff4444',
-              fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-              opacity: loading ? 0.6 : 1,
-            }}>
-            {loading ? 'CLOSING...' : 'CONFIRM CLOSE'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function SimulatorTab({ market = 'US' }) {
   const { user, isLoaded } = useUser();
   const currency       = market === 'INDIA' ? '₹' : '$';
@@ -136,9 +65,10 @@ export default function SimulatorTab({ market = 'US' }) {
   const [prices,     setPrices]     = useState({});
   const [loading,    setLoading]    = useState(true);
   const [tab,        setTab]        = useState('open'); // open | closed | stats
-  const [closing,    setClosing]    = useState(null);  // position being closed
-  const [resetting,  setResetting]  = useState(false);
-  const [error,      setError]      = useState('');
+  const [resetting,    setResetting]    = useState(false);
+  const [resetError,   setResetError]   = useState('');
+  const [showShare,    setShowShare]    = useState(false);
+  const [error,        setError]        = useState('');
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -164,16 +94,7 @@ export default function SimulatorTab({ market = 'US' }) {
     return () => clearInterval(interval);
   }, [isLoaded, user?.id]);
 
-  const handleClose = async (position, exitPrice, reason) => {
-    try {
-      await fetch(`${BASE}/sim/${user.id}/close/${position.id}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exitPrice, exitReason: reason }),
-      });
-      setClosing(null);
-      load();
-    } catch (e) { setError(e.message); }
-  };
+
 
   const handleReset = async () => {
     if (!window.confirm(`Reset ${market} simulator? All positions will be deleted and balance reset to ${startingLabel}.`)) return;
@@ -240,15 +161,48 @@ export default function SimulatorTab({ market = 'US' }) {
             `${market === 'INDIA' ? 'NSE India' : 'US Market'} · Virtual paper trading · $10,000 starting balance`
           </div>
         </div>
-        <button onClick={handleReset} disabled={resetting} style={{
+        {(() => {
+          const resetCount  = account?.reset_count || 0;
+          const hasReset    = resetCount >= 1;
+          const lastReset   = account?.last_reset;
+          return (
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={handleReset}
+                disabled={resetting || hasReset}
+                title={hasReset ? 'Reset already used — results are permanent' : 'One-time reset (cannot be undone)'}
+                style={{
+                  padding: '6px 14px', fontSize: 10, cursor: hasReset ? 'not-allowed' : 'pointer',
+                  borderRadius: 4, fontFamily: 'inherit', letterSpacing: '0.08em',
+                  border: `1px solid ${hasReset ? '#2a2a3e' : '#ff444433'}`,
+                  background: hasReset ? '#0a0a14' : '#ff444411',
+                  color: hasReset ? '#2a2a3e' : '#ff444488',
+                  opacity: resetting ? 0.5 : 1,
+                }}>
+                {resetting ? 'RESETTING...' : hasReset ? '↺ RESET USED' : '↺ RESET (1×)'}
+              </button>
+              {lastReset && (
+                <div style={{ fontSize: 8, color: '#2a2a3e', textAlign: 'center', marginTop: 2 }}>
+                  Reset on {new Date(lastReset).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        <button onClick={() => setShowShare(true)} style={{
           padding: '6px 14px', fontSize: 10, cursor: 'pointer', borderRadius: 4,
-          border: '1px solid #ff444433', background: '#ff444411', color: '#ff444488',
+          border: '1px solid #ffaa0033', background: '#ffaa0011', color: '#ffaa00',
           fontFamily: 'inherit', letterSpacing: '0.08em',
-          opacity: resetting ? 0.5 : 1,
         }}>
-          {resetting ? 'RESETTING...' : '↺ RESET'}
+          📤 SHARE
         </button>
       </div>
+
+      {resetError && (
+        <div style={{ fontSize: 12, color: '#ff444488', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
+          {resetError}
+        </div>
+      )}
 
       {error && (
         <div style={{ fontSize: 12, color: '#ff4444', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
@@ -388,27 +342,23 @@ export default function SimulatorTab({ market = 'US' }) {
                       ))}
                     </div>
 
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {hitTarget && (
-                        <button onClick={() => handleClose(pos, pos.price_target, 'TARGET')} style={{
-                          flex: 1, padding: '8px', borderRadius: 5, cursor: 'pointer',
-                          background: '#00ff8811', border: '1px solid #00ff88',
-                          color: '#00ff88', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                        }}>✓ CLOSE AT TARGET</button>
+                    {/* Auto-close status */}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0 0' }}>
+                      {hitTarget ? (
+                        <div style={{ fontSize: 11, color: '#00ff88', background: '#00ff8811',
+                          border: '1px solid #00ff8833', borderRadius: 5, padding: '6px 12px', flex: 1, textAlign: 'center' }}>
+                          🎯 TARGET REACHED — Auto-closing next check
+                        </div>
+                      ) : hitStop ? (
+                        <div style={{ fontSize: 11, color: '#ff4444', background: '#ff444411',
+                          border: '1px solid #ff444433', borderRadius: 5, padding: '6px 12px', flex: 1, textAlign: 'center' }}>
+                          ⚠ STOP HIT — Auto-closing next check
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 10, color: '#445', flex: 1 }}>
+                          ⏱ Auto-closes when target or stop is hit · Checks every 60s
+                        </div>
                       )}
-                      {hitStop && (
-                        <button onClick={() => handleClose(pos, pos.stop_loss, 'STOP')} style={{
-                          flex: 1, padding: '8px', borderRadius: 5, cursor: 'pointer',
-                          background: '#ff444411', border: '1px solid #ff4444',
-                          color: '#ff4444', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                        }}>✕ CLOSE AT STOP</button>
-                      )}
-                      <button onClick={() => setClosing(pos)} style={{
-                        flex: 1, padding: '8px', borderRadius: 5, cursor: 'pointer',
-                        background: '#0a0a14', border: '1px solid #2a2a3e',
-                        color: '#7788aa', fontFamily: 'inherit', fontSize: 11,
-                      }}>CLOSE POSITION</button>
                     </div>
                   </div>
                 );
@@ -481,13 +431,29 @@ export default function SimulatorTab({ market = 'US' }) {
         </div>
       )}
 
-      {/* ── Close Modal ── */}
-      {closing && (
-        <CloseModal
-          position={closing}
-          currentPrice={prices[closing.ticker] || null}
-          onConfirm={(exitPrice, reason) => handleClose(closing, exitPrice, reason)}
-          onClose={() => setClosing(null)}
+
+
+      {/* Share Modal */}
+      {showShare && (
+        <ShareModal
+          type="simulator"
+          data={{
+            market,
+            totalReturn,
+            totalReturnPct,
+            winRate,
+            wins,
+            losses,
+            totalTrades:     closedPositions.length,
+            highConfRate,
+            highConfCount:   highConfSignals.length,
+            startingBalance: account?.starting_balance,
+            currentEquity:   totalEquity,
+            topTrades:       closedPositions
+              .sort((a, b) => Math.abs(b.realized_pct) - Math.abs(a.realized_pct))
+              .slice(0, 3),
+          }}
+          onClose={() => setShowShare(false)}
         />
       )}
 

@@ -2781,6 +2781,45 @@ app.delete('/sips/:userId/:sipId', async (req, res) => {
   }
 });
 
+// ─── Share Cards ─────────────────────────────────────────────────────────────
+// Store shareable card data in Supabase, return a short ID
+
+app.post('/share', async (req, res) => {
+  const { type, data } = req.body;
+  if (!type || !data) return res.status(400).json({ error: 'type and data required' });
+  try {
+    // Store in a simple share_cards table
+    const { data: card, error } = await supabase
+      .from('share_cards')
+      .insert({
+        type,       // 'signal' | 'simulator'
+        data,       // JSON blob with all card data
+        created_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    res.json({ id: card.id, url: `${process.env.FRONTEND_URL || 'https://quaint-signal.tech'}/share/${card.id}` });
+  } catch (e) {
+    console.error('[share POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/share/:id', async (req, res) => {
+  try {
+    const { data: card, error } = await supabase
+      .from('share_cards')
+      .select('type, data, created_at')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !card) return res.status(404).json({ error: 'Card not found' });
+    res.json(card);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Simulator ────────────────────────────────────────────────────────────────
 const SIM_BALANCE_US    = 10000;    // $10,000 USD
 const SIM_BALANCE_INDIA = 1000000;  // ₹10,00,000 (10 Lakhs)
@@ -2928,23 +2967,52 @@ app.post('/sim/:userId/close/:positionId', async (req, res) => {
   }
 });
 
-// POST /sim/:userId/reset — reset account to $10k for a market
+// POST /sim/:userId/reset — reset with 30-day cooldown, max 1 reset lifetime
 app.post('/sim/:userId/reset', async (req, res) => {
   const market = req.query.market || req.body?.market || 'US';
   const simId  = `${req.params.userId}_${market}`;
+  const RESET_COOLDOWN_DAYS = 30;
+
   try {
+    // Check existing account
+    const { data: acct } = await supabase
+      .from('sim_account').select('*').eq('user_id', simId).single();
+
+    if (acct) {
+      // Block if already reset once
+      if ((acct.reset_count || 0) >= 1) {
+        return res.status(403).json({
+          error: 'You have already used your one lifetime reset. Results are permanent to ensure authenticity.',
+          reset_count: acct.reset_count,
+        });
+      }
+      // Block if reset within last 30 days (safety check)
+      if (acct.last_reset) {
+        const daysSince = (Date.now() - new Date(acct.last_reset).getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSince < RESET_COOLDOWN_DAYS) {
+          return res.status(403).json({
+            error: `Reset cooldown active. You can reset again in ${Math.ceil(RESET_COOLDOWN_DAYS - daysSince)} days.`,
+            cooldown_days_remaining: Math.ceil(RESET_COOLDOWN_DAYS - daysSince),
+          });
+        }
+      }
+    }
+
+    const now = new Date().toISOString();
     await Promise.all([
       supabase.from('sim_account').upsert({
         user_id:          simId,
         balance:          simStartingBalance(market),
         starting_balance: simStartingBalance(market),
-        updated_at:       new Date().toISOString(),
+        updated_at:       now,
+        last_reset:       now,
+        reset_count:      (acct?.reset_count || 0) + 1,
       }, { onConflict: 'user_id' }),
       supabase.from('sim_positions').delete()
         .eq('user_id', req.params.userId)
         .eq('market', market),
     ]);
-    res.json({ success: true, balance: simStartingBalance(market) });
+    res.json({ success: true, balance: simStartingBalance(market), reset_count: (acct?.reset_count || 0) + 1 });
   } catch (e) {
     console.error('[sim reset]', e.message);
     res.status(500).json({ error: e.message });
