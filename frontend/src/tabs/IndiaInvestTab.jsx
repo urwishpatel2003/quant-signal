@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useUsage } from '../hooks/useUsage';
 import { useUser } from '@clerk/clerk-react';
 import UpgradeModal from '../components/UpgradeModal';
@@ -527,6 +527,158 @@ const SIP_OPTIONS = [
   { label: 'ICICI Pru Short Term Fund Direct',      value: 'ICICI Pru Short Term Fund Direct'      },
 ];
 
+
+// ── iOS-style scroll wheel date picker ───────────────────────────────────────
+function WheelColumn({ items, selectedIndex, onSelect, width = '33%' }) {
+  const ref = useRef(null);
+  const itemH = 44;
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.scrollTop = selectedIndex * itemH;
+    }
+  }, [selectedIndex]);
+
+  const handleScroll = () => {
+    if (!ref.current) return;
+    const idx = Math.round(ref.current.scrollTop / itemH);
+    if (idx !== selectedIndex && idx >= 0 && idx < items.length) {
+      onSelect(idx);
+    }
+  };
+
+  return (
+    <div style={{ width, position: 'relative', overflow: 'hidden' }}>
+      {/* Selection highlight */}
+      <div style={{
+        position: 'absolute', top: '50%', left: 4, right: 4,
+        height: itemH, transform: 'translateY(-50%)',
+        background: '#ff9a0018', border: '1px solid #ff9a0044',
+        borderRadius: 8, pointerEvents: 'none', zIndex: 1,
+      }} />
+      {/* Fade top */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 60,
+        background: 'linear-gradient(to bottom, #0f0f1a, transparent)',
+        pointerEvents: 'none', zIndex: 2,
+      }} />
+      {/* Fade bottom */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: 60,
+        background: 'linear-gradient(to top, #0f0f1a, transparent)',
+        pointerEvents: 'none', zIndex: 2,
+      }} />
+      {/* Scroll container */}
+      <div
+        ref={ref}
+        onScroll={handleScroll}
+        style={{
+          height: itemH * 5,
+          overflowY: 'scroll',
+          scrollSnapType: 'y mandatory',
+          scrollbarWidth: 'none',
+          paddingTop: itemH * 2,
+          paddingBottom: itemH * 2,
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        {items.map((item, i) => (
+          <div
+            key={i}
+            onClick={() => {
+              onSelect(i);
+              if (ref.current) ref.current.scrollTo({ top: i * itemH, behavior: 'smooth' });
+            }}
+            style={{
+              height: itemH,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              scrollSnapAlign: 'center',
+              fontSize: i === selectedIndex ? 17 : 14,
+              fontWeight: i === selectedIndex ? 700 : 400,
+              color: i === selectedIndex ? '#ff9a00' : '#556677',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              userSelect: 'none',
+            }}
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DatePicker({ value, onChange }) {
+  const now    = new Date();
+  const curY   = now.getFullYear();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const years  = Array.from({ length: 11 }, (_, i) => curY - 10 + i);
+
+  const parsed = value ? value.split('-') : [String(curY), '01', '01'];
+  const initY  = years.indexOf(Number(parsed[0]));
+  const initM  = Number(parsed[1]) - 1;
+  const initD  = Number(parsed[2]) - 1;
+
+  const [yIdx, setYIdx] = useState(initY >= 0 ? initY : years.length - 1);
+  const [mIdx, setMIdx] = useState(initM >= 0 ? initM : now.getMonth());
+  const [dIdx, setDIdx] = useState(initD >= 0 ? initD : now.getDate() - 1);
+
+  const selYear  = years[yIdx];
+  const selMonth = mIdx + 1;
+  const daysInM  = new Date(selYear, selMonth, 0).getDate();
+  const days     = Array.from({ length: daysInM }, (_, i) => i + 1);
+
+  // Clamp day index when month/year changes
+  const safeDIdx = Math.min(dIdx, daysInM - 1);
+
+  const emit = (y, m, d) => {
+    const dd = String(d + 1).padStart(2, '0');
+    const mm = String(m + 1).padStart(2, '0');
+    onChange(`${years[y]}-${mm}-${dd}`);
+  };
+
+  const handleY = (i) => { setYIdx(i); emit(i, mIdx, safeDIdx); };
+  const handleM = (i) => { setMIdx(i); emit(yIdx, i, safeDIdx); };
+  const handleD = (i) => { setDIdx(i); emit(yIdx, mIdx, i); };
+
+  return (
+    <div style={{
+      background: '#0f0f1a', border: '1px solid #2a2a40', borderRadius: 12,
+      overflow: 'hidden', padding: '0 8px',
+    }}>
+      {/* Labels */}
+      <div style={{ display: 'flex', padding: '10px 0 0', marginBottom: -4 }}>
+        {[['DAY', '33%'], ['MONTH', '34%'], ['YEAR', '33%']].map(([l, w]) => (
+          <div key={l} style={{ width: w, textAlign: 'center', fontSize: 9,
+            color: '#445', letterSpacing: '0.15em' }}>{l}</div>
+        ))}
+      </div>
+      {/* Wheels */}
+      <div style={{ display: 'flex' }}>
+        <WheelColumn
+          items={days.map(d => String(d).padStart(2, '0'))}
+          selectedIndex={safeDIdx}
+          onSelect={handleD}
+          width="33%"
+        />
+        <WheelColumn
+          items={months}
+          selectedIndex={mIdx}
+          onSelect={handleM}
+          width="34%"
+        />
+        <WheelColumn
+          items={years.map(String)}
+          selectedIndex={yIdx}
+          onSelect={handleY}
+          width="33%"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── SIP Form with autocomplete ────────────────────────────────────────────────
 function SIPForm({ form, setForm, onAdd, onCancel, saving }) {
   const [query,       setQuery]       = useState(form.name || '');
@@ -610,14 +762,15 @@ function SIPForm({ form, setForm, onAdd, onCancel, saving }) {
             value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
         </div>
 
-        {/* Start date — full width to prevent overflow */}
+        {/* Start date — iOS scroll wheel picker */}
         <div>
-          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>SIP START DATE</div>
-          <input className="input" type="date"
-            max={new Date().toISOString().split('T')[0]}
-            value={form.startDate}
-            onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-            style={{ width: '100%', boxSizing: 'border-box' }} />
+          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 8 }}>SIP START DATE</div>
+          <DatePicker value={form.startDate} onChange={v => setForm(f => ({ ...f, startDate: v }))} />
+          {form.startDate && (
+            <div style={{ fontSize: 11, color: '#ff9a00', textAlign: 'center', marginTop: 8 }}>
+              {new Date(form.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          )}
         </div>
 
         {/* Frequency */}
