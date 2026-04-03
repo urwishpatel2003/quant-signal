@@ -16,11 +16,23 @@ const BASE = import.meta.env.VITE_API_BASE;
 const STAGE_LABELS = {
   price:        'FETCHING PRICE DATA...',
   fundamentals: 'LOADING FUNDAMENTALS...',
+  financials:   'FETCHING FINANCIALS...',
   options:      'SCANNING OPTIONS FLOW...',
   news:         'GATHERING NEWS...',
   claude:       'RUNNING AI ANALYSIS...',
+  done:         'ANALYSIS COMPLETE',
 };
-const STAGES = ['price', 'fundamentals', 'options', 'news', 'claude'];
+
+const STAGES = ['price', 'fundamentals', 'financials', 'options', 'news', 'claude'];
+
+const STAGE_SHORT = {
+  price:        'PRICE',
+  fundamentals: 'FUNDAMENTALS',
+  financials:   'FINANCIALS',
+  options:      'OPTIONS',
+  news:         'NEWS',
+  claude:       'AI ANALYSIS',
+};
 
 const MOVER_TABS = [
   { key: 'gainers', label: '▲ GAINERS', color: '#00ff88' },
@@ -209,11 +221,10 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
     setMoversOpen(true);
   };
 
-  const activeData = isIndia ? indiaMovers : movers;
-  const isLoading  = isIndia ? indiaLoad   : moversLoad;
-  const list       = activeData[moversTab] || [];
-  const isClosed   = marketStatus?.closed;
-  const closeReason = marketStatus?.reason;
+  const activeData      = isIndia ? indiaMovers : movers;
+  const isLoading       = isIndia ? indiaLoad   : moversLoad;
+  const list            = activeData[moversTab] || [];
+  const currentStageIdx = STAGES.indexOf(scan.stage);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -241,40 +252,74 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
       {scan.loading && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(7, 7, 14, 0.88)', backdropFilter: 'blur(4px)',
+          background: 'rgba(7, 7, 14, 0.92)', backdropFilter: 'blur(4px)',
           zIndex: 999, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 20,
+          alignItems: 'center', justifyContent: 'center', gap: 24,
         }}>
-          <div style={{ width: 60, height: 60, borderRadius: '50%',
+
+          {/* Spinner */}
+          <div style={{ width: 56, height: 56, borderRadius: '50%',
             border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00',
             animation: 'spin 0.8s linear infinite' }} />
+
+          {/* Title + current stage */}
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
-              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>
-              {isIndia ? 'ANALYSING' : 'ANALYZING'}
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
+              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 10 }}>
+              {isIndia ? 'ANALYSING' : 'ANALYZING'} {scan.ticker}
             </div>
-            <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
-              {STAGE_LABELS[scan.stage] || 'LOADING...'}
+            <div style={{ fontSize: 12, color: '#ffaa0099', letterSpacing: '0.2em', minHeight: 20 }}>
+              {STAGE_LABELS[scan.stage] || 'INITIALIZING...'}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {STAGES.map((s, i) => {
-              const currentIdx = STAGES.indexOf(scan.stage);
-              const done   = i < currentIdx;
-              const active = i === currentIdx;
-              return (
-                <div key={s} style={{
-                  width: active ? 12 : 8, height: active ? 12 : 8,
-                  borderRadius: '50%',
-                  background: done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
-                  transition: 'all 0.3s',
-                  boxShadow: active ? '0 0 10px #ffaa00' : done ? '0 0 6px #00ff88' : 'none',
-                }} />
-              );
-            })}
+
+          {/* Stage progress — dots + labels */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            {/* Dots */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              {STAGES.map((s, i) => {
+                const done   = i < currentStageIdx;
+                const active = i === currentStageIdx;
+                return (
+                  <div key={s} style={{
+                    width:        active ? 14 : done ? 10 : 8,
+                    height:       active ? 14 : done ? 10 : 8,
+                    borderRadius: '50%',
+                    background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                    transition:   'all 0.3s ease',
+                    boxShadow:    active ? '0 0 14px #ffaa00aa' : done ? '0 0 6px #00ff8866' : 'none',
+                    flexShrink:   0,
+                  }} />
+                );
+              })}
+            </div>
+
+            {/* Stage name labels */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {STAGES.map((s, i) => {
+                const done   = i < currentStageIdx;
+                const active = i === currentStageIdx;
+                return (
+                  <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{
+                      fontSize: 9, letterSpacing: '0.08em',
+                      color:      done ? '#00ff8877' : active ? '#ffaa00' : '#2a2a3e',
+                      fontWeight: active ? 700 : 400,
+                      transition: 'color 0.3s',
+                    }}>
+                      {STAGE_SHORT[s]}
+                    </span>
+                    {i < STAGES.length - 1 && (
+                      <span style={{ fontSize: 9, color: done ? '#00ff8844' : '#2a2a3e' }}>→</span>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: '#7788aa' }}>
-            {scan.ticker && `${scan.ticker} · `}This may take 10–20 seconds
+
+          <div style={{ fontSize: 11, color: '#556677', letterSpacing: '0.1em' }}>
+            This may take 10–20 seconds
           </div>
         </div>
       )}
@@ -400,8 +445,6 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
 
           {/* ── Movers card ── */}
           <div className="card" style={{ marginBottom: 16 }}>
-
-            {/* Header */}
             <div style={{
               fontSize: 10, fontWeight: 700, letterSpacing: '0.15em',
               marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #1e1e30',
@@ -410,7 +453,6 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
               {isIndia ? '🇮🇳 NIFTY 50 MOVERS' : '📈 STOCK MOVERS'}
             </div>
 
-            {/* Sub-tabs */}
             <div style={{
               display: 'flex', gap: 0,
               borderBottom: moversOpen ? '1px solid #1e1e30' : 'none',
@@ -444,7 +486,6 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
               </div>
             </div>
 
-            {/* List */}
             {moversOpen && (
               isLoading ? (
                 <div className="pulse" style={{ fontSize: 12, color: '#b0c0dd', textAlign: 'center', padding: '20px 0' }}>
@@ -457,8 +498,6 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     : 'Market data unavailable — market may be closed'}
                 </div>
               ) : moversTab === 'volume' ? (
-
-                // ── Volume layout ──
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {list.map((m, i) => {
                     const isGainer  = m.changePct >= 0;
@@ -466,78 +505,60 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     const isActive  = scan.ticker === m.ticker;
                     const isUnusual = m.volVsAvg && m.volVsAvg >= 2;
                     return (
-                      <div key={m.ticker}
-                        onClick={() => handleScan(m.ticker, 'swing')}
+                      <div key={m.ticker} onClick={() => handleScan(m.ticker, 'swing')}
                         style={{
-                          display: 'flex', alignItems: 'center',
-                          padding: '9px 10px', cursor: 'pointer', borderRadius: 2,
+                          display: 'flex', alignItems: 'center', padding: '9px 10px',
+                          cursor: 'pointer', borderRadius: 2, gap: 8,
                           background:   isActive ? '#4488ff08' : 'transparent',
                           borderLeft:   `2px solid ${isActive ? '#4488ff' : 'transparent'}`,
                           borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
-                          transition:   'background 0.1s', gap: 8,
+                          transition: 'background 0.1s',
                         }}
                         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
-                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                      >
+                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
                         <div style={{ fontSize: 11, color: '#7788aa', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
                         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
-                        <div style={{ fontSize: 12, color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>
-                          {fmtPrice(m.price, currency)}
-                        </div>
+                        <div style={{ fontSize: 12, color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#4488ff',
-                            display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#4488ff', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                             {fmtVol(m.volume)}
                             {isUnusual && (
-                              <span style={{ fontSize: 9, color: '#ffaa00',
-                                background: '#ffaa0011', border: '1px solid #ffaa0033',
-                                padding: '1px 5px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 9, color: '#ffaa00', background: '#ffaa0011', border: '1px solid #ffaa0033', padding: '1px 5px', borderRadius: 2, whiteSpace: 'nowrap' }}>
                                 {m.volVsAvg}x
                               </span>
                             )}
                           </div>
-                          {m.avgVolume > 0 && (
-                            <div style={{ fontSize: 10, color: '#7788aa' }}>avg {fmtVol(m.avgVolume)}</div>
-                          )}
+                          {m.avgVolume > 0 && <div style={{ fontSize: 10, color: '#7788aa' }}>avg {fmtVol(m.avgVolume)}</div>}
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: pctColor, flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
                           {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                         </div>
-                        <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>
-                          {isActive ? '●' : '→'}
-                        </div>
+                        <div style={{ fontSize: 10, color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
                       </div>
                     );
                   })}
                 </div>
-
               ) : (
-
-                // ── Gainers / Losers layout ──
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {list.map((m, i) => {
                     const isGainer = m.changePct >= 0;
                     const color    = isGainer ? '#00ff88' : '#ff4444';
                     const isActive = scan.ticker === m.ticker;
                     return (
-                      <div key={m.ticker}
-                        onClick={() => handleScan(m.ticker, 'swing')}
+                      <div key={m.ticker} onClick={() => handleScan(m.ticker, 'swing')}
                         style={{
-                          display: 'flex', alignItems: 'center',
-                          padding: '9px 10px', cursor: 'pointer', borderRadius: 2,
+                          display: 'flex', alignItems: 'center', padding: '9px 10px',
+                          cursor: 'pointer', borderRadius: 2, gap: 8,
                           background:   isActive ? '#ffaa0008' : 'transparent',
                           borderLeft:   `2px solid ${isActive ? '#ffaa00' : 'transparent'}`,
                           borderBottom: i < list.length - 1 ? '1px solid #1a1a26' : 'none',
-                          transition:   'background 0.1s', gap: 8,
+                          transition: 'background 0.1s',
                         }}
                         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
-                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                      >
+                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
                         <div style={{ fontSize: 11, color: '#7788aa', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
                         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
-                        <div style={{ fontSize: 12, color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>
-                          {fmtPrice(m.price, currency)}
-                        </div>
+                        <div style={{ fontSize: 12, color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
                         <div style={{ flex: 1 }} />
                         <div style={{ fontSize: 11, color: color + '99', flexShrink: 0, textAlign: 'right', minWidth: 52, fontWeight: 600 }}>
                           {isGainer ? '+' : ''}{currency}{m.change?.toFixed(2)}
@@ -545,9 +566,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                         <div style={{ fontSize: 13, fontWeight: 700, color, flexShrink: 0, textAlign: 'right', minWidth: 66 }}>
                           {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                         </div>
-                        <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>
-                          {isActive ? '●' : '→'}
-                        </div>
+                        <div style={{ fontSize: 10, color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
                       </div>
                     );
                   })}
