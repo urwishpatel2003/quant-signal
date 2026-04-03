@@ -1,4 +1,5 @@
 import CalendarPanel from '../components/CalendarPanel';
+import USSectorHeatmap from '../components/USSectorHeatmap';
 
 const REGIONS = [
   { label: '🇯🇵 JAPAN',     syms: [{ name: 'Nikkei 225', sym: '^N225', fmt: v => v ? `$${v.toFixed(2)}` : '—' }] },
@@ -61,6 +62,9 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* ── Sector Heatmap ── */}
+      <USSectorHeatmap />
 
       {/* ── Summary cards ── */}
       <div className="markets-summary">

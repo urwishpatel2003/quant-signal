@@ -2267,6 +2267,59 @@ Recommend 4-6 specific instruments. Make the monthly amounts add exactly to ₹$
   }
 });
 
+// ─── US Sector Heatmap ───────────────────────────────────────────────────────
+const US_SECTORS = [
+  { symbol: 'XLK',  name: 'Technology',        color: '#4488ff' },
+  { symbol: 'XLF',  name: 'Financials',         color: '#ff9a00' },
+  { symbol: 'XLV',  name: 'Healthcare',         color: '#00ff88' },
+  { symbol: 'XLE',  name: 'Energy',             color: '#ffaa00' },
+  { symbol: 'XLI',  name: 'Industrials',        color: '#aa88ff' },
+  { symbol: 'XLY',  name: 'Consumer Discret.',  color: '#ff6688' },
+  { symbol: 'XLP',  name: 'Consumer Staples',   color: '#44ddcc' },
+  { symbol: 'XLU',  name: 'Utilities',          color: '#88aaff' },
+  { symbol: 'XLRE', name: 'Real Estate',        color: '#ffcc44' },
+  { symbol: 'XLB',  name: 'Materials',          color: '#66dd88' },
+  { symbol: 'XLC',  name: 'Comm. Services',     color: '#ff8844' },
+];
+
+const usSectorCache = { data: null, ts: 0 };
+const US_SECTOR_TTL = 2 * 60 * 1000; // 2 min during market hours
+
+app.get('/sectors/us', async (req, res) => {
+  try {
+    if (usSectorCache.data && Date.now() - usSectorCache.ts < US_SECTOR_TTL) {
+      return res.json({ sectors: usSectorCache.data, cached: true });
+    }
+    const symbols = US_SECTORS.map(s => s.symbol).join(',');
+    const data    = await tradierGet(`/v1/markets/quotes?symbols=${symbols}&greeks=false`);
+    const raw     = data?.quotes?.quote || [];
+    const quotes  = Array.isArray(raw) ? raw : [raw];
+    const quoteMap = {};
+    quotes.forEach(q => { quoteMap[q.symbol] = q; });
+
+    const sectors = US_SECTORS.map(s => {
+      const q = quoteMap[s.symbol];
+      return {
+        ...s,
+        price:     q?.last     ? parseFloat(q.last)              : null,
+        changePct: q?.change_percentage ? parseFloat(q.change_percentage) : null,
+        change:    q?.change   ? parseFloat(q.change)            : null,
+        volume:    q?.volume   ? parseInt(q.volume)              : null,
+        week52High: q?.week_52_high ? parseFloat(q.week_52_high) : null,
+        week52Low:  q?.week_52_low  ? parseFloat(q.week_52_low)  : null,
+      };
+    });
+
+    usSectorCache.data = sectors;
+    usSectorCache.ts   = Date.now();
+    res.json({ sectors, cached: false });
+  } catch (e) {
+    console.error('[sectors/us]', e.message);
+    if (usSectorCache.data) return res.json({ sectors: usSectorCache.data, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Portfolio recommendation persistence ─────────────────────────────────────
 app.get('/portfolio/:userId', async (req, res) => {
   try {
