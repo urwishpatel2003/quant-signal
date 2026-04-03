@@ -2311,16 +2311,18 @@ app.get('/debug/finnhub/:ticker', async (req, res) => {
   try {
     const ticker = req.params.ticker.toUpperCase();
     const data = await finnhubGet(`/stock/financials-reported?symbol=${ticker}&freq=quarterly`);
-    const first = data?.data?.[0];
-    const ic = first?.report?.ic || [];
     res.json({
       totalReports: data?.data?.length,
-      firstPeriod:  first?.period,
-      firstFP:      first?.report?.fp,
-      firstFY:      first?.report?.fy,
-      icCount:      ic.length,
-      // Show first 20 income statement concepts
-      icSample:     ic.slice(0, 20).map(i => ({ concept: i.concept, label: i.label, value: i.value, unit: i.unit })),
+      // Show period info for first 6 reports
+      reports: (data?.data || []).slice(0, 6).map(r => ({
+        period:    r.period,
+        fp:        r.report?.fp,
+        fy:        r.report?.fy,
+        startDate: r.startDate,
+        endDate:   r.endDate,
+        year:      r.year,
+        icCount:   r.report?.ic?.length,
+      })),
     });
   } catch(e) { res.json({ error: e.message }); }
 });
