@@ -479,6 +479,163 @@ function PortfolioPage({ onBack }) {
   );
 }
 
+
+// ── SIP autocomplete options ──────────────────────────────────────────────────
+const SIP_OPTIONS = [
+  // Index ETFs
+  { label: 'NIFTYBEES — Nippon Nifty 50 BeES',     value: 'NIFTYBEES'  },
+  { label: 'JUNIORBEES — Nippon Junior BeES',       value: 'JUNIORBEES' },
+  { label: 'SETFNN50 — SBI Nifty Next 50 ETF',     value: 'SETFNN50'   },
+  { label: 'SETFNIF50 — SBI Nifty 50 ETF',         value: 'SETFNIF50'  },
+  { label: 'NV20IETF — Nippon Nifty 100 ETF',      value: 'NV20IETF'   },
+  { label: 'MAFSETF — Mirae Asset Nifty 50 ETF',   value: 'MAFSETF'    },
+  // Sectoral ETFs
+  { label: 'BANKBEES — Nippon Bank BeES',           value: 'BANKBEES'   },
+  { label: 'ITBEES — Nippon IT BeES',               value: 'ITBEES'     },
+  { label: 'PHARMABEES — Nippon Pharma BeES',       value: 'PHARMABEES' },
+  { label: 'INFRABEES — Nippon Infra BeES',         value: 'INFRABEES'  },
+  { label: 'PSUBNKBEES — Nippon PSU Bank BeES',     value: 'PSUBNKBEES' },
+  { label: 'AUTOBEES — Nippon Auto BeES',           value: 'AUTOBEES'   },
+  { label: 'FMCGBEES — Nippon FMCG BeES',           value: 'FMCGBEES'   },
+  // Commodity ETFs
+  { label: 'GOLDBEES — Nippon Gold BeES',           value: 'GOLDBEES'   },
+  { label: 'SILVERIETF — ICICI Silver ETF',         value: 'SILVERIETF' },
+  { label: 'SETFGOLD — SBI Gold ETF',               value: 'SETFGOLD'   },
+  { label: 'HDFCGOLD — HDFC Gold ETF',              value: 'HDFCGOLD'   },
+  // Debt ETFs
+  { label: 'LIQUIDBEES — Nippon Liquid BeES',       value: 'LIQUIDBEES' },
+  { label: 'LIQUIDETF — HDFC Liquid ETF',           value: 'LIQUIDETF'  },
+  { label: 'CPSEETF — Nippon CPSE ETF',             value: 'CPSEETF'    },
+  // Mutual Funds
+  { label: 'UTI Nifty 50 Index Fund Direct',        value: 'UTI Nifty 50 Index Fund Direct'        },
+  { label: 'HDFC Nifty 50 Index Fund Direct',       value: 'HDFC Nifty 50 Index Fund Direct'       },
+  { label: 'SBI Nifty Index Fund Direct',           value: 'SBI Nifty Index Fund Direct'           },
+  { label: 'Mirae Asset Large Cap Fund Direct',     value: 'Mirae Asset Large Cap Fund Direct'     },
+  { label: 'Axis Bluechip Fund Direct',             value: 'Axis Bluechip Fund Direct'             },
+  { label: 'Parag Parikh Flexi Cap Fund Direct',    value: 'Parag Parikh Flexi Cap Fund Direct'    },
+  { label: 'SBI Small Cap Fund Direct',             value: 'SBI Small Cap Fund Direct'             },
+  { label: 'HDFC Mid-Cap Opportunities Direct',     value: 'HDFC Mid-Cap Opportunities Direct'     },
+  { label: 'Nippon India Liquid Fund Direct',       value: 'Nippon India Liquid Fund Direct'       },
+  { label: 'ICICI Pru Short Term Fund Direct',      value: 'ICICI Pru Short Term Fund Direct'      },
+];
+
+// ── SIP Form with autocomplete ────────────────────────────────────────────────
+function SIPForm({ form, setForm, onAdd, onCancel, saving }) {
+  const [query,       setQuery]       = useState(form.name || '');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showDrop,    setShowDrop]    = useState(false);
+
+  const handleSearch = (val) => {
+    setQuery(val);
+    setForm(f => ({ ...f, name: val }));
+    if (val.length < 1) { setSuggestions([]); setShowDrop(false); return; }
+    const q = val.toUpperCase();
+    const matches = SIP_OPTIONS.filter(o =>
+      o.value.toUpperCase().includes(q) || o.label.toUpperCase().includes(q)
+    ).slice(0, 8);
+    setSuggestions(matches);
+    setShowDrop(matches.length > 0);
+  };
+
+  const selectOption = (opt) => {
+    setQuery(opt.label);
+    setForm(f => ({ ...f, name: opt.value }));
+    setShowDrop(false);
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 20, borderColor: '#00ff8833' }}>
+      <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 16 }}>NEW SIP</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* Autocomplete fund/ETF picker */}
+        <div style={{ position: 'relative' }}>
+          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>
+            ETF OR MUTUAL FUND
+          </div>
+          <input
+            className="input"
+            type="text"
+            placeholder="Search ETF or fund name..."
+            value={query}
+            onChange={e => handleSearch(e.target.value)}
+            onFocus={() => query.length > 0 && setSuggestions(
+              SIP_OPTIONS.filter(o => o.label.toUpperCase().includes(query.toUpperCase())).slice(0, 8)
+            ) || setShowDrop(true)}
+            onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+            autoComplete="off"
+          />
+          {showDrop && suggestions.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+              background: '#0f0f1a', border: '1px solid #ff9a0044', borderRadius: 4,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)', maxHeight: 220, overflowY: 'auto',
+            }}>
+              {suggestions.map((opt, i) => (
+                <div key={i}
+                  onMouseDown={() => selectOption(opt)}
+                  style={{
+                    padding: '10px 14px', cursor: 'pointer', fontSize: 13,
+                    borderBottom: i < suggestions.length - 1 ? '1px solid #1a1a2a' : 'none',
+                    color: '#c8d8f0',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#ff9a0011'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ color: '#ff9a00', fontWeight: 700 }}>
+                    {opt.value.length < 15 ? opt.value : ''}
+                  </span>
+                  {opt.value.length < 15 && <span style={{ color: '#556677' }}> — </span>}
+                  <span style={{ color: opt.value.length >= 15 ? '#c8d8f0' : '#7788aa' }}>
+                    {opt.value.length >= 15 ? opt.label : opt.label.split('—')[1]?.trim() || opt.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Amount */}
+        <div>
+          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>MONTHLY AMOUNT (₹)</div>
+          <input className="input" type="number" placeholder="5000" min="100"
+            value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+        </div>
+
+        {/* Start date — full width to prevent overflow */}
+        <div>
+          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>SIP START DATE</div>
+          <input className="input" type="date"
+            max={new Date().toISOString().split('T')[0]}
+            value={form.startDate}
+            onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+            style={{ width: '100%', boxSizing: 'border-box' }} />
+        </div>
+
+        {/* Frequency */}
+        <div>
+          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>FREQUENCY</div>
+          <select className="input" value={form.frequency}
+            onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}>
+            <option value="monthly">Monthly</option>
+            <option value="weekly">Weekly</option>
+            <option value="quarterly">Quarterly</option>
+          </select>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button className="btn-sm" onClick={onCancel}
+            style={{ color: '#7788aa', borderColor: '#2a2a3e' }}>CANCEL</button>
+          <button className="btn" onClick={onAdd} disabled={saving}>
+            {saving ? 'SAVING...' : 'ADD SIP'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page: My SIPs ─────────────────────────────────────────────────────────────
 function SIPTrackerPage({ onBack }) {
   const { user }  = useUser();
@@ -576,40 +733,11 @@ function SIPTrackerPage({ onBack }) {
       </div>
 
       {adding && (
-        <div className="card" style={{ marginBottom: 20, borderColor: '#00ff8833' }}>
-          <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 16 }}>NEW SIP</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>NSE SYMBOL OR FUND NAME</div>
-              <input className="input" type="text" placeholder="e.g. NIFTYBEES, GOLDBEES, UTI Nifty 50"
-                value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                style={{ width: '100%' }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>AMOUNT (₹)</div>
-                <input className="input" type="number" placeholder="5000"
-                  value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>START DATE</div>
-                <input className="input" type="date"
-                  value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>FREQUENCY</div>
-              <select className="input" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })}>
-                <option value="monthly">Monthly</option>
-                <option value="weekly">Weekly</option>
-                <option value="quarterly">Quarterly</option>
-              </select>
-            </div>
-            <button className="btn" onClick={addSIP} disabled={saving} style={{ width: '100%' }}>
-              {saving ? 'SAVING...' : 'ADD SIP'}
-            </button>
-          </div>
-        </div>
+        <SIPForm
+          form={form} setForm={setForm}
+          onAdd={addSIP} onCancel={() => setAdding(false)}
+          saving={saving}
+        />
       )}
 
       {error && (
