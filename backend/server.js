@@ -2438,29 +2438,16 @@ app.get('/debug/screener/:symbol', async (req, res) => {
     const results = {};
 
     if (nseIndia) {
-      // Test getEquityCorporateInfo
       try {
         const corp = await nseIndia.getEquityCorporateInfo(raw);
-        results.corpKeys     = corp ? Object.keys(corp) : null;
-        results.corpRaw      = JSON.stringify(corp).slice(0, 600);
-      } catch(e) { results.corpError = e.message; }
-
-      // Test getEquityTradeInfo
-      try {
-        const trade = await nseIndia.getEquityTradeInfo(raw);
-        results.tradeKeys = trade ? Object.keys(trade) : null;
-        results.tradeRaw  = JSON.stringify(trade).slice(0, 400);
-      } catch(e) { results.tradeError = e.message; }
-
-      // Test getDataByEndpoint for financial results
-      try {
-        const fin = await nseIndia.getDataByEndpoint(
-          `/api/financial-results?index=equities&symbol=${raw}&period=Quarterly&from_date=01-01-2024&to_date=31-12-2025`
-        );
-        results.finKeys   = fin ? Object.keys(fin).slice(0, 8) : null;
-        results.finIsArray = Array.isArray(fin);
-        results.finRaw    = JSON.stringify(fin).slice(0, 600);
-      } catch(e) { results.finError = e.message; }
+        const fr   = corp?.financial_results;
+        results.frType    = typeof fr;
+        results.frIsArray = Array.isArray(fr);
+        results.frKeys    = fr && !Array.isArray(fr) ? Object.keys(fr) : null;
+        results.frLength  = Array.isArray(fr) ? fr.length : null;
+        results.frFirst   = Array.isArray(fr) ? fr[0] : fr;
+        results.frRaw     = JSON.stringify(fr).slice(0, 1000);
+      } catch(e) { results.frError = e.message; }
     }
 
     res.json(results);
