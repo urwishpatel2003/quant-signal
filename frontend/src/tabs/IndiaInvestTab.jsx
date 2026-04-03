@@ -248,14 +248,23 @@ function PortfolioPage({ onBack }) {
   const startChat = async () => {
     setStage('chat');
     setLoading(true);
+    setError('');
     try {
       const res  = await fetch(`${BASE}/api/portfolio/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [], sipAmount }),
       });
       const data = await res.json();
-      setMessages([{ role: 'assistant', content: data.message }]);
-    } catch (e) { setError(e.message); }
+      if (data.error) throw new Error(data.error);
+      if (data.message) {
+        setMessages([{ role: 'assistant', content: data.message }]);
+      } else {
+        throw new Error('No response from Artha. Please try again.');
+      }
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+      setStage('budget');
+    }
     setLoading(false);
   };
 
@@ -277,9 +286,12 @@ function PortfolioPage({ onBack }) {
 
       if (data.done) {
         // Advisor has enough info — add final message then generate
-        if (data.message) setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
+        const finalMsgs = data.message
+          ? [...newMsgs, { role: 'assistant', content: data.message }]
+          : newMsgs;
+        if (data.message) setMessages(finalMsgs);
         setStage('generating');
-        await generatePortfolio(newMsgs);
+        await generatePortfolio(finalMsgs);
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
       }
@@ -1025,7 +1037,7 @@ export default function IndiaInvestTab({ onScanTicker }) {
         activePage === 'sip'       ? <SIPPage       onBack={goBack} /> :
         activePage === 'portfolio' ? <PortfolioPage  onBack={goBack} /> :
         activePage === 'tracker'   ? <SIPTrackerPage onBack={goBack} /> :
-        activePage === 'etfs'      ? <ETFPage        onBack={goBack} onScan={onScanTicker} /> :
+        activePage === 'etfs'      ? <ETFPage        onBack={goBack} onScan={onScanTicker} />
         activePage === 'mf'        ? <MFPage         onBack={goBack} /> :
         <Overview />
       }

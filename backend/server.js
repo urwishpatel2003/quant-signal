@@ -1850,7 +1850,8 @@ app.get('/india/fundamentals/:symbol', async (req, res) => {
 // When advisor has enough info, returns { done: true, portfolioReady: true }
 app.post('/api/portfolio/chat', async (req, res) => {
   const { messages, sipAmount } = req.body;
-  if (!messages?.length) return res.status(400).json({ error: 'messages required' });
+  // messages can be empty for initial greeting
+  const msgHistory = Array.isArray(messages) ? messages : [];
   try {
     const result = await callClaudeRaw({
       model: 'claude-sonnet-4-20250514',
@@ -1880,16 +1881,28 @@ RULES:
 - Don't ask about SIP amount again
 
 Start by greeting them warmly and asking their age and occupation in one natural question.`,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      messages: msgHistory.length > 0
+        ? msgHistory.map(m => ({ role: m.role, content: m.content }))
+        : [{ role: 'user', content: 'Hello, I want to start investing.' }],
     });
 
+    // Handle Anthropic API errors
+    if (result?.error) {
+      console.error('[portfolio/chat] Claude API error:', result.error);
+      throw new Error(result.error.message || 'Claude API error');
+    }
+
     const text = result?.content?.[0]?.text || '';
+    if (!text) {
+      console.error('[portfolio/chat] Empty response from Claude. Full result:', JSON.stringify(result).slice(0, 300));
+      throw new Error('No response from AI. Please try again.');
+    }
 
     // Check if advisor signals portfolio is ready
     if (text.includes('"PORTFOLIO_READY": true')) {
       return res.json({
         message: text.replace(/\{"PORTFOLIO_READY":\s*true\}/g, '').trim() ||
-          "Great, I have everything I need! Let me build your personalised portfolio now...",
+          'Great, I have everything I need! Let me build your personalised portfolio now...',
         done: true,
       });
     }
