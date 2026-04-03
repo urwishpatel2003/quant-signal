@@ -1839,6 +1839,53 @@ Suggest 3-5 specific NSE ETFs or Indian mutual funds with exact allocation perce
   }
 });
 
+// ─── SIPs CRUD ────────────────────────────────────────────────────────────────
+app.get('/sips/:userId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('sips')
+      .select('*')
+      .eq('user_id', req.params.userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    console.error('[sips GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/sips/:userId', async (req, res) => {
+  const { name, amount, startDate, frequency } = req.body;
+  if (!name || !amount || !startDate) return res.status(400).json({ error: 'name, amount, startDate required' });
+  try {
+    const { data, error } = await supabase
+      .from('sips')
+      .insert({ user_id: req.params.userId, name, amount: Number(amount), start_date: startDate, frequency: frequency || 'monthly' })
+      .select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    console.error('[sips POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/sips/:userId/:sipId', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('sips')
+      .delete()
+      .eq('id', req.params.sipId)
+      .eq('user_id', req.params.userId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[sips DELETE]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
