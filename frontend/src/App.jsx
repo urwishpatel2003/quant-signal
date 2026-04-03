@@ -70,7 +70,7 @@ export default function App() {
     ? TABS.filter(t => (typeof t === 'string' ? t : t.id) !== 'options')
     : TABS;
   const visibleTabs = market === 'INDIA'
-    ? [...baseTabs, { id: 'invest', label: '🇮🇳 INVEST' }]
+    ? [...baseTabs, { id: 'invest', label: 'INVEST' }]
     : baseTabs;
 
   if (!isLoaded) {
