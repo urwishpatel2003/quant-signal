@@ -2251,44 +2251,50 @@ function calcYoY(current, prior) {
   return parseFloat(((current - prior) / Math.abs(prior) * 100).toFixed(1));
 }
 
-// US — Quarterly Financials via Polygon (primary) with smart field mapping
+// US — Quarterly Financials via Financial Modeling Prep (FMP)
+// Free tier: 250 req/day, no IP blocks, works from Railway
+// Get free key at: https://financialmodelingprep.com/developer/docs/
+const FMP_KEY = process.env.FMP_API_KEY || 'SOfbx10EQBKh8R5HLptRDLxt7A3nAGxl';
+
+async function fmpGet(path) {
+  const sep = path.includes('?') ? '&' : '?';
+  return httpsGet('financialmodelingprep.com', `${path}${sep}apikey=${FMP_KEY}`);
+}
+
 app.get('/financials/us/:ticker', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase();
+
+  if (!FMP_KEY) {
+    return res.status(503).json({ error: 'Financial data unavailable — FMP_API_KEY not configured. Add a free key from financialmodelingprep.com' });
+  }
+
   try {
-    // Fetch last 8 quarters + 4 annual + earnings surprises in parallel
-    const [qData, aData, earningsData] = await Promise.all([
-      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=8&timeframe=quarterly&order=desc`),
-      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=4&timeframe=annual&order=desc`),
-      polygonGet(`/v2/reference/news?ticker=${ticker}&limit=1`), // just to test access
+    const [quarterly, annual, earningsSurprise] = await Promise.all([
+      fmpGet(`/api/v3/income-statement/${ticker}?period=quarter&limit=8`),
+      fmpGet(`/api/v3/income-statement/${ticker}?period=annual&limit=4`),
+      fmpGet(`/api/v3/earnings-surprises/${ticker}`),
     ]);
 
-    const parseFinRow = (item) => {
-      const is = item.financials?.income_statement || {};
-      const bs = item.financials?.balance_sheet    || {};
-      const revenue     = is.revenues?.value                    ?? is.net_income_loss?.value != null ? is.revenues?.value : null;
-      const netIncome   = is.net_income_loss?.value             ?? null;
-      const grossProfit = is.gross_profit?.value                ?? null;
-      const opIncome    = is.operating_income_loss?.value       ?? null;
-      const epsDiluted  = is.diluted_earnings_per_share?.value  ?? is.basic_earnings_per_share?.value ?? null;
-      const rev         = is.revenues?.value ?? null;
+    const parseStmt = (s) => {
+      const revenue    = s.revenue      ?? null;
+      const netIncome  = s.netIncome    ?? null;
+      const grossProfit= s.grossProfit  ?? null;
+      const epsDiluted = s.epsdiluted   ?? s.eps ?? null;
       return {
-        period:      item.fiscal_period ? `${item.fiscal_period} ${item.fiscal_year}` : item.end_date?.slice(0,7),
-        endDate:     item.end_date ?? null,
-        revenue:     rev,
-        netIncome,
-        grossProfit,
-        opIncome,
-        epsDiluted,
-        netMargin:   rev && netIncome   ? parseFloat((netIncome   / rev * 100).toFixed(2)) : null,
-        grossMargin: rev && grossProfit ? parseFloat((grossProfit / rev * 100).toFixed(2)) : null,
+        period:      s.period ?? s.date?.slice(0, 7),
+        endDate:     s.date   ?? null,
+        revenue, netIncome, grossProfit, epsDiluted,
+        netMargin:   s.netIncomeRatio   != null ? parseFloat((s.netIncomeRatio   * 100).toFixed(2)) :
+                     revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
+        grossMargin: s.grossProfitRatio != null ? parseFloat((s.grossProfitRatio * 100).toFixed(2)) :
+                     revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
       };
     };
 
-    const allQ    = (qData?.results || []).map(parseFinRow);
+    const allQ    = Array.isArray(quarterly) ? quarterly.map(parseStmt) : [];
     const quarters = allQ.slice(0, 4);
-    const annuals  = (aData?.results || []).map(parseFinRow);
+    const annuals  = Array.isArray(annual) ? annual.map(parseStmt) : [];
 
-    // YoY: compare latest quarter to same quarter last year (index 4)
     const yoy = allQ.length >= 5 ? {
       revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
       netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
@@ -2297,28 +2303,24 @@ app.get('/financials/us/:ticker', async (req, res) => {
         ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
     } : {};
 
-    // Polygon earnings surprises endpoint
-    let epsHistory = [];
-    try {
-      const surprises = await polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=4&timeframe=quarterly&order=desc`);
-      // Extract EPS actual from quarterly data as beat/miss requires estimate — use what we have
-      epsHistory = allQ.slice(0, 4).map((q, i) => ({
-        quarter:     q.period,
-        epsActual:   q.epsDiluted,
-        epsEstimate: null, // Polygon free tier doesn't have estimates
-        surprisePct: null,
-        beat:        null,
-      })).filter(e => e.epsActual != null);
-    } catch {}
+    // EPS beat/miss from FMP earnings surprises
+    const epsHistory = Array.isArray(earningsSurprise)
+      ? earningsSurprise.slice(0, 4).map(e => ({
+          quarter:     e.date          ?? null,
+          epsActual:   e.actualEarningResult ?? null,
+          epsEstimate: e.estimatedEarning    ?? null,
+          surprisePct: e.actualEarningResult != null && e.estimatedEarning
+            ? parseFloat(((e.actualEarningResult - e.estimatedEarning) / Math.abs(e.estimatedEarning) * 100).toFixed(1))
+            : null,
+          beat: (e.actualEarningResult ?? 0) >= (e.estimatedEarning ?? 0),
+        }))
+      : [];
 
-    const hasData = quarters.length > 0 || annuals.length > 0;
-    if (!hasData) {
-      return res.status(404).json({
-        error: `No financial statements found for ${ticker}. This ticker may be pre-revenue, an ETF, or not yet reporting to SEC.`
-      });
+    if (!quarters.length && !annuals.length) {
+      return res.status(404).json({ error: `No financial data found for ${ticker}` });
     }
 
-    res.json({ ticker, quarters, annuals, yoy, epsHistory, epsTrend: [], nextEarnings: null });
+    res.json({ ticker, quarters, annuals, yoy, epsHistory, nextEarnings: null });
   } catch (e) {
     console.error('[financials/us]', e.message);
     res.status(500).json({ error: e.message });
