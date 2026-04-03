@@ -207,21 +207,19 @@ export default function WelcomePage({ onEnter, onNavigate }) {
 
         {/* Promo Banner */}
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
           background: '#00ff8808', border: '1px solid #00ff8833',
-          borderRadius: 6, padding: '12px 20px', flexWrap: 'wrap', textAlign: 'center',
+          borderRadius: 6, padding: '12px 16px', textAlign: 'center',
         }}>
-          <span style={{ fontSize: 18 }}>🎉</span>
-          <div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#00ff88' }}>FIRST MONTH FREE FOR NEW SUBSCRIBERS</span>
-            <span style={{ fontSize: 12, color: '#7788aa', marginLeft: 8 }}>
-              No credit card required. Add details before trial ends to continue.
-            </span>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#00ff88', marginBottom: 4 }}>
+            🎉 FIRST MONTH FREE — NO CREDIT CARD REQUIRED
+          </div>
+          <div style={{ fontSize: 12, color: '#7788aa' }}>
+            30 days free for new subscribers. Add payment details before trial ends to continue.
           </div>
         </div>
 
         {/* Stats bars — US and India with Free/Pro split */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, width: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, width: '100%' }}>
           {[
             { flag: '🇺🇸', label: 'US', accent: '#ffaa00', border: '#ffaa0033', stats: US_STATS },
             { flag: '🇮🇳', label: 'INDIA', accent: '#ff9a00', border: '#ff9a0033', stats: INDIA_STATS },
@@ -231,7 +229,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               padding: 'clamp(12px,2vw,20px)' }}>
               <div style={{ fontSize: 9, color: accent + '99', letterSpacing: '0.2em',
                 textAlign: 'center', marginBottom: 14 }}>{flag} {label}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }}>
                 {/* Free */}
                 <div>
                   <div style={{ fontSize: 8, color: '#556677', letterSpacing: '0.15em',
@@ -242,10 +240,8 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                     {stats.free.map((s, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ fontFamily: "'Bebas Neue',sans-serif",
-                          fontSize: 'clamp(13px,1.6vw,18px)', color: '#b0c0dd',
-                          minWidth: 'clamp(28px,3vw,40px)', lineHeight: 1 }}>{s.value}</div>
-                        <div style={{ fontSize: 'clamp(8px,0.7vw,10px)', color: '#556677',
-                          lineHeight: 1.3 }}>{s.label}</div>
+                          fontSize: 14, color: '#b0c0dd', minWidth: 36, lineHeight: 1, flexShrink: 0 }}>{s.value}</div>
+                        <div style={{ fontSize: 11, color: '#556677', lineHeight: 1.3 }}>{s.label}</div>
                       </div>
                     ))}
                   </div>
@@ -260,10 +256,8 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                     {stats.pro.map((s, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ fontFamily: "'Bebas Neue',sans-serif",
-                          fontSize: 'clamp(13px,1.6vw,18px)', color: accent,
-                          minWidth: 'clamp(28px,3vw,40px)', lineHeight: 1 }}>{s.value}</div>
-                        <div style={{ fontSize: 'clamp(8px,0.7vw,10px)', color: '#8899bb',
-                          lineHeight: 1.3 }}>{s.label}</div>
+                          fontSize: 14, color: accent, minWidth: 36, lineHeight: 1, flexShrink: 0 }}>{s.value}</div>
+                        <div style={{ fontSize: 11, color: '#8899bb', lineHeight: 1.3 }}>{s.label}</div>
                       </div>
                     ))}
                   </div>
