@@ -1,13 +1,37 @@
 import { useEffect, useState } from 'react';
 
-const STATS = [
-  { value: '5,000+', label: 'US Stocks & Options'         },
-  { value: '500+',   label: 'NSE India Nifty 500 Stocks'  },
-  { value: '15+',    label: 'Global Markets Tracked'      },
-  { value: '4',      label: 'Timeframes — Short to Long'  },
-  { value: '2',      label: 'Markets — 🇺🇸 US & 🇮🇳 India' },
-  { value: 'FREE',   label: 'To Start · No Card Needed'   },
-];
+const US_STATS = {
+  free: [
+    { value: '5,000+', label: 'US Stocks'             },
+    { value: '5/day',  label: 'Stock Scans'           },
+    { value: '3/day',  label: 'Options Analyses'      },
+    { value: '5',      label: 'Watchlist Items'       },
+    { value: '15+',    label: 'Global Markets'        },
+  ],
+  pro: [
+    { value: '∞',      label: 'Unlimited Scans'       },
+    { value: '∞',      label: 'Options Analyses'      },
+    { value: '∞',      label: 'Watchlist Items'       },
+    { value: '4',      label: 'Timeframes'            },
+    { value: '$5',     label: 'Per Month'             },
+  ],
+};
+
+const INDIA_STATS = {
+  free: [
+    { value: '500+',   label: 'NSE Stocks'            },
+    { value: '5/day',  label: 'Stock Scans'           },
+    { value: '5',      label: 'Watchlist Items'       },
+    { value: '28+',    label: 'NSE ETFs Visible'      },
+  ],
+  pro: [
+    { value: '∞',      label: 'Unlimited Scans'       },
+    { value: 'SIP',    label: 'Planner + Calculator'  },
+    { value: 'AI',     label: 'Portfolio Recommender' },
+    { value: 'MF',     label: 'Mutual Fund Explorer'  },
+    { value: '₹249',   label: 'Per Month'             },
+  ],
+};
 
 const FEATURES = [
   {
@@ -57,7 +81,7 @@ const HOW_IT_WORKS = [
 
 const TECH_STACK = [
   { icon: '⚙️',  label: 'Signal Engine',  value: 'Advanced LLM — Quantitative Logic', color: '#00ff88' },
-  { icon: '🇮🇳', label: 'India Data',    value: 'NSE India API — Nifty 500',       color: '#ff9a00' },
+  { icon: '🇮🇳', label: 'India Data',    value: 'NSE India API + MFAPI.in NAV',    color: '#ff9a00' },
   { icon: '📈', label: 'Options Data',   value: 'Tradier — Real-time US chains',   color: '#ffaa00' },
   { icon: '📊', label: 'Stock History',  value: 'Tradier + NSE — OHLCV + quotes', color: '#4488ff' },
   { icon: '🌍', label: 'Macro Data',     value: 'Polygon — 15+ global markets',   color: '#ff8844' },
@@ -78,7 +102,7 @@ const PRICING = [
   },
   {
     label: 'PRO — INDIA 🇮🇳', color: '#ff9a00', price: '₹249', sub: '/mo · INR · No commitment',
-    features: ['Unlimited scans', 'Unlimited India watchlist', 'Full Nifty 500 coverage', 'Indian macro — RBI/FII/Budget', 'Priority AI processing'],
+    features: ['Unlimited scans & watchlist', 'Full Nifty 500 coverage', 'India Invest tab — ETFs + SIP + MF', 'AI portfolio recommender', 'RBI/FII/Budget macro context'],
     cta: 'GET INDIA PRO',
   },
 ];
@@ -181,13 +205,55 @@ export default function WelcomePage({ onEnter, onNavigate }) {
           </button>
         </div>
 
-        {/* Stats bar */}
-        <div style={{ display: 'flex', gap: 'clamp(16px,3vw,40px)', justifyContent: 'center', flexWrap: 'wrap',
-          padding: 'clamp(16px,2vw,24px)', background: '#0c0c18', border: '1px solid #1e1e2e', borderRadius: 6 }}>
-          {STATS.map((s, i) => (
-            <div key={i} style={{ textAlign: 'center', minWidth: 'clamp(70px,8vw,90px)' }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(24px,3vw,40px)', color: '#ffaa00', lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 'clamp(8px,0.8vw,10px)', color: '#8899bb', letterSpacing: '0.06em', marginTop: 5, lineHeight: 1.3 }}>{s.label}</div>
+        {/* Stats bars — US and India with Free/Pro split */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, width: '100%' }}>
+          {[
+            { flag: '🇺🇸', label: 'US', accent: '#ffaa00', border: '#ffaa0033', stats: US_STATS },
+            { flag: '🇮🇳', label: 'INDIA', accent: '#ff9a00', border: '#ff9a0033', stats: INDIA_STATS },
+          ].map(({ flag, label, accent, border, stats }) => (
+            <div key={label} style={{ background: '#0c0c18', border: `1px solid ${border}`,
+              borderTop: `2px solid ${accent}55`, borderRadius: 6,
+              padding: 'clamp(12px,2vw,20px)' }}>
+              <div style={{ fontSize: 9, color: accent + '99', letterSpacing: '0.2em',
+                textAlign: 'center', marginBottom: 14 }}>{flag} {label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {/* Free */}
+                <div>
+                  <div style={{ fontSize: 8, color: '#556677', letterSpacing: '0.15em',
+                    marginBottom: 8, textAlign: 'center', borderBottom: '1px solid #1a1a2a', paddingBottom: 4 }}>
+                    FREE
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {stats.free.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontFamily: "'Bebas Neue',sans-serif",
+                          fontSize: 'clamp(13px,1.6vw,18px)', color: '#b0c0dd',
+                          minWidth: 'clamp(28px,3vw,40px)', lineHeight: 1 }}>{s.value}</div>
+                        <div style={{ fontSize: 'clamp(8px,0.7vw,10px)', color: '#556677',
+                          lineHeight: 1.3 }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Pro */}
+                <div style={{ borderLeft: `1px solid ${accent}22`, paddingLeft: 8 }}>
+                  <div style={{ fontSize: 8, color: accent + 'aa', letterSpacing: '0.15em',
+                    marginBottom: 8, textAlign: 'center', borderBottom: `1px solid ${accent}22`, paddingBottom: 4 }}>
+                    PRO
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {stats.pro.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontFamily: "'Bebas Neue',sans-serif",
+                          fontSize: 'clamp(13px,1.6vw,18px)', color: accent,
+                          minWidth: 'clamp(28px,3vw,40px)', lineHeight: 1 }}>{s.value}</div>
+                        <div style={{ fontSize: 'clamp(8px,0.7vw,10px)', color: '#8899bb',
+                          lineHeight: 1.3 }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -288,7 +354,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               </div>
               {[
                 "QuAInt Signal is a quantitative investing platform covering US stocks & options and NSE India (Nifty 500). Every ticker is analyzed using RSI, MACD, SMA20/50/200, ATR, Bollinger Bands, support/resistance, company fundamentals, news sentiment, and global macro conditions.",
-                "For Indian stocks, the engine incorporates RBI monetary policy, FII/DII flows, INR/USD strength, Budget impact, and SEBI regulations. Prices shown in ₹. The macro ticker bar switches to show Nifty, Sensex, Gold, Crude, and USD/INR in India mode.",
+                "For Indian stocks, the engine incorporates RBI monetary policy, FII/DII flows, INR/USD strength, Budget impact, and SEBI regulations. The dedicated India Invest tab adds NSE ETF signals, a SIP planner (with SIP vs lump sum comparison), AI-powered portfolio allocation based on your risk profile, SIP tracker, and live mutual fund NAV data.",
                 "Every signal includes exact entry, ATR-based target and stop, a thesis combining company context + fundamental driver + technical setup — with different logic per timeframe. Short term uses momentum; long term uses analyst consensus and fundamentals.",
               ].map((t, i) => (
                 <p key={i} style={{ fontSize: 'clamp(12px,1.2vw,14px)', color: '#8899aa', lineHeight: 1.9, marginBottom: 16, marginTop: 0 }}>{t}</p>
