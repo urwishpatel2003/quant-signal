@@ -2782,7 +2782,12 @@ app.delete('/sips/:userId/:sipId', async (req, res) => {
 });
 
 // ─── Simulator ────────────────────────────────────────────────────────────────
-const SIM_STARTING_BALANCE = 10000;
+const SIM_BALANCE_US    = 10000;    // $10,000 USD
+const SIM_BALANCE_INDIA = 1000000;  // ₹10,00,000 (10 Lakhs)
+
+function simStartingBalance(market) {
+  return market === 'INDIA' ? SIM_BALANCE_INDIA : SIM_BALANCE_US;
+}
 
 async function getOrCreateSimAccount(userId, market = 'US') {
   const simId = `${userId}_${market}`; // separate account per market
@@ -2791,7 +2796,7 @@ async function getOrCreateSimAccount(userId, market = 'US') {
   if (error && error.code === 'PGRST116') {
     const { data: newAcc, error: e2 } = await supabase
       .from('sim_account')
-      .insert({ user_id: simId, balance: SIM_STARTING_BALANCE, starting_balance: SIM_STARTING_BALANCE })
+      .insert({ user_id: simId, balance: simStartingBalance(market), starting_balance: simStartingBalance(market) })
       .select().single();
     if (e2) throw e2;
     return newAcc;
@@ -2827,6 +2832,9 @@ app.post('/sim/:userId/open', async (req, res) => {
 
   if (!ticker || !entryPrice || !quantity)
     return res.status(400).json({ error: 'ticker, entryPrice, quantity required' });
+
+  if (confidence != null && confidence < 75)
+    return res.status(400).json({ error: `Signal confidence too low (${confidence}%) — need 75%+ to simulate` });
 
   try {
     const account  = await getOrCreateSimAccount(req.params.userId, market);
@@ -2928,15 +2936,15 @@ app.post('/sim/:userId/reset', async (req, res) => {
     await Promise.all([
       supabase.from('sim_account').upsert({
         user_id:          simId,
-        balance:          SIM_STARTING_BALANCE,
-        starting_balance: SIM_STARTING_BALANCE,
+        balance:          simStartingBalance(market),
+        starting_balance: simStartingBalance(market),
         updated_at:       new Date().toISOString(),
       }, { onConflict: 'user_id' }),
       supabase.from('sim_positions').delete()
         .eq('user_id', req.params.userId)
         .eq('market', market),
     ]);
-    res.json({ success: true, balance: SIM_STARTING_BALANCE });
+    res.json({ success: true, balance: simStartingBalance(market) });
   } catch (e) {
     console.error('[sim reset]', e.message);
     res.status(500).json({ error: e.message });
@@ -2977,6 +2985,171 @@ app.get('/sim/:userId/prices', async (req, res) => {
     res.json(prices);
   } catch (e) {
     console.error('[sim prices]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Simulator Auto-Close Engine ─────────────────────────────────────────────
+// Runs every 60s — checks all open positions against live prices
+// Auto-closes when price target or stop loss is hit
+
+async function runSimAutoClose() {
+  try {
+    // Get all open positions that have a target or stop
+    const { data: openPositions } = await supabase
+      .from('sim_positions')
+      .select('*')
+      .eq('status', 'OPEN')
+      .or('price_target.not.is.null,stop_loss.not.is.null');
+
+    if (!openPositions?.length) return;
+
+    // Group by market
+    const usPosns     = openPositions.filter(p => p.market !== 'INDIA');
+    const indiaPosns  = openPositions.filter(p => p.market === 'INDIA');
+    const prices      = {};
+
+    // Fetch US prices
+    if (usPosns.length) {
+      const tickers = [...new Set(usPosns.map(p => p.ticker))];
+      try {
+        const data = await tradierGet(`/v1/markets/quotes?symbols=${tickers.join(',')}&greeks=false`);
+        const raw  = data?.quotes?.quote || [];
+        const list = Array.isArray(raw) ? raw : [raw];
+        list.forEach(q => { if (q.symbol && q.last) prices[q.symbol] = parseFloat(q.last); });
+      } catch {}
+    }
+
+    // Fetch India prices
+    if (indiaPosns.length) {
+      const tickers = [...new Set(indiaPosns.map(p => p.ticker))];
+      await Promise.allSettled(tickers.map(async ticker => {
+        const q = await getNSEQuote(ticker);
+        if (q?.price) prices[ticker] = q.price;
+      }));
+    }
+
+    // Check each position
+    const closes = [];
+    for (const pos of openPositions) {
+      const cur = prices[pos.ticker];
+      if (!cur) continue;
+
+      let exitReason = null;
+      let exitPrice  = null;
+
+      if (pos.direction === 'LONG') {
+        if (pos.price_target && cur >= parseFloat(pos.price_target)) {
+          exitReason = 'TARGET'; exitPrice = parseFloat(pos.price_target);
+        } else if (pos.stop_loss && cur <= parseFloat(pos.stop_loss)) {
+          exitReason = 'STOP'; exitPrice = parseFloat(pos.stop_loss);
+        }
+      } else { // SHORT
+        if (pos.price_target && cur <= parseFloat(pos.price_target)) {
+          exitReason = 'TARGET'; exitPrice = parseFloat(pos.price_target);
+        } else if (pos.stop_loss && cur >= parseFloat(pos.stop_loss)) {
+          exitReason = 'STOP'; exitPrice = parseFloat(pos.stop_loss);
+        }
+      }
+
+      if (exitReason) closes.push({ pos, exitPrice, exitReason });
+    }
+
+    // Execute closes
+    for (const { pos, exitPrice, exitReason } of closes) {
+      try {
+        const pnl = pos.direction === 'LONG'
+          ? (exitPrice - pos.entry_price) * pos.quantity
+          : (pos.entry_price - exitPrice) * pos.quantity;
+        const pct = pos.direction === 'LONG'
+          ? ((exitPrice - pos.entry_price) / pos.entry_price) * 100
+          : ((pos.entry_price - exitPrice) / pos.entry_price) * 100;
+
+        const simId     = `${pos.user_id}_${pos.market}`;
+        const { data: acc } = await supabase.from('sim_account').select('balance').eq('user_id', simId).single();
+        const newBalance = acc
+          ? (pos.direction === 'LONG'
+              ? acc.balance + (exitPrice * pos.quantity)
+              : acc.balance + pnl)
+          : null;
+
+        await Promise.all([
+          supabase.from('sim_positions').update({
+            status:       'CLOSED',
+            exit_price:   exitPrice,
+            exit_reason:  exitReason,
+            closed_at:    new Date().toISOString(),
+            realized_pnl: parseFloat(pnl.toFixed(2)),
+            realized_pct: parseFloat(pct.toFixed(2)),
+          }).eq('id', pos.id),
+          ...(newBalance != null ? [supabase.from('sim_account').update({
+            balance:    parseFloat(newBalance.toFixed(2)),
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', simId)] : []),
+        ]);
+
+        console.log(`[sim auto-close] ${pos.ticker} ${exitReason} @ ${exitPrice} | P&L: ${pnl.toFixed(2)}`);
+      } catch (e) {
+        console.error('[sim auto-close] error closing', pos.ticker, e.message);
+      }
+    }
+  } catch (e) {
+    console.error('[sim auto-close] engine error:', e.message);
+  }
+}
+
+// Run auto-close every 60 seconds
+setInterval(runSimAutoClose, 60 * 1000);
+// Also run on startup after 10s delay
+setTimeout(runSimAutoClose, 10000);
+
+// Remove manual close route — positions close automatically
+// Keep it for emergency/admin use only with a header check
+app.post('/sim/:userId/close/:positionId', async (req, res) => {
+  // Only allow if position has no target/stop (edge case)
+  const { exitPrice, exitReason = 'MANUAL' } = req.body;
+  if (!exitPrice) return res.status(400).json({ error: 'exitPrice required' });
+
+  try {
+    const { data: pos, error: posErr } = await supabase
+      .from('sim_positions').select('*')
+      .eq('id', req.params.positionId)
+      .eq('user_id', req.params.userId)
+      .single();
+    if (posErr || !pos) return res.status(404).json({ error: 'Position not found' });
+    if (pos.status === 'CLOSED') return res.status(400).json({ error: 'Already closed' });
+    if (pos.price_target || pos.stop_loss)
+      return res.status(400).json({ error: 'Position has target/stop — will close automatically' });
+
+    const exit = parseFloat(exitPrice);
+    const pnl  = pos.direction === 'LONG'
+      ? (exit - pos.entry_price) * pos.quantity
+      : (pos.entry_price - exit) * pos.quantity;
+    const pct  = pos.direction === 'LONG'
+      ? ((exit - pos.entry_price) / pos.entry_price) * 100
+      : ((pos.entry_price - exit) / pos.entry_price) * 100;
+
+    const account    = await getOrCreateSimAccount(req.params.userId, pos.market);
+    const simId      = `${req.params.userId}_${pos.market}`;
+    const newBalance = pos.direction === 'LONG'
+      ? account.balance + (exit * pos.quantity)
+      : account.balance + pnl;
+
+    await Promise.all([
+      supabase.from('sim_positions').update({
+        status: 'CLOSED', exit_price: exit, exit_reason: exitReason,
+        closed_at: new Date().toISOString(),
+        realized_pnl: parseFloat(pnl.toFixed(2)),
+        realized_pct: parseFloat(pct.toFixed(2)),
+      }).eq('id', req.params.positionId),
+      supabase.from('sim_account').update({
+        balance: parseFloat(newBalance.toFixed(2)), updated_at: new Date().toISOString(),
+      }).eq('user_id', simId),
+    ]);
+
+    res.json({ pnl, pct, newBalance });
+  } catch (e) {
+    console.error('[sim close]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

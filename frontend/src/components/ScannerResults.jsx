@@ -125,19 +125,36 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               {watchlistAdded ? '✓ WATCHLIST' : watchlistLoading ? '...' : '+ WATCHLIST'}
             </button>
           )}
-          {onAddToSim && (
-            <button
-              className="btn-sm"
-              onClick={() => setShowSimModal(true)}
-              disabled={simAdded}
-              style={{
-                color:       simAdded ? '#00ff88' : '#aa66ff',
-                borderColor: simAdded ? '#00ff8844' : '#aa66ff44',
-                background:  simAdded ? '#00ff8811' : '#aa66ff11',
-              }}>
-              {simAdded ? '✓ IN SIMULATOR' : '📊 SIMULATE'}
-            </button>
-          )}
+          {onAddToSim && (() => {
+            const conf       = scan.analysis?.confidence || 0;
+            const highConf   = conf >= 75;
+            const tooltip    = !highConf ? `Confidence too low (${conf}%) — need 75%+ to simulate` : '';
+            return (
+              <div title={tooltip} style={{ position: 'relative' }}>
+                <button
+                  className="btn-sm"
+                  onClick={() => highConf && !simAdded && setShowSimModal(true)}
+                  disabled={simAdded || !highConf}
+                  style={{
+                    color:       simAdded ? '#00ff88' : highConf ? '#aa66ff' : '#445566',
+                    borderColor: simAdded ? '#00ff8844' : highConf ? '#aa66ff44' : '#2a2a3e',
+                    background:  simAdded ? '#00ff8811' : highConf ? '#aa66ff11' : '#0a0a14',
+                    opacity:     !highConf ? 0.5 : 1,
+                    cursor:      !highConf ? 'not-allowed' : 'pointer',
+                  }}>
+                  {simAdded ? '✓ IN SIMULATOR' : highConf ? '📊 SIMULATE' : `📊 ${conf}% CONF`}
+                </button>
+                {!highConf && !simAdded && (
+                  <div style={{
+                    fontSize: 9, color: '#556677', marginTop: 3,
+                    textAlign: 'center', letterSpacing: '0.05em',
+                  }}>
+                    75%+ required
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
