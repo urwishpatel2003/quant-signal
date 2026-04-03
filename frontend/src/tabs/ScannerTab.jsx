@@ -262,63 +262,43 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
             border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00',
             animation: 'spin 0.8s linear infinite' }} />
 
-          {/* Title + current stage */}
+          {/* Title */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26,
-              color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 10 }}>
+              color: '#ffaa00', letterSpacing: '0.15em' }}>
               {isIndia ? 'ANALYSING' : 'ANALYZING'} {scan.ticker}
             </div>
-            <div style={{ fontSize: 12, color: '#ffaa0099', letterSpacing: '0.2em', minHeight: 20 }}>
-              {STAGE_LABELS[scan.stage] || 'INITIALIZING...'}
-            </div>
           </div>
 
-          {/* Stage progress — dots + labels */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            {/* Dots */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              {STAGES.map((s, i) => {
-                const done   = i < currentStageIdx;
-                const active = i === currentStageIdx;
-                return (
-                  <div key={s} style={{
-                    width:        active ? 14 : done ? 10 : 8,
-                    height:       active ? 14 : done ? 10 : 8,
-                    borderRadius: '50%',
-                    background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
-                    transition:   'all 0.3s ease',
-                    boxShadow:    active ? '0 0 14px #ffaa00aa' : done ? '0 0 6px #00ff8866' : 'none',
-                    flexShrink:   0,
-                  }} />
-                );
-              })}
-            </div>
-
-            {/* Stage name labels */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {STAGES.map((s, i) => {
-                const done   = i < currentStageIdx;
-                const active = i === currentStageIdx;
-                return (
-                  <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{
-                      fontSize: 9, letterSpacing: '0.08em',
-                      color:      done ? '#00ff8877' : active ? '#ffaa00' : '#2a2a3e',
-                      fontWeight: active ? 700 : 400,
-                      transition: 'color 0.3s',
-                    }}>
-                      {STAGE_SHORT[s]}
-                    </span>
-                    {i < STAGES.length - 1 && (
-                      <span style={{ fontSize: 9, color: done ? '#00ff8844' : '#2a2a3e' }}>→</span>
-                    )}
-                  </span>
-                );
-              })}
-            </div>
+          {/* Stage dots */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {STAGES.map((s, i) => {
+              const done   = i < currentStageIdx;
+              const active = i === currentStageIdx;
+              return (
+                <div key={s} style={{
+                  width:        active ? 12 : done ? 8 : 6,
+                  height:       active ? 12 : done ? 8 : 6,
+                  borderRadius: '50%',
+                  background:   done ? '#00ff88' : active ? '#ffaa00' : '#2a2a3e',
+                  transition:   'all 0.3s ease',
+                  boxShadow:    active ? '0 0 12px #ffaa00aa' : done ? '0 0 5px #00ff8855' : 'none',
+                  flexShrink:   0,
+                }} />
+              );
+            })}
           </div>
 
-          <div style={{ fontSize: 11, color: '#556677', letterSpacing: '0.1em' }}>
+          {/* Flashing current stage label */}
+          <div style={{
+            fontSize: 11, letterSpacing: '0.2em', fontWeight: 700,
+            color: '#ffaa00', animation: 'pulse 1.2s ease-in-out infinite',
+            minHeight: 18,
+          }}>
+            {STAGE_LABELS[scan.stage] || 'INITIALIZING...'}
+          </div>
+
+          <div style={{ fontSize: 11, color: '#445', letterSpacing: '0.1em' }}>
             This may take 10–20 seconds
           </div>
         </div>
