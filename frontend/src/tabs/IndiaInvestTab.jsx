@@ -875,7 +875,8 @@ function SIPTrackerPage({ onBack }) {
 
   const getStats = (sip) => {
     const s = new Date(sip.startDate), n = new Date();
-    const m = Math.max(0, (n.getFullYear() - s.getFullYear()) * 12 + n.getMonth() - s.getMonth());
+    // +1 because the first installment is paid on the start month itself
+    const m = Math.max(1, (n.getFullYear() - s.getFullYear()) * 12 + n.getMonth() - s.getMonth() + 1);
     return { months: m, invested: sip.amount * m };
   };
 
