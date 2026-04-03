@@ -14,7 +14,6 @@ async function fetchIndiaHistory(symbol, range = '3mo') {
   if (!result) return null;
   const quote  = result.indicators?.quote?.[0] || {};
   const close  = quote.close || [];
-  // Filter only valid (non-null) closes
   const closes = close.filter(c => c != null && !isNaN(c));
   if (!closes.length) return null;
   return {
@@ -51,6 +50,19 @@ async function fetchIndiaNews(symbol) {
   } catch { return []; }
 }
 
+async function fetchQuarterlyFinancials(symbol, market) {
+  try {
+    const endpoint = market === 'INDIA'
+      ? `${BASE}/financials/india/${symbol}`
+      : `${BASE}/financials/us/${symbol}`;
+    const res = await fetch(endpoint);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+    return data;
+  } catch { return null; }
+}
+
 export function useScan(macro) {
   const [ticker,       setTicker]       = useState('');
   const [timeframe,    setTimeframe]    = useState('swing');
@@ -60,6 +72,7 @@ export function useScan(macro) {
   const [ohlcv,        setOhlcv]        = useState(null);
   const [quote,        setQuote]        = useState(null);
   const [fundamentals, setFundamentals] = useState(null);
+  const [financials,   setFinancials]   = useState(null);
   const [options,      setOptions]      = useState(null);
   const [news,         setNews]         = useState([]);
   const [analysis,     setAnalysis]     = useState(null);
@@ -95,37 +108,38 @@ export function useScan(macro) {
       }
 
       setOhlcv(p); setQuote(q);
-      // Company name resolved below after fundamentals load
       const indicators = calcIndicators(p, tf);
       setTa(indicators);
       const livePrice = q?.last || p.current;
 
       setStage('fundamentals');
-      // Use India-specific fundamentals for NSE stocks (Yahoo .NS)
       const f = isIndia ? await fetchIndiaFundamentals(t) : await fetchFundamentals(t);
       setFundamentals(f);
-      // Extract company name from fundamentals (Polygon ref for US, Yahoo for India)
       if (f?.companyName) setCompanyName(f.companyName);
 
-      setStage('options');
-      let optData = null;
-      if (!isIndia) {
-        const exps = await fetchTradierExpirations(t);
-        if (exps.length > 0) {
-          optData = await fetchTradierChain(t, exps[0], livePrice);
-          setOptions(optData);
-        }
-      }
+      setStage('financials');
+      // Fetch quarterly financials, options, and news in parallel
+      const [fin, optData, n] = await Promise.all([
+        fetchQuarterlyFinancials(t, market),
+        (async () => {
+          if (isIndia) return null;
+          const exps = await fetchTradierExpirations(t);
+          if (!exps.length) return null;
+          return fetchTradierChain(t, exps[0], livePrice);
+        })(),
+        isIndia ? fetchIndiaNews(t) : fetchStockNews(t),
+      ]);
 
-      setStage('news');
-      const n = isIndia ? await fetchIndiaNews(t) : await fetchStockNews(t);
-      setNews(n);
+      setFinancials(fin);
+      if (optData) setOptions(optData);
+      setNews(n || []);
 
       setStage('claude');
       const a = await runPriceAnalysis(
         t, livePrice, p, f, optData, n,
         macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar,
-        indicators, tf, market
+        indicators, tf, market,
+        fin   // quarterly financials → injected into AI thesis
       );
       setAnalysis(a);
       setStage('done');
@@ -142,6 +156,7 @@ export function useScan(macro) {
     setQuote(null);
     setCompanyName('');
     setFundamentals(null);
+    setFinancials(null);
     setOptions(null);
     setNews([]);
     setAnalysis(null);
@@ -151,7 +166,7 @@ export function useScan(macro) {
   return {
     ticker, timeframe, setTimeframe,
     loading, stage, error,
-    ohlcv, quote, fundamentals, options, news, analysis, ta, companyName,
+    ohlcv, quote, fundamentals, financials, options, news, analysis, ta, companyName,
     terminalRef, runScan, reset,
   };
 }
