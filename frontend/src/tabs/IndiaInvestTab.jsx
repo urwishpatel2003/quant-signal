@@ -1179,3 +1179,4 @@ export default function IndiaInvestTab({ onScanTicker }) {
     </div>
   );
 }
+
