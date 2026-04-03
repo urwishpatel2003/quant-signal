@@ -273,40 +273,155 @@ function PortfolioPage({ onBack }) {
       {step === 1 && aiResult ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <button className="btn-sm" onClick={() => { setStep(0); setAiResult(null); setAnswers([]); }}
-            style={{ alignSelf: 'flex-start' }}>RETAKE QUIZ</button>
-          <div className="card" style={{ borderColor: '#00ff8833' }}>
-            <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.12em', marginBottom: 10 }}>AI RECOMMENDATION</div>
-            <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.summary}</div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-            {aiResult.topPicks?.map((pick, i) => (
-              <div key={i} className="card" style={{ borderColor: '#ff9a0033' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <Pill label={pick.type} color={pick.type === 'ETF' ? '#ff9a00' : '#4488ff'} />
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24, color: '#ff9a00' }}>{pick.allocation}%</div>
+            style={{ alignSelf: 'flex-start' }}>← RETAKE QUIZ</button>
+
+          {/* Summary + Risk Profile */}
+          <div className="card" style={{ borderColor: '#ff9a0033' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 8 }}>AI PORTFOLIO RECOMMENDATION</div>
+                <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.summary}</div>
+              </div>
+              {aiResult.riskAssessment && (
+                <div style={{ background: '#0a0a14', borderRadius: 6, padding: '12px 16px', textAlign: 'center', flexShrink: 0 }}>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: '#ff9a00' }}>{aiResult.riskAssessment.label}</div>
+                  <div style={{ fontSize: 11, color: '#00ff88', marginTop: 2 }}>{aiResult.riskAssessment.expectedReturn}</div>
+                  <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2 }}>Volatility: {aiResult.riskAssessment.volatility}</div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0', marginBottom: 4 }}>{pick.name}</div>
-                {pick.symbol && <div style={{ fontSize: 11, color: '#7788aa', marginBottom: 8 }}>{pick.symbol}</div>}
-                <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{pick.reason}</div>
+              )}
+            </div>
+            {aiResult.riskAssessment?.suitability && (
+              <div style={{ fontSize: 12, color: '#7788aa', borderTop: '1px solid #1e1e2e', paddingTop: 10, fontStyle: 'italic' }}>
+                {aiResult.riskAssessment.suitability}
+              </div>
+            )}
+          </div>
+
+          {/* Asset Allocation Bar */}
+          {aiResult.assetAllocation && (
+            <div className="card">
+              <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>ASSET ALLOCATION</div>
+              <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 10 }}>
+                {[
+                  { key: 'equity', color: '#00ff88' }, { key: 'debt', color: '#4488ff' },
+                  { key: 'gold', color: '#ffaa00' },   { key: 'international', color: '#ff8844' },
+                ].filter(a => aiResult.assetAllocation[a.key] > 0).map((a, i) => (
+                  <div key={i} style={{ width: `${aiResult.assetAllocation[a.key]}%`, background: a.color }} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {[
+                  { key: 'equity', color: '#00ff88', label: 'Equity' }, { key: 'debt', color: '#4488ff', label: 'Debt' },
+                  { key: 'gold', color: '#ffaa00', label: 'Gold' },     { key: 'international', color: '#ff8844', label: 'Intl' },
+                ].filter(a => aiResult.assetAllocation[a.key] > 0).map((a, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 2, background: a.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: '#99aacc' }}>{a.label} {aiResult.assetAllocation[a.key]}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fund Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {aiResult.topPicks?.map((pick, i) => (
+              <div key={i} className="card" style={{ borderColor: '#ff9a0022' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                  <div style={{ flex: 1, marginRight: 12 }}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <Pill label={pick.type} color={pick.type === 'ETF' ? '#ff9a00' : '#4488ff'} />
+                      {pick.taxCategory && <Pill label={pick.taxCategory} color="#7788aa" />}
+                      {pick.expenseRatio && <Pill label={`ER: ${pick.expenseRatio}`} color="#556677" />}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0', marginBottom: 2 }}>{pick.name}</div>
+                    {pick.symbol && <div style={{ fontSize: 11, color: '#7788aa' }}>{pick.symbol}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', lineHeight: 1 }}>{pick.allocation}%</div>
+                    {pick.amount && <div style={{ fontSize: 12, color: '#99aacc', marginTop: 2 }}>{fmtRs(pick.amount)}/mo</div>}
+                    {pick.expectedReturn && <div style={{ fontSize: 11, color: '#00ff88', marginTop: 2 }}>{pick.expectedReturn}</div>}
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: '#b0c0dd', lineHeight: 1.7, marginBottom: pick.pros?.length > 0 || pick.cons?.length > 0 ? 10 : 0 }}>{pick.reason}</div>
+                {(pick.pros?.length > 0 || pick.cons?.length > 0) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, borderTop: '1px solid #1e1e2e', paddingTop: 10 }}>
+                    <div>{pick.pros?.map((p, j) => (
+                      <div key={j} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 4 }}>
+                        <span style={{ color: '#00ff88', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✓</span>
+                        <span style={{ fontSize: 11, color: '#7788aa' }}>{p}</span>
+                      </div>
+                    ))}</div>
+                    <div>{pick.cons?.map((c, j) => (
+                      <div key={j} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 4 }}>
+                        <span style={{ color: '#ff4444', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✗</span>
+                        <span style={{ fontSize: 11, color: '#7788aa' }}>{c}</span>
+                      </div>
+                    ))}</div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          {/* Monthly SIP Plan */}
           {aiResult.monthlyPlan && (
             <div className="card">
-              <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 14 }}>MONTHLY SIP BREAKDOWN — {fmtRs(aiResult.monthlyPlan.total)}</div>
+              <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>
+                MONTHLY SIP PLAN — {fmtRs(aiResult.monthlyPlan.total)}/mo
+              </div>
               {aiResult.monthlyPlan.breakdown?.map((b, i) => (
-                <div key={i} className="kv">
-                  <span className="kv-key">{b.instrument}</span>
+                <div key={i} className="kv" style={{ paddingBottom: 8, marginBottom: 8, borderBottom: i < aiResult.monthlyPlan.breakdown.length - 1 ? '1px solid #1a1a2a' : 'none' }}>
+                  <div>
+                    <span className="kv-key">{b.instrument}</span>
+                    {b.sipDate && <span style={{ fontSize: 10, color: '#445', marginLeft: 8 }}>on {b.sipDate}</span>}
+                  </div>
                   <span className="kv-value" style={{ color: '#ff9a00' }}>{fmtRs(b.amount)}/mo</span>
                 </div>
               ))}
             </div>
           )}
-          {aiResult.advice && (
-            <div className="card" style={{ borderLeft: '3px solid #ff9a0055' }}>
-              <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8, fontStyle: 'italic' }}>{aiResult.advice}</div>
+
+          {/* Tax Strategy + Rebalancing */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+            {aiResult.taxStrategy && (
+              <div className="card" style={{ borderLeft: '3px solid #4488ff55' }}>
+                <div style={{ fontSize: 10, color: '#4488ff', letterSpacing: '0.15em', marginBottom: 8 }}>TAX STRATEGY</div>
+                <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.taxStrategy}</div>
+              </div>
+            )}
+            {aiResult.rebalancing && (
+              <div className="card" style={{ borderLeft: '3px solid #ffaa0055' }}>
+                <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>REBALANCING</div>
+                <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.rebalancing}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Red Flags */}
+          {aiResult.redFlags?.length > 0 && (
+            <div className="card" style={{ borderColor: '#ff444433', borderLeft: '3px solid #ff4444' }}>
+              <div style={{ fontSize: 10, color: '#ff4444', letterSpacing: '0.15em', marginBottom: 8 }}>⚠ RISKS TO BE AWARE OF</div>
+              {aiResult.redFlags.map((flag, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <span style={{ color: '#ff4444', fontSize: 11, flexShrink: 0 }}>•</span>
+                  <span style={{ fontSize: 12, color: '#b0c0dd' }}>{flag}</span>
+                </div>
+              ))}
             </div>
           )}
+
+          {/* Final Advice */}
+          {aiResult.advice && (
+            <div className="card" style={{ borderLeft: '3px solid #00ff8855', background: '#00ff8808' }}>
+              <div style={{ fontSize: 10, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 8 }}>NEXT STEPS</div>
+              <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.advice}</div>
+            </div>
+          )}
+
+          <div style={{ fontSize: 10, color: '#445', textAlign: 'center' }}>
+            AI-generated recommendations only. Not SEBI-registered advice. Consult a financial advisor before investing.
+          </div>
         </div>
       ) : (
         <div>
