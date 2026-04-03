@@ -366,8 +366,17 @@ app.get('/search', async (req, res) => {
 });
 
 app.get('/movers', async (req, res) => {
-  // Serve from cache if fresh
-  if (usMoversCache.data && Date.now() - usMoversCache.ts < US_MOVERS_TTL) {
+  // Invalidate cache at market open — if cache is from before 9:30 AM ET today, force refresh
+  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const marketOpenToday = new Date(nowET);
+  marketOpenToday.setHours(9, 30, 0, 0);
+  if (usMoversCache.ts && usMoversCache.ts < marketOpenToday.getTime() && nowET >= marketOpenToday) {
+    usMoversCache.ts = 0; // force refresh when market opens
+  }
+  // During market hours use 90s TTL, outside hours use 10 min TTL
+  const marketOpen = !isMarketClosed();
+  const ttl = marketOpen ? US_MOVERS_TTL : 10 * 60 * 1000;
+  if (usMoversCache.data && Date.now() - usMoversCache.ts < ttl) {
     return res.json({ ...usMoversCache.data, cached: true });
   }
   try {
@@ -389,7 +398,8 @@ app.get('/movers', async (req, res) => {
       'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
       'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
     ];
-    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
+    // session_filter=all includes pre/post market, ensures today's data
+    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false&session_filter=all`);
     const raw  = data?.quotes?.quote || [];
     const list = (Array.isArray(raw) ? raw : [raw])
       .filter(q => q.last && q.change_percentage != null)
@@ -1340,8 +1350,8 @@ try {
 const nseQuoteCache   = new Map();
 const indiaMoversCache = { data: null, ts: 0 };
 const usMoversCache    = { data: null, ts: 0 };
-const INDIA_MOVERS_TTL = 5 * 60 * 1000; // 5 minutes
-const US_MOVERS_TTL    = 2 * 60 * 1000; // 2 minutes (more active market)
+const INDIA_MOVERS_TTL = 5 * 60 * 1000;  // 5 minutes
+const US_MOVERS_TTL    = 90 * 1000;       // 90 seconds during market hours
 const nseHistoryCache = new Map();
 const NSE_QUOTE_TTL   = 5  * 60 * 1000;
 const NSE_HISTORY_TTL = 30 * 60 * 1000;
