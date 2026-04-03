@@ -2244,6 +2244,138 @@ Recommend 4-6 specific instruments. Make the monthly amounts add exactly to ₹$
   }
 });
 
+// ─── Quarterly Financials ────────────────────────────────────────────────────
+
+function calcYoY(current, prior) {
+  if (current == null || prior == null || prior === 0) return null;
+  return parseFloat(((current - prior) / Math.abs(prior) * 100).toFixed(1));
+}
+
+// US — via Polygon vX reference/financials
+app.get('/financials/us/:ticker', async (req, res) => {
+  const ticker = req.params.ticker.toUpperCase();
+  try {
+    const [quarterly, annual] = await Promise.all([
+      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=8&timeframe=quarterly&order=desc`),
+      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=4&timeframe=annual&order=desc`),
+    ]);
+
+    const parseQ = (q) => {
+      const is  = q.financials?.income_statement || {};
+      const revenue    = is.revenues?.value                   ?? null;
+      const netIncome  = is.net_income_loss?.value            ?? null;
+      const grossProfit= is.gross_profit?.value               ?? null;
+      const epsDiluted = is.diluted_earnings_per_share?.value ?? null;
+      const epsBasic   = is.basic_earnings_per_share?.value   ?? null;
+      return {
+        period:      `${q.fiscal_period} ${q.fiscal_year}`,
+        endDate:     q.end_date,
+        revenue,
+        netIncome,
+        grossProfit,
+        epsDiluted:  epsDiluted ?? epsBasic,
+        netMargin:   revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
+        grossMargin: revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
+      };
+    };
+
+    const quarters = (quarterly?.results || []).slice(0, 4).map(parseQ);
+
+    // YoY = compare q[0] to q[4] (same quarter last year)
+    const allQ  = (quarterly?.results || []).slice(0, 8).map(parseQ);
+    const yoy = allQ.length >= 5 ? {
+      revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4].revenue),
+      netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4].netIncome),
+      epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4].epsDiluted),
+      netMarginYoY: allQ[0].netMargin != null && allQ[4].netMargin != null
+        ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+    } : {};
+
+    const annuals = (annual?.results || []).map(q => {
+      const is = q.financials?.income_statement || {};
+      const revenue   = is.revenues?.value                   ?? null;
+      const netIncome = is.net_income_loss?.value            ?? null;
+      const eps       = is.diluted_earnings_per_share?.value ?? is.basic_earnings_per_share?.value ?? null;
+      return {
+        period:    q.fiscal_year,
+        endDate:   q.end_date,
+        revenue, netIncome, epsDiluted: eps,
+        netMargin: revenue && netIncome ? parseFloat((netIncome / revenue * 100).toFixed(2)) : null,
+      };
+    });
+
+    res.json({ ticker, quarters, annuals, yoy });
+  } catch (e) {
+    console.error('[financials/us]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// India — via Yahoo Finance quoteSummary modules
+app.get('/financials/india/:symbol', async (req, res) => {
+  const symbol  = req.params.symbol.toUpperCase();
+  const ySymbol = `${symbol}.NS`;
+  try {
+    const modules = 'incomeStatementHistoryQuarterly,incomeStatementHistory,earningsHistory,calendarEvents';
+    let result = null;
+
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const data = await httpsGet(host,
+          `/v10/finance/quoteSummary/${encodeURIComponent(ySymbol)}?modules=${modules}`,
+          YAHOO_HEADERS
+        );
+        const r = data?.quoteSummary?.result?.[0];
+        if (!r) continue;
+
+        const parseStmt = (s) => ({
+          endDate:     s.endDate?.fmt ?? null,
+          revenue:     s.totalRevenue?.raw      ?? null,
+          netIncome:   s.netIncome?.raw          ?? null,
+          grossProfit: s.grossProfit?.raw        ?? null,
+          epsDiluted:  s.dilutedEPS?.raw         ?? null,
+          netMargin:   s.totalRevenue?.raw && s.netIncome?.raw
+            ? parseFloat((s.netIncome.raw / s.totalRevenue.raw * 100).toFixed(2)) : null,
+          grossMargin: s.totalRevenue?.raw && s.grossProfit?.raw
+            ? parseFloat((s.grossProfit.raw / s.totalRevenue.raw * 100).toFixed(2)) : null,
+        });
+
+        const allQ    = (r.incomeStatementHistoryQuarterly?.incomeStatementHistory || []).map(parseStmt);
+        const quarters = allQ.slice(0, 4);
+
+        const yoy = allQ.length >= 8 ? {
+          revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4].revenue),
+          netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4].netIncome),
+          epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4].epsDiluted),
+          netMarginYoY: allQ[0].netMargin != null && allQ[4].netMargin != null
+            ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+        } : {};
+
+        const annuals = (r.incomeStatementHistory?.incomeStatementHistory || []).map(parseStmt);
+
+        const epsHistory = (r.earningsHistory?.history || []).slice(0, 4).map(e => ({
+          quarter:     e.quarter?.fmt   ?? null,
+          epsActual:   e.epsActual?.raw ?? null,
+          epsEstimate: e.epsEstimate?.raw ?? null,
+          surprisePct: e.surprisePercent?.raw ?? null,
+          beat:        (e.epsDifference?.raw ?? 0) > 0,
+        }));
+
+        const nextEarnings = r.calendarEvents?.earnings?.earningsDate?.[0]?.fmt ?? null;
+
+        result = { symbol, quarters, annuals, yoy, epsHistory, nextEarnings };
+        break;
+      } catch { continue; }
+    }
+
+    if (!result) return res.status(404).json({ error: `No financials for ${ySymbol}` });
+    res.json(result);
+  } catch (e) {
+    console.error('[financials/india]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── US Sector Heatmap ───────────────────────────────────────────────────────
 const US_SECTORS = [
   { symbol: 'XLK',  name: 'Technology',        color: '#4488ff' },
