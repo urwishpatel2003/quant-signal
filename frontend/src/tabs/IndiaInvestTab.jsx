@@ -73,7 +73,6 @@ function getPortfolioAllocation(score) {
   return                  { 'Nifty 50 Index': 30, 'Midcap/Next50': 35, 'Sectoral ETF': 25, 'Gold ETF': 10 };
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function sipMaturity(monthly, years, rate) {
   const r = rate / 100 / 12, n = years * 12;
   if (r === 0) return monthly * n;
@@ -93,48 +92,36 @@ function Pill({ label, color }) {
   return <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, border: `1px solid ${color}44`, color, background: color + '11' }}>{label}</span>;
 }
 
-// ── Accordion wrapper — matches app style ─────────────────────────────────────
-function AccordionCard({ title, subtitle, icon, isOpen, onToggle, accent = '#ff9a00', children }) {
+// ── Shared page header with back button ───────────────────────────────────────
+function PageHeader({ icon, title, subtitle, onBack }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 8 }}>
-      {/* Header row */}
-      <div
-        onClick={onToggle}
+    <div style={{ marginBottom: 24 }}>
+      <button
+        onClick={onBack}
         style={{
-          display: 'flex', alignItems: 'center', gap: 14,
-          padding: '16px 18px', cursor: 'pointer',
-          background: isOpen ? '#0f0f1a' : 'transparent',
-          transition: 'background 0.15s',
+          background: 'none', border: '1px solid #2a2a40', color: '#b0c0dd',
+          cursor: 'pointer', borderRadius: 4, padding: '7px 14px',
+          fontSize: 12, fontFamily: 'inherit', letterSpacing: '0.08em',
+          marginBottom: 20, transition: 'all 0.15s',
         }}
-        onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = '#0d0d18'; }}
-        onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = isOpen ? '#0f0f1a' : 'transparent'; }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff9a0066'; e.currentTarget.style.color = '#ff9a00'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a40'; e.currentTarget.style.color = '#b0c0dd'; }}
       >
-        <div style={{ fontSize: 22, flexShrink: 0 }}>{icon}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18,
-            color: isOpen ? accent : '#c8d8f0', letterSpacing: '0.05em', lineHeight: 1.2 }}>
-            {title}
-          </div>
-          {subtitle && (
-            <div style={{ fontSize: 11, color: '#556677', marginTop: 2 }}>{subtitle}</div>
-          )}
-        </div>
-        <div style={{ fontSize: 12, color: isOpen ? accent : '#3a3a5e', flexShrink: 0 }}>
-          {isOpen ? '▲' : '▼'}
+        ← INVEST
+      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 28 }}>{icon}</span>
+        <div>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#ff9a00', lineHeight: 1.1 }}>{title}</div>
+          {subtitle && <div style={{ fontSize: 12, color: '#7788aa', marginTop: 3 }}>{subtitle}</div>}
         </div>
       </div>
-      {/* Content */}
-      {isOpen && (
-        <div style={{ padding: '4px 18px 20px', borderTop: '1px solid #1e1e30' }}>
-          {children}
-        </div>
-      )}
     </div>
   );
 }
 
-// ── Tool: SIP Calculator ──────────────────────────────────────────────────────
-function SIPCalculator() {
+// ── Page: SIP Planner ─────────────────────────────────────────────────────────
+function SIPPage({ onBack }) {
   const [monthly, setMonthly] = useState(10000);
   const [years,   setYears]   = useState(10);
   const [rate,    setRate]    = useState(12);
@@ -148,8 +135,8 @@ function SIPCalculator() {
   const sipTotal   = sipMaturity(lumpSum / (years * 12), years, rate);
 
   const Slider = ({ label, value, setValue, min, max, step, display }) => (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 12, color: '#99aacc' }}>{label}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#ff9a00' }}>{display}</span>
       </div>
@@ -160,8 +147,12 @@ function SIPCalculator() {
   );
 
   return (
-    <div style={{ paddingTop: 16 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+    <div className="fade-in">
+      <PageHeader icon="🔄" title="SIP Planner"
+        subtitle="Calculate SIP returns and compare with lump sum investment"
+        onBack={onBack} />
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         {[['sip', 'SIP Calculator'], ['compare', 'SIP vs Lump Sum']].map(([k, l]) => (
           <button key={k} className="btn-sm" onClick={() => setView(k)} style={{
             color: view === k ? '#ff9a00' : '#99aacc',
@@ -172,22 +163,23 @@ function SIPCalculator() {
       </div>
 
       {view === 'sip' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          <div>
-            <Slider label="Monthly SIP" value={monthly} setValue={setMonthly} min={500} max={100000} step={500} display={fmtRs(monthly)} />
-            <Slider label="Duration" value={years} setValue={setYears} min={1} max={30} step={1} display={`${years} years`} />
-            <Slider label="Expected Return" value={rate} setValue={setRate} min={4} max={25} step={0.5} display={`${rate}%`} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div className="card">
+            <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.15em', marginBottom: 20 }}>INPUTS</div>
+            <Slider label="Monthly SIP Amount" value={monthly} setValue={setMonthly} min={500} max={100000} step={500} display={fmtRs(monthly)} />
+            <Slider label="Investment Duration" value={years}   setValue={setYears}   min={1}   max={30}     step={1}   display={`${years} years`} />
+            <Slider label="Expected Annual Return" value={rate} setValue={setRate}    min={4}   max={25}     step={0.5} display={`${rate}%`} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[
               { label: 'MATURITY VALUE', value: fmtRs(maturity), color: '#00ff88', large: true },
               { label: 'TOTAL INVESTED', value: fmtRs(invested), color: '#e8e8f0' },
               { label: 'WEALTH GAIN',    value: fmtRs(gain),     color: '#ff9a00' },
-              { label: 'RETURNS',        value: `${((gain / invested) * 100).toFixed(1)}%`, color: '#4488ff' },
+              { label: 'TOTAL RETURNS',  value: `${((gain / invested) * 100).toFixed(1)}%`, color: '#4488ff' },
             ].map((item, i) => (
-              <div key={i} className="card" style={{ textAlign: 'center', padding: '10px 14px', borderColor: item.color + '33' }}>
-                <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.15em', marginBottom: 4 }}>{item.label}</div>
-                <div style={{ fontSize: item.large ? 24 : 17, fontWeight: 700, color: item.color,
+              <div key={i} className="card" style={{ textAlign: 'center', borderColor: item.color + '33' }}>
+                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.15em', marginBottom: 8 }}>{item.label}</div>
+                <div style={{ fontSize: item.large ? 32 : 22, fontWeight: 700, color: item.color,
                   fontFamily: item.large ? "'Bebas Neue',sans-serif" : 'inherit' }}>{item.value}</div>
               </div>
             ))}
@@ -196,41 +188,44 @@ function SIPCalculator() {
       )}
 
       {view === 'compare' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-          <div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+          <div className="card">
+            <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.15em', marginBottom: 20 }}>INPUTS</div>
             <Slider label="Total Investment" value={lumpSum} setValue={setLumpSum} min={10000} max={10000000} step={10000} display={fmtRs(lumpSum)} />
-            <Slider label="Duration" value={years} setValue={setYears} min={1} max={30} step={1} display={`${years} yrs`} />
-            <Slider label="Expected Return" value={rate} setValue={setRate} min={4} max={25} step={0.5} display={`${rate}%`} />
+            <Slider label="Duration"         value={years}   setValue={setYears}   min={1}     max={30}       step={1}     display={`${years} yrs`} />
+            <Slider label="Expected Return"  value={rate}    setValue={setRate}    min={4}     max={25}       step={0.5}   display={`${rate}%`} />
           </div>
           {[
             { label: 'LUMP SUM',         color: '#4488ff', maturity: lsMaturity, invested: lumpSum },
             { label: 'SIP (same total)', color: '#00ff88', maturity: sipTotal,   invested: lumpSum },
           ].map((col, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 10, color: col.color, letterSpacing: '0.15em', textAlign: 'center' }}>{col.label}</div>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 10, color: col.color, letterSpacing: '0.15em', textAlign: 'center', marginBottom: 4 }}>{col.label}</div>
               {[
-                { label: 'MATURITY', value: fmtRs(col.maturity),                  color: col.color, large: true },
-                { label: 'INVESTED', value: fmtRs(col.invested),                  color: '#e8e8f0' },
-                { label: 'GAIN',     value: fmtRs(col.maturity - col.invested),   color: col.color },
+                { label: 'MATURITY', value: fmtRs(col.maturity),              color: col.color, large: true },
+                { label: 'INVESTED', value: fmtRs(col.invested),              color: '#e8e8f0' },
+                { label: 'GAIN',     value: fmtRs(col.maturity - col.invested), color: col.color },
               ].map((item, j) => (
-                <div key={j} className="card" style={{ textAlign: 'center', padding: '8px', borderColor: item.color + '33' }}>
-                  <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3 }}>{item.label}</div>
-                  <div style={{ fontSize: item.large ? 20 : 13, fontWeight: 700, color: item.color }}>{item.value}</div>
+                <div key={j} className="card" style={{ textAlign: 'center', borderColor: item.color + '33' }}>
+                  <div style={{ fontSize: 10, color: '#7788aa', marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ fontSize: item.large ? 28 : 18, fontWeight: 700, color: item.color,
+                    fontFamily: item.large ? "'Bebas Neue',sans-serif" : 'inherit' }}>{item.value}</div>
                 </div>
               ))}
             </div>
           ))}
         </div>
       )}
-      <div style={{ fontSize: 10, color: '#445', marginTop: 14, textAlign: 'center' }}>
+      <div style={{ fontSize: 11, color: '#445', marginTop: 20, textAlign: 'center' }}>
         Returns are estimated. Past performance does not indicate future results.
       </div>
     </div>
   );
 }
 
-// ── Tool: AI Portfolio Recommender ────────────────────────────────────────────
-function AIPortfolioRecommender({ sipAmount, setSipAmount }) {
+// ── Page: AI Portfolio ────────────────────────────────────────────────────────
+function PortfolioPage({ onBack }) {
+  const [sipAmount, setSipAmount] = useState(10000);
   const [answers,   setAnswers]   = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult,  setAiResult]  = useState(null);
@@ -238,10 +233,10 @@ function AIPortfolioRecommender({ sipAmount, setSipAmount }) {
   const [error,     setError]     = useState('');
 
   const handleAnswer = (idx, score) => { const next = [...answers]; next[idx] = score; setAnswers(next); };
-  const allAnswered   = answers.length === RISK_QUESTIONS.length && answers.every(a => a != null);
-  const totalScore    = answers.reduce((a, b) => a + (b || 0), 0);
-  const riskProfile   = allAnswered ? getRiskProfile(totalScore) : null;
-  const allocation    = allAnswered ? getPortfolioAllocation(totalScore) : null;
+  const allAnswered = answers.length === RISK_QUESTIONS.length && answers.every(a => a != null);
+  const totalScore  = answers.reduce((a, b) => a + (b || 0), 0);
+  const riskProfile = allAnswered ? getRiskProfile(totalScore) : null;
+  const allocation  = allAnswered ? getPortfolioAllocation(totalScore) : null;
 
   const getAIRecommendation = async () => {
     setAiLoading(true); setError('');
@@ -262,102 +257,108 @@ function AIPortfolioRecommender({ sipAmount, setSipAmount }) {
     setAiLoading(false);
   };
 
-  if (step === 1 && aiResult) return (
-    <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <button className="btn-sm" onClick={() => { setStep(0); setAiResult(null); setAnswers([]); }}
-        style={{ alignSelf: 'flex-start' }}>RETAKE QUIZ</button>
-      <div className="card" style={{ borderColor: '#00ff8833' }}>
-        <div style={{ fontSize: 11, color: '#00ff88', marginBottom: 8 }}>AI RECOMMENDATION</div>
-        <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.summary}</div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-        {aiResult.topPicks?.map((pick, i) => (
-          <div key={i} className="card" style={{ borderColor: '#ff9a0033' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Pill label={pick.type} color={pick.type === 'ETF' ? '#ff9a00' : '#4488ff'} />
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ff9a00' }}>{pick.allocation}%</div>
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#e8e8f0', marginBottom: 4 }}>{pick.name}</div>
-            {pick.symbol && <div style={{ fontSize: 11, color: '#7788aa', marginBottom: 6 }}>{pick.symbol}</div>}
-            <div style={{ fontSize: 11, color: '#99aacc', lineHeight: 1.6 }}>{pick.reason}</div>
-          </div>
-        ))}
-      </div>
-      {aiResult.monthlyPlan && (
-        <div className="card">
-          <div style={{ fontSize: 11, color: '#ff9a00', marginBottom: 10 }}>MONTHLY SIP BREAKDOWN</div>
-          {aiResult.monthlyPlan.breakdown?.map((b, i) => (
-            <div key={i} className="kv">
-              <span className="kv-key">{b.instrument}</span>
-              <span className="kv-value" style={{ color: '#ff9a00' }}>{fmtRs(b.amount)}/mo</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {aiResult.advice && (
-        <div className="card" style={{ borderLeft: '3px solid #ff9a0055' }}>
-          <div style={{ fontSize: 12, color: '#b0c0dd', lineHeight: 1.8, fontStyle: 'italic' }}>{aiResult.advice}</div>
-        </div>
-      )}
-    </div>
-  );
-
   return (
-    <div style={{ paddingTop: 16 }}>
-      <div style={{ marginBottom: 20, padding: '12px 16px', background: '#0a0a14', borderRadius: 4, border: '1px solid #1a1a2e' }}>
-        <div style={{ fontSize: 12, color: '#99aacc', marginBottom: 8 }}>Monthly SIP budget</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <input type="range" min={500} max={100000} step={500} value={sipAmount}
-            onChange={e => setSipAmount(Number(e.target.value))}
-            style={{ flex: 1, accentColor: '#ff9a00' }} />
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#ff9a00', minWidth: 80 }}>{fmtRs(sipAmount)}</span>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {RISK_QUESTIONS.map((q, qi) => (
-          <div key={qi} className="card">
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#c8d8f0', marginBottom: 10 }}>
-              <span style={{ color: '#ff9a00', marginRight: 8 }}>{qi + 1}.</span>{q.q}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {q.options.map((opt, oi) => (
-                <button key={oi} onClick={() => handleAnswer(qi, opt.score)} style={{
-                  padding: '9px 12px', textAlign: 'left', fontSize: 12,
-                  background: answers[qi] === opt.score ? '#ff9a0022' : '#0a0a14',
-                  border: `1px solid ${answers[qi] === opt.score ? '#ff9a00' : '#2a2a3e'}`,
-                  color: answers[qi] === opt.score ? '#ff9a00' : '#b0c0dd',
-                  cursor: 'pointer', borderRadius: 4, fontFamily: 'inherit',
-                }}>{opt.label}</button>
-              ))}
-            </div>
+    <div className="fade-in">
+      <PageHeader icon="🤖" title="AI Portfolio Recommender"
+        subtitle="Answer 4 questions to get a personalised ETF and mutual fund allocation"
+        onBack={onBack} />
+
+      {step === 1 && aiResult ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <button className="btn-sm" onClick={() => { setStep(0); setAiResult(null); setAnswers([]); }}
+            style={{ alignSelf: 'flex-start' }}>RETAKE QUIZ</button>
+          <div className="card" style={{ borderColor: '#00ff8833' }}>
+            <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.12em', marginBottom: 10 }}>AI RECOMMENDATION</div>
+            <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.summary}</div>
           </div>
-        ))}
-        {allAnswered && (
-          <div className="card" style={{ borderColor: riskProfile.color + '44', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: '#7788aa', marginBottom: 6 }}>YOUR RISK PROFILE</div>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 30, color: riskProfile.color, marginBottom: 4 }}>{riskProfile.label}</div>
-            <div style={{ fontSize: 12, color: '#7788aa', marginBottom: 16 }}>Expected return: ~{riskProfile.expected}%</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 16 }}>
-              {Object.entries(allocation).map(([k, v]) => (
-                <div key={k} style={{ background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 4, padding: '6px 12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: riskProfile.color }}>{v}%</div>
-                  <div style={{ fontSize: 10, color: '#7788aa' }}>{k}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+            {aiResult.topPicks?.map((pick, i) => (
+              <div key={i} className="card" style={{ borderColor: '#ff9a0033' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <Pill label={pick.type} color={pick.type === 'ETF' ? '#ff9a00' : '#4488ff'} />
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24, color: '#ff9a00' }}>{pick.allocation}%</div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0', marginBottom: 4 }}>{pick.name}</div>
+                {pick.symbol && <div style={{ fontSize: 11, color: '#7788aa', marginBottom: 8 }}>{pick.symbol}</div>}
+                <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{pick.reason}</div>
+              </div>
+            ))}
+          </div>
+          {aiResult.monthlyPlan && (
+            <div className="card">
+              <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 14 }}>MONTHLY SIP BREAKDOWN — {fmtRs(aiResult.monthlyPlan.total)}</div>
+              {aiResult.monthlyPlan.breakdown?.map((b, i) => (
+                <div key={i} className="kv">
+                  <span className="kv-key">{b.instrument}</span>
+                  <span className="kv-value" style={{ color: '#ff9a00' }}>{fmtRs(b.amount)}/mo</span>
                 </div>
               ))}
             </div>
-            {error && <div style={{ fontSize: 12, color: '#ff4444', marginBottom: 10 }}>{error}</div>}
-            <button className="btn" onClick={getAIRecommendation} disabled={aiLoading}>
-              {aiLoading ? 'GENERATING...' : 'GET AI PORTFOLIO RECOMMENDATION'}
-            </button>
+          )}
+          {aiResult.advice && (
+            <div className="card" style={{ borderLeft: '3px solid #ff9a0055' }}>
+              <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8, fontStyle: 'italic' }}>{aiResult.advice}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 12, color: '#99aacc', marginBottom: 10 }}>Monthly SIP budget</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <input type="range" min={500} max={100000} step={500} value={sipAmount}
+                onChange={e => setSipAmount(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#ff9a00' }} />
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#ff9a00', minWidth: 90 }}>{fmtRs(sipAmount)}</span>
+            </div>
           </div>
-        )}
-      </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {RISK_QUESTIONS.map((q, qi) => (
+              <div key={qi} className="card">
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#c8d8f0', marginBottom: 14 }}>
+                  <span style={{ color: '#ff9a00', marginRight: 10 }}>{qi + 1}.</span>{q.q}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {q.options.map((opt, oi) => (
+                    <button key={oi} onClick={() => handleAnswer(qi, opt.score)} style={{
+                      padding: '11px 14px', textAlign: 'left', fontSize: 13,
+                      background: answers[qi] === opt.score ? '#ff9a0022' : '#0a0a14',
+                      border: `1px solid ${answers[qi] === opt.score ? '#ff9a00' : '#2a2a3e'}`,
+                      color: answers[qi] === opt.score ? '#ff9a00' : '#b0c0dd',
+                      cursor: 'pointer', borderRadius: 4, fontFamily: 'inherit', transition: 'all 0.12s',
+                    }}>{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {allAnswered && (
+              <div className="card" style={{ borderColor: riskProfile.color + '44', textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#7788aa', letterSpacing: '0.15em', marginBottom: 10 }}>YOUR RISK PROFILE</div>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 36, color: riskProfile.color, marginBottom: 6 }}>{riskProfile.label}</div>
+                <div style={{ fontSize: 13, color: '#7788aa', marginBottom: 20 }}>Expected annual return: ~{riskProfile.expected}%</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 24 }}>
+                  {Object.entries(allocation).map(([k, v]) => (
+                    <div key={k} style={{ background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 4, padding: '10px 16px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: riskProfile.color }}>{v}%</div>
+                      <div style={{ fontSize: 11, color: '#7788aa', marginTop: 2 }}>{k}</div>
+                    </div>
+                  ))}
+                </div>
+                {error && <div style={{ fontSize: 12, color: '#ff4444', marginBottom: 12 }}>{error}</div>}
+                <button className="btn" onClick={getAIRecommendation} disabled={aiLoading} style={{ fontSize: 14, padding: '12px 32px' }}>
+                  {aiLoading ? 'GENERATING...' : 'GET AI PORTFOLIO RECOMMENDATION'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Tool: SIP Tracker ─────────────────────────────────────────────────────────
-function SIPTracker() {
+// ── Page: My SIPs ─────────────────────────────────────────────────────────────
+function SIPTrackerPage({ onBack }) {
   const [sips,   setSips]   = useState(() => { try { return JSON.parse(localStorage.getItem('quaint_sips') || '[]'); } catch { return []; } });
   const [form,   setForm]   = useState({ name: '', amount: '', startDate: '', frequency: 'monthly' });
   const [adding, setAdding] = useState(false);
@@ -370,33 +371,39 @@ function SIPTracker() {
   };
 
   return (
-    <div style={{ paddingTop: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: '#7788aa' }}>{sips.length} active SIP{sips.length !== 1 ? 's' : ''}</div>
-        <button className="btn-sm" onClick={() => setAdding(!adding)}
-          style={{ color: '#00ff88', borderColor: '#00ff8844' }}>
+    <div className="fade-in">
+      <PageHeader icon="📊" title="My SIPs"
+        subtitle="Track your active SIPs and monitor total invested amount"
+        onBack={onBack} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <div style={{ fontSize: 13, color: '#7788aa' }}>{sips.length} active SIP{sips.length !== 1 ? 's' : ''}</div>
+        <button className="btn" onClick={() => setAdding(!adding)}
+          style={{ color: '#00ff88', borderColor: '#00ff8844', background: '#00ff8811' }}>
           {adding ? 'CANCEL' : '+ ADD SIP'}
         </button>
       </div>
 
       {adding && (
-        <div className="card" style={{ marginBottom: 14, borderColor: '#00ff8833' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
+        <div className="card" style={{ marginBottom: 20, borderColor: '#00ff8833' }}>
+          <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 16 }}>NEW SIP</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
             {[
-              { label: 'NAME',       key: 'name',      type: 'text',   ph: 'e.g. NIFTYBEES' },
-              { label: 'AMOUNT (₹)', key: 'amount',    type: 'number', ph: '5000'           },
-              { label: 'START DATE', key: 'startDate', type: 'date',   ph: ''               },
+              { label: 'FUND / ETF NAME', key: 'name',      type: 'text',   ph: 'e.g. NIFTYBEES or UTI Nifty 50' },
+              { label: 'AMOUNT (₹)',      key: 'amount',    type: 'number', ph: '5000'                            },
+              { label: 'START DATE',      key: 'startDate', type: 'date',   ph: ''                                },
             ].map(f => (
               <div key={f.key}>
-                <div style={{ fontSize: 10, color: '#7788aa', marginBottom: 4 }}>{f.label}</div>
+                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>{f.label}</div>
                 <input className="input" type={f.type} placeholder={f.ph}
                   value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
               </div>
             ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'end' }}>
             <div>
-              <div style={{ fontSize: 10, color: '#7788aa', marginBottom: 4 }}>FREQ</div>
-              <select className="input" value={form.frequency}
-                onChange={e => setForm({ ...form, frequency: e.target.value })}>
+              <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>FREQUENCY</div>
+              <select className="input" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })}>
                 <option value="monthly">Monthly</option>
                 <option value="weekly">Weekly</option>
                 <option value="quarterly">Quarterly</option>
@@ -407,47 +414,50 @@ function SIPTracker() {
               save([...sips, { ...form, id: Date.now(), amount: Number(form.amount) }]);
               setForm({ name: '', amount: '', startDate: '', frequency: 'monthly' });
               setAdding(false);
-            }}>ADD</button>
+            }}>ADD SIP</button>
           </div>
         </div>
       )}
 
       {sips.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '32px 0', color: '#445' }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>📊</div>
-          <div style={{ fontSize: 13 }}>No SIPs tracked yet. Click + ADD SIP to start.</div>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#445' }}>
+          <div style={{ fontSize: 48, marginBottom: 14 }}>📊</div>
+          <div style={{ fontSize: 15, color: '#556', marginBottom: 8 }}>No SIPs tracked yet</div>
+          <div style={{ fontSize: 13, color: '#445' }}>Click + ADD SIP to start tracking your investments.</div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 8 }}>
             {[
-              { l: 'MONTHLY',    v: fmtRs(sips.reduce((a, s) => a + s.amount, 0)),                       c: '#ff9a00' },
-              { l: 'INVESTED',   v: fmtRs(sips.reduce((a, s) => a + getStats(s).invested, 0)),           c: '#4488ff' },
-              { l: 'ACTIVE SIPs', v: sips.length,                                                         c: '#00ff88' },
+              { l: 'TOTAL MONTHLY',  v: fmtRs(sips.reduce((a, s) => a + s.amount, 0)),                     c: '#ff9a00' },
+              { l: 'TOTAL INVESTED', v: fmtRs(sips.reduce((a, s) => a + getStats(s).invested, 0)),         c: '#4488ff' },
+              { l: 'ACTIVE SIPs',    v: sips.length,                                                         c: '#00ff88' },
             ].map((s, i) => (
-              <div key={i} className="card" style={{ textAlign: 'center', padding: '10px', borderColor: s.c + '33' }}>
-                <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3 }}>{s.l}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: s.c }}>{s.v}</div>
+              <div key={i} className="card" style={{ textAlign: 'center', borderColor: s.c + '33' }}>
+                <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.15em', marginBottom: 6 }}>{s.l}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.c }}>{s.v}</div>
               </div>
             ))}
           </div>
           {sips.map(sip => {
             const { months, invested } = getStats(sip);
             return (
-              <div key={sip.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <div key={sip.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0' }}>{sip.name}</div>
-                  <div style={{ fontSize: 11, color: '#7788aa' }}>{sip.frequency}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#e8e8f0' }}>{sip.name}</div>
+                  <div style={{ fontSize: 11, color: '#7788aa', marginTop: 3 }}>
+                    {sip.frequency} · since {new Date(sip.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
                   {[
                     { l: 'MONTHLY',  v: fmtRs(sip.amount), c: '#ff9a00' },
                     { l: 'INVESTED', v: fmtRs(invested),   c: '#4488ff' },
                     { l: 'MONTHS',   v: months,             c: '#b0c0dd' },
                   ].map((x, i) => (
                     <div key={i} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 9, color: '#7788aa' }}>{x.l}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: x.c }}>{x.v}</div>
+                      <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.1em' }}>{x.l}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: x.c }}>{x.v}</div>
                     </div>
                   ))}
                   <button className="btn-sm btn-danger"
@@ -462,13 +472,17 @@ function SIPTracker() {
   );
 }
 
-// ── Tool: ETF Scanner ─────────────────────────────────────────────────────────
-function ETFScanner({ onScan }) {
+// ── Page: ETFs ────────────────────────────────────────────────────────────────
+function ETFPage({ onBack, onScan }) {
   const [category, setCategory] = useState('INDEX');
 
   return (
-    <div style={{ paddingTop: 16 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+    <div className="fade-in">
+      <PageHeader icon="📈" title="NSE ETFs"
+        subtitle="Live prices from NSE — click any ETF to run an AI scan"
+        onBack={onBack} />
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {Object.keys(ETF_UNIVERSE).map(cat => (
           <button key={cat} className="btn-sm" onClick={() => setCategory(cat)} style={{
             color:       category === cat ? '#ff9a00' : '#99aacc',
@@ -477,10 +491,9 @@ function ETFScanner({ onScan }) {
           }}>{cat}</button>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10 }}>
-        {ETF_UNIVERSE[category].map(etf => (
-          <ETFCard key={etf.symbol} etf={etf} onScan={onScan} />
-        ))}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+        {ETF_UNIVERSE[category].map(etf => <ETFCard key={etf.symbol} etf={etf} onScan={onScan} />)}
       </div>
     </div>
   );
@@ -498,34 +511,34 @@ function ETFCard({ etf, onScan }) {
   const isUp = (price?.changePct || 0) >= 0;
   return (
     <div style={{ background: '#0f0f1a', border: '1px solid #2a2a40', borderRadius: 6,
-      padding: '12px 14px', cursor: 'pointer', transition: 'border-color 0.15s' }}
+      padding: '14px 16px', cursor: 'pointer', transition: 'border-color 0.15s' }}
       onClick={() => onScan(etf.symbol)}
       onMouseEnter={e => e.currentTarget.style.borderColor = '#ff9a0066'}
       onMouseLeave={e => e.currentTarget.style.borderColor = '#2a2a40'}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#fff' }}>{etf.symbol}</div>
-          <div style={{ fontSize: 10, color: '#7788aa' }}>{etf.name}</div>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: '#fff' }}>{etf.symbol}</div>
+          <div style={{ fontSize: 11, color: '#7788aa', marginTop: 2 }}>{etf.name}</div>
         </div>
-        {loading ? <div style={{ fontSize: 10, color: '#445' }}>—</div> : price?.price ? (
+        {loading ? <div style={{ fontSize: 11, color: '#445' }}>—</div> : price?.price ? (
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#e8e8f0' }}>{fmtRs(price.price)}</div>
-            <div style={{ fontSize: 11, color: isUp ? '#00ff88' : '#ff4444' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#e8e8f0' }}>{fmtRs(price.price)}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: isUp ? '#00ff88' : '#ff4444' }}>
               {isUp ? '+' : ''}{(price.changePct || 0).toFixed(2)}%
             </div>
           </div>
-        ) : <div style={{ fontSize: 10, color: '#445' }}>N/A</div>}
+        ) : <div style={{ fontSize: 11, color: '#445' }}>N/A</div>}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 10, color: '#445' }}>Tracks: {etf.tracking}</div>
-        <div style={{ fontSize: 9, color: '#ff9a0077' }}>SCAN →</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 11, color: '#445' }}>Tracks: {etf.tracking}</div>
+        <div style={{ fontSize: 10, color: '#ff9a0077' }}>SCAN →</div>
       </div>
     </div>
   );
 }
 
-// ── Tool: Mutual Fund Explorer ────────────────────────────────────────────────
-function MFExplorer() {
+// ── Page: Mutual Funds ────────────────────────────────────────────────────────
+function MFPage({ onBack }) {
   const [navData, setNavData] = useState({});
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState('All');
@@ -544,8 +557,12 @@ function MFExplorer() {
   const filtered   = filter === 'All' ? MF_LIST : MF_LIST.filter(m => m.category === filter);
 
   return (
-    <div style={{ paddingTop: 16 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+    <div className="fade-in">
+      <PageHeader icon="🏦" title="Mutual Fund Explorer"
+        subtitle="Live NAV data for popular Indian mutual funds via MFAPI.in"
+        onBack={onBack} />
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {categories.map(c => (
           <button key={c} className="btn-sm" onClick={() => setFilter(c)} style={{
             color:       filter === c ? '#4488ff' : '#99aacc',
@@ -554,114 +571,144 @@ function MFExplorer() {
           }}>{c}</button>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10 }}>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
         {filtered.map(mf => {
           const nav = navData[mf.schemeCode];
           return (
             <div key={mf.schemeCode} className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                <div style={{ flex: 1, marginRight: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e8e8f0', lineHeight: 1.4, marginBottom: 6 }}>{mf.name}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, marginRight: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0', lineHeight: 1.4, marginBottom: 8 }}>{mf.name}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <Pill label={mf.category} color="#4488ff" />
                     <Pill label={mf.risk} color={mf.risk === 'Low' ? '#00ff88' : mf.risk === 'High' ? '#ff4444' : '#ffaa00'} />
                   </div>
                 </div>
-                {loading ? <div style={{ fontSize: 10, color: '#445' }}>—</div> : nav?.nav ? (
+                {loading ? (
+                  <div style={{ fontSize: 12, color: '#445', animation: 'pulse 1s infinite' }}>—</div>
+                ) : nav?.nav ? (
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e8e8f0' }}>{fmtRs(nav.nav)}</div>
-                    <div style={{ fontSize: 10, color: '#556677' }}>{nav.date}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#e8e8f0' }}>{fmtRs(nav.nav)}</div>
+                    <div style={{ fontSize: 10, color: '#556677', marginTop: 2 }}>NAV · {nav.date}</div>
                   </div>
-                ) : <div style={{ fontSize: 10, color: '#445' }}>N/A</div>}
+                ) : <div style={{ fontSize: 12, color: '#445' }}>N/A</div>}
               </div>
+              <div style={{ fontSize: 10, color: '#2a2a3e', marginTop: 10 }}>Scheme: {mf.schemeCode}</div>
             </div>
           );
         })}
       </div>
-      <div style={{ fontSize: 10, color: '#445', marginTop: 10, textAlign: 'center' }}>
-        NAV from MFAPI.in · Updated daily · Not investment advice
+      <div style={{ fontSize: 11, color: '#445', marginTop: 16, textAlign: 'center' }}>
+        NAV data from MFAPI.in · Updated daily · Not investment advice
       </div>
     </div>
   );
 }
 
-// ── Tab config ────────────────────────────────────────────────────────────────
+// ── Tab definitions ───────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'sip',       icon: '🔄', label: 'SIP Planner',  desc: 'Calculate SIP returns and compare with lump sum investment'    },
-  { id: 'portfolio', icon: '🤖', label: 'AI Portfolio', desc: 'Personalised ETF allocation based on your risk profile'        },
-  { id: 'tracker',   icon: '📊', label: 'My SIPs',      desc: 'Track your active SIPs and monitor total invested'             },
-  { id: 'etfs',      icon: '📈', label: 'ETFs',         desc: 'Browse 28+ NSE ETFs with live prices — click to scan'         },
-  { id: 'mf',        icon: '🏦', label: 'Mutual Funds', desc: 'Explore popular mutual funds with live NAV data'               },
+  { id: 'sip',       icon: '🔄', label: 'SIP Planner',  desc: 'Calculate SIP returns · Compare with lump sum'            },
+  { id: 'portfolio', icon: '🤖', label: 'AI Portfolio', desc: 'Risk quiz → personalised ETF & MF allocation'             },
+  { id: 'tracker',   icon: '📊', label: 'My SIPs',      desc: 'Track active SIPs · Monitor total invested amount'        },
+  { id: 'etfs',      icon: '📈', label: 'ETFs',         desc: '28+ NSE ETFs with live prices · Click to run AI scan'     },
+  { id: 'mf',        icon: '🏦', label: 'Mutual Funds', desc: 'Live NAV data for popular index and sectoral funds'       },
 ];
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function IndiaInvestTab({ onScanTicker }) {
-  const [openTab,     setOpenTab]     = useState(null);
-  const [sipAmount,   setSipAmount]   = useState(10000);
+  const [activePage,  setActivePage]  = useState(null); // null = overview
   const [showUpgrade, setShowUpgrade] = useState(false);
   const { plan } = useUsage();
   const isPro = plan === 'pro';
 
-  const toggle = (id) => setOpenTab(prev => prev === id ? null : id);
+  const goBack = () => setActivePage(null);
+
+  // ── Overview — 5 full-width tab cards ──────────────────────────────────────
+  const Overview = () => (
+    <div className="fade-in">
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', marginBottom: 4 }}>INVEST</div>
+        <div style={{ fontSize: 12, color: '#7788aa' }}>SIP Planner · AI Portfolio · ETFs · Mutual Funds · India only</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActivePage(tab.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 16, width: '100%',
+              background: '#0f0f1a', border: '1px solid #2a2a40',
+              borderLeft: '3px solid #ff9a0055',
+              borderRadius: 6, padding: '18px 20px', cursor: 'pointer',
+              textAlign: 'left', fontFamily: 'inherit', transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff9a00'; e.currentTarget.style.background = '#ff9a0008'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a40'; e.currentTarget.style.background = '#0f0f1a'; e.currentTarget.style.borderLeftColor = '#ff9a0055'; }}
+          >
+            <span style={{ fontSize: 26, flexShrink: 0 }}>{tab.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: '#c8d8f0', letterSpacing: '0.05em', marginBottom: 3 }}>
+                {tab.label}
+              </div>
+              <div style={{ fontSize: 12, color: '#556677' }}>{tab.desc}</div>
+            </div>
+            <div style={{ fontSize: 14, color: '#3a3a5e', flexShrink: 0 }}>›</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Upgrade wall ────────────────────────────────────────────────────────────
+  const UpgradeWall = () => (
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', marginBottom: 4 }}>INVEST</div>
+        <div style={{ fontSize: 12, color: '#7788aa' }}>SIP Planner · AI Portfolio · ETFs · Mutual Funds · India only</div>
+      </div>
+      <div style={{ background: '#0f0f1a', border: '1px solid #ff9a0044', borderTop: '3px solid #ff9a00',
+        borderRadius: 6, padding: '40px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 14 }}>🔒</div>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 30, color: '#ff9a00', marginBottom: 12 }}>PRO FEATURE</div>
+        <div style={{ fontSize: 13, color: '#99aacc', lineHeight: 1.8, maxWidth: 460, margin: '0 auto 24px' }}>
+          Invest gives you SIP planning tools, AI portfolio recommendations, ETF signals, and mutual fund NAV data — all in one place.
+        </div>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 44, color: '#ff9a00', marginBottom: 4 }}>
+          ₹249<span style={{ fontSize: 22 }}>/mo</span>
+        </div>
+        <div style={{ fontSize: 12, color: '#7788aa', marginBottom: 28 }}>No credit card required · First month free</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 400, margin: '0 auto 32px', textAlign: 'left' }}>
+          {['SIP calculator with SIP vs Lump Sum comparison', 'AI portfolio recommender based on your risk profile', 'Track all your active SIPs', 'NSE ETF scanner with live prices', 'Mutual fund NAV explorer'].map((f, i) => (
+            <div key={i} style={{ fontSize: 13, color: '#b0c0dd', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: '#ff9a00', flexShrink: 0, fontSize: 14 }}>✓</span>{f}
+            </div>
+          ))}
+        </div>
+        <button className="btn" onClick={() => setShowUpgrade(true)}
+          style={{ fontSize: 14, padding: '14px 52px', background: '#ff9a0022', borderColor: '#ff9a00', color: '#ff9a00' }}>
+          START FREE MONTH →
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div>
       {showUpgrade && <UpgradeModal type="scan" onClose={() => setShowUpgrade(false)} />}
 
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', marginBottom: 4 }}>INVEST</div>
-        <div style={{ fontSize: 12, color: '#7788aa' }}>SIP Planner · AI Portfolio · ETFs · Mutual Funds · India only</div>
-      </div>
+      {!isPro ? <UpgradeWall /> : activePage === null  ? <Overview /> :
+        activePage === 'sip'       ? <SIPPage       onBack={goBack} /> :
+        activePage === 'portfolio' ? <PortfolioPage  onBack={goBack} /> :
+        activePage === 'tracker'   ? <SIPTrackerPage onBack={goBack} /> :
+        activePage === 'etfs'      ? <ETFPage        onBack={goBack} onScan={onScanTicker} /> :
+        activePage === 'mf'        ? <MFPage         onBack={goBack} /> :
+        <Overview />
+      }
 
-      {!isPro ? (
-        // ── Upgrade wall ──────────────────────────────────────────────────────
-        <div style={{ background: '#0f0f1a', border: '1px solid #ff9a0044',
-          borderTop: '3px solid #ff9a00', borderRadius: 6, padding: '40px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', marginBottom: 10 }}>PRO FEATURE</div>
-          <div style={{ fontSize: 13, color: '#99aacc', lineHeight: 1.8, maxWidth: 440, margin: '0 auto 24px' }}>
-            Invest gives you SIP planning tools, AI portfolio recommendations, ETF signals, and mutual fund NAV data.
-          </div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 40, color: '#ff9a00', marginBottom: 4 }}>
-            ₹249<span style={{ fontSize: 20 }}>/mo</span>
-          </div>
-          <div style={{ fontSize: 11, color: '#7788aa', marginBottom: 24 }}>No credit card required · 30 days free</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 380, margin: '0 auto 28px', textAlign: 'left' }}>
-            {['SIP calculator with SIP vs Lump Sum', 'AI portfolio recommender', 'Track active SIPs', 'NSE ETF scanner with live prices', 'Mutual fund NAV explorer'].map((f, i) => (
-              <div key={i} style={{ fontSize: 13, color: '#b0c0dd', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#ff9a00', flexShrink: 0 }}>✓</span>{f}
-              </div>
-            ))}
-          </div>
-          <button className="btn" onClick={() => setShowUpgrade(true)}
-            style={{ fontSize: 14, padding: '14px 48px', background: '#ff9a0022', borderColor: '#ff9a00', color: '#ff9a00' }}>
-            START FREE MONTH →
-          </button>
-        </div>
-      ) : (
-        // ── Accordion tabs ────────────────────────────────────────────────────
-        <div>
-          {TABS.map(tab => (
-            <AccordionCard
-              key={tab.id}
-              icon={tab.icon}
-              title={tab.label}
-              subtitle={tab.desc}
-              isOpen={openTab === tab.id}
-              onToggle={() => toggle(tab.id)}
-              accent="#ff9a00"
-            >
-              {tab.id === 'sip'       && <SIPCalculator />}
-              {tab.id === 'portfolio' && <AIPortfolioRecommender sipAmount={sipAmount} setSipAmount={setSipAmount} />}
-              {tab.id === 'tracker'   && <SIPTracker />}
-              {tab.id === 'etfs'      && <ETFScanner onScan={onScanTicker} />}
-              {tab.id === 'mf'        && <MFExplorer />}
-            </AccordionCard>
-          ))}
-          <div style={{ fontSize: 10, color: '#2a2a3e', marginTop: 20, textAlign: 'center' }}>
-            Not financial advice. Investments subject to market risk.
-          </div>
+      {isPro && activePage && (
+        <div style={{ fontSize: 10, color: '#2a2a3e', marginTop: 32, textAlign: 'center' }}>
+          Not financial advice. Investments subject to market risk. Read all scheme documents carefully.
         </div>
       )}
     </div>
