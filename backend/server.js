@@ -2432,110 +2432,86 @@ app.get('/financials/us/:ticker', async (req, res) => {
 });
 
 // Debug: test Screener.in response for India stocks
-app.get('/debug/screener/:symbol', async (req, res) => {
-  try {
-    const raw = req.params.symbol.toUpperCase();
-    const results = {};
 
-    if (nseIndia) {
-      try {
-        const corp = await nseIndia.getEquityCorporateInfo(raw);
-        const fr   = corp?.financial_results;
-        results.frType    = typeof fr;
-        results.frIsArray = Array.isArray(fr);
-        results.frKeys    = fr && !Array.isArray(fr) ? Object.keys(fr) : null;
-        results.frLength  = Array.isArray(fr) ? fr.length : null;
-        results.frFirst   = Array.isArray(fr) ? fr[0] : fr;
-        results.frRaw     = JSON.stringify(fr).slice(0, 1000);
-      } catch(e) { results.frError = e.message; }
-    }
 
-    res.json(results);
-  } catch(e) { res.json({ error: e.message }); }
-});
-
-// India — Quarterly Financials via NSE India API (stock-nse-india package)
-// Falls back to Screener.in public JSON for income statement data
+// India — Quarterly Financials via stock-nse-india getEquityCorporateInfo
+// financial_results.data contains: income (Lakhs), proLossAftTax (Lakhs), reDilEPS, to_date
 app.get('/financials/india/:symbol', async (req, res) => {
-  const raw     = req.params.symbol.toUpperCase().replace(/\.NS$/i, '');
+  const raw = req.params.symbol.toUpperCase().replace(/\.NS$/i, '');
 
   try {
-    // 1. Try stock-nse-india getEquityDetails — has some financial data
-    let quarters = [], annuals = [], yoy = {}, epsHistory = [], nextEarnings = null;
+    if (!nseIndia) return res.status(503).json({ error: 'NSE data service unavailable' });
 
-    if (nseIndia) {
-      try {
-        // NSE financial results via stock-nse-india
-        const [details, financialResults] = await Promise.allSettled([
-          nseIndia.getEquityDetails(raw),
-          nseIndia.getEquityDetails(raw), // placeholder — check if financial methods exist
-        ]);
+    const corp = await nseIndia.getEquityCorporateInfo(raw);
+    const frData = corp?.financial_results?.data || [];
 
-        // getEquityDetails has metadata.pdSectorInd, securityInfo, priceInfo
-        // For quarterly financials we need a different approach
-      } catch (e) { console.warn('[financials/india] nseIndia error:', e.message); }
+    if (!frData.length) {
+      return res.status(404).json({ error: `No financial results found for ${raw}` });
     }
 
-    // 2. Screener.in public API — works from Railway, no auth needed
-    // URL format: https://www.screener.in/api/company/{symbol}/
-    try {
-      const screenerData = await httpsGet('www.screener.in',
-        `/api/company/${encodeURIComponent(raw)}/`,
-        {
-          'User-Agent': 'Mozilla/5.0 (compatible; QuAIntSignal/1.0)',
-          'Accept': 'application/json',
-          'Referer': 'https://www.screener.in',
-        }
-      );
+    // Parse NSE financial results
+    // Values are in LAKHS (×1e5 = INR absolute)
+    const LAC = 1e5;
+    const parseRow = (r) => {
+      const revenue   = r.income           ? parseFloat(r.income)           * LAC : null;
+      const netIncome = r.proLossAftTax    ? parseFloat(r.proLossAftTax)    * LAC : null;
+      const pbt       = r.reProLossBefTax  ? parseFloat(r.reProLossBefTax)  * LAC : null;
+      const expend    = r.expenditure      ? parseFloat(r.expenditure)      * LAC : null;
+      const grossProfit = revenue && expend ? revenue - expend : null;
+      const epsDiluted  = r.reDilEPS ? parseFloat(r.reDilEPS) : null;
 
-      if (screenerData && !screenerData.error && screenerData.quarters) {
-        // Screener returns quarters array with labels like "Mar 2025"
-        const rawQ = screenerData.quarters || [];
-
-        // Map screener quarter data to our format
-        const parseScreenerQ = (q) => {
-          const rev  = q['Net Sales']    ?? q['Revenue']        ?? q['Sales']         ?? null;
-          const ni   = q['Net Profit']   ?? q['PAT']            ?? q['Net Income']    ?? null;
-          const gp   = q['Gross Profit'] ?? null;
-          const eps  = q['EPS']          ?? q['EPS (Diluted)']  ?? null;
-          return {
-            period:   q.label ?? q.period ?? null,
-            endDate:  null,
-            // Screener values are in Cr — convert to absolute
-            revenue:     rev  ? rev  * 1e7 : null,  // Cr to INR
-            netIncome:   ni   ? ni   * 1e7 : null,
-            grossProfit: gp   ? gp   * 1e7 : null,
-            epsDiluted:  eps  ?? null,
-            netMargin:   rev && ni ? parseFloat((ni / rev * 100).toFixed(2)) : null,
-            grossMargin: rev && gp ? parseFloat((gp / rev * 100).toFixed(2)) : null,
-          };
-        };
-
-        const allQ = rawQ.slice(0, 8).map(parseScreenerQ).filter(q => q.revenue || q.netIncome);
-        quarters   = allQ.slice(0, 4);
-
-        // Annual data
-        const rawA = screenerData.annuals || screenerData.annual || [];
-        annuals = rawA.slice(0, 4).map(parseScreenerQ).filter(q => q.revenue || q.netIncome);
-
-        yoy = allQ.length >= 5 ? {
-          revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
-          netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
-          epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4]?.epsDiluted),
-          netMarginYoY: allQ[0].netMargin != null && allQ[4]?.netMargin != null
-            ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
-        } : {};
+      // Derive quarter label from to_date e.g. "31 Dec 2025" → Q3 FY2026
+      let period = null;
+      if (r.to_date) {
+        const parts = r.to_date.split(' ');
+        const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+          .indexOf(parts[1]) + 1;
+        const year  = parseInt(parts[2]);
+        const q     = month <= 3 ? 'Q4' : month <= 6 ? 'Q1' : month <= 9 ? 'Q2' : 'Q3';
+        const fy    = month <= 3 ? year : year + 1; // Indian FY: Apr-Mar
+        period = `${q} FY${fy}`;
       }
-    } catch (e) { console.warn('[financials/india] screener error:', e.message); }
 
-    // 3. EPS history via Finnhub (.BO suffix for BSE)
+      return {
+        period,
+        endDate:     r.to_date ?? null,
+        audited:     r.audited ?? null,
+        revenue,
+        netIncome,
+        grossProfit,
+        epsDiluted,
+        netMargin:   revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
+        grossMargin: revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
+      };
+    };
+
+    // Filter to non-cumulative quarterly results only
+    const allQ = frData
+      .filter(r => !r.cumulative || r.cumulative === 'Non-cumulative' || r.cumulative === null)
+      .slice(0, 8)
+      .map(parseRow)
+      .filter(q => q.revenue || q.netIncome);
+
+    const quarters = allQ.slice(0, 4);
+
+    // YoY: compare q[0] to q[4] (same quarter last year)
+    const yoy = allQ.length >= 5 ? {
+      revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
+      netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
+      epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4]?.epsDiluted),
+      netMarginYoY: allQ[0].netMargin != null && allQ[4]?.netMargin != null
+        ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+    } : {};
+
+    // EPS history via Finnhub
+    let epsHistory = [];
     try {
       const earnings = await finnhubGet(`/stock/earnings?symbol=${raw}.NS`);
       if (Array.isArray(earnings) && earnings.length) {
         epsHistory = earnings.slice(0, 4).map(e => ({
-          quarter:     e.period       ?? null,
-          epsActual:   e.actual       ?? null,
-          epsEstimate: e.estimate     ?? null,
+          quarter:     e.period    ?? null,
+          epsActual:   e.actual    ?? null,
+          epsEstimate: e.estimate  ?? null,
           surprisePct: e.actual != null && e.estimate
             ? parseFloat(((e.actual - e.estimate) / Math.abs(e.estimate) * 100).toFixed(1)) : null,
           beat: (e.actual ?? 0) >= (e.estimate ?? 0),
@@ -2543,11 +2519,10 @@ app.get('/financials/india/:symbol', async (req, res) => {
       }
     } catch {}
 
-    if (!quarters.length && !annuals.length && !epsHistory.length) {
-      return res.status(404).json({ error: `No financial data available for ${raw}` });
-    }
+    // No annual data from this endpoint — skip for now
+    const annuals = [];
 
-    res.json({ symbol: raw, quarters, annuals, yoy, epsHistory, nextEarnings });
+    res.json({ symbol: raw, quarters, annuals, yoy, epsHistory, nextEarnings: null });
   } catch (e) {
     console.error('[financials/india]', e.message);
     res.status(500).json({ error: e.message });
