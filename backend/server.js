@@ -2306,6 +2306,25 @@ async function fmpGet(path) {
   });
 }
 
+// Debug: see raw Finnhub financials structure
+app.get('/debug/finnhub/:ticker', async (req, res) => {
+  try {
+    const ticker = req.params.ticker.toUpperCase();
+    const data = await finnhubGet(`/stock/financials-reported?symbol=${ticker}&freq=quarterly`);
+    const first = data?.data?.[0];
+    const ic = first?.report?.ic || [];
+    res.json({
+      totalReports: data?.data?.length,
+      firstPeriod:  first?.period,
+      firstFP:      first?.report?.fp,
+      firstFY:      first?.report?.fy,
+      icCount:      ic.length,
+      // Show first 20 income statement concepts
+      icSample:     ic.slice(0, 20).map(i => ({ concept: i.concept, label: i.label, value: i.value, unit: i.unit })),
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 // US Quarterly Financials via Finnhub (free tier, already integrated)
 // /stock/financials-reported → actual SEC-filed income statements
 // /stock/earnings → EPS surprise history
