@@ -1740,10 +1740,13 @@ async function fetchIndiaMacroData() {
     .filter(r => r.status === 'fulfilled' && r.value?.price)
     .map(r => r.value);
 
-  // 2. USD/INR via Yahoo Finance
-  let usdInr = null;
+  // 2–5. Fetch macro data via Polygon (reliable) + Yahoo fallback for USD/INR
+  // Polygon proxies: UUP≈DXY, USO≈crude, GLD≈gold
+  let usdInr = null, crude = null, gold = null;
+
+  // Try Yahoo for USD/INR (no good Polygon proxy)
   try {
-    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
+    for (const host of ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']) {
       try {
         const d = await httpsGet(host,
           '/v8/finance/chart/USDINR=X?interval=1d&range=5d',
@@ -1764,10 +1767,34 @@ async function fetchIndiaMacroData() {
     }
   } catch {}
 
-  // 3. India 10Y bond yield via Yahoo Finance (^INBY10Y or proxy)
+  // Crude + Gold via Polygon (USO = US Oil ETF, GLD = Gold ETF)
+  try {
+    const macroProxies = [
+      { poly: 'USO', yahoo: 'CL=F', key: 'crude' },
+      { poly: 'GLD', yahoo: 'GC=F', key: 'gold'  },
+    ];
+    const results = await polygonBatch(macroProxies, 5);
+    results.forEach((r, i) => {
+      if (r.current != null) {
+        const key = macroProxies[i].key;
+        if (key === 'crude') {
+          crude = { price: r.current, changePct: r.changePct };
+        } else if (key === 'gold') {
+          const inrRate = usdInr?.price || 84;
+          gold = {
+            priceUsd: r.current,
+            priceInr: Math.round(r.current * inrRate / 31.1035),
+            changePct: r.changePct,
+          };
+        }
+      }
+    });
+  } catch (e) { console.warn('[india/macro] crude/gold error:', e.message); }
+
+  // India 10Y bond yield — Yahoo only (no Polygon proxy)
   let india10Y = null;
   try {
-    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
+    for (const host of ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']) {
       try {
         const d = await httpsGet(host,
           '/v8/finance/chart/%5EINBY?interval=1d&range=5d',
@@ -1782,79 +1809,29 @@ async function fetchIndiaMacroData() {
     }
   } catch {}
 
-  // 4. Crude oil (Brent) — key for India (net importer)
-  let crude = null;
-  try {
-    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
-      try {
-        const d = await httpsGet(host,
-          '/v8/finance/chart/BZ=F?interval=1d&range=5d',
-          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-        );
-        const meta = d?.chart?.result?.[0]?.meta;
-        if (meta?.regularMarketPrice) {
-          crude = {
-            price: meta.regularMarketPrice,
-            changePct: meta.previousClose
-              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
-              : null,
-          };
-          break;
-        }
-      } catch { continue; }
-    }
-  } catch {}
-
-  // 5. Gold MCX proxy via Yahoo Finance (GC=F in USD, convert)
-  let gold = null;
-  try {
-    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
-      try {
-        const d = await httpsGet(host,
-          '/v8/finance/chart/GC=F?interval=1d&range=5d',
-          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-        );
-        const meta = d?.chart?.result?.[0]?.meta;
-        if (meta?.regularMarketPrice) {
-          const inrRate = usdInr?.price || 84;
-          gold = {
-            priceUsd: meta.regularMarketPrice,
-            priceInr: Math.round(meta.regularMarketPrice * inrRate / 31.1035), // per gram in INR
-            changePct: meta.previousClose
-              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
-              : null,
-          };
-          break;
-        }
-      } catch { continue; }
-    }
-  } catch {}
-
-  // 6. Global signals relevant to India (FII flows proxy)
+  // Global signals — via Polygon (reliable)
+  // Global signals — reuse Polygon data via polygonBatch (same as /international endpoint)
   let globalSignals = {};
   try {
-    const symbols = [
-      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/%5EGSPC?interval=1d&range=5d', key: 'sp500',  label: 'S&P 500' },
-      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/DX-Y.NYB?interval=1d&range=5d', key: 'dxy',   label: 'DXY'     },
-      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/%5EN225?interval=1d&range=5d',  key: 'n225',  label: 'Nikkei'  },
-      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/000001.SS?interval=1d&range=5d', key: 'china', label: 'Shanghai'},
+    const globalSymbols = [
+      { poly: 'SPY',  yahoo: 'SPY',       key: 'sp500', label: 'S&P 500' },
+      { poly: 'UUP',  yahoo: 'DX-Y.NYB',  key: 'dxy',   label: 'DXY'     },
+      { poly: 'EWJ',  yahoo: '^N225',      key: 'n225',  label: 'Nikkei'  },
+      { poly: 'FXI',  yahoo: '000001.SS',  key: 'china', label: 'Shanghai'},
     ];
-    await Promise.allSettled(symbols.map(async s => {
-      try {
-        const d = await httpsGet(s.host, s.path, { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' });
-        const meta = d?.chart?.result?.[0]?.meta;
-        if (meta?.regularMarketPrice) {
-          globalSignals[s.key] = {
-            label: s.label,
-            price: meta.regularMarketPrice,
-            changePct: meta.previousClose
-              ? parseFloat(((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100).toFixed(2))
-              : null,
-          };
-        }
-      } catch {}
-    }));
-  } catch {}
+    const results = await polygonBatch(globalSymbols, 5);
+    results.forEach((r, i) => {
+      if (r.current != null) {
+        globalSignals[globalSymbols[i].key] = {
+          label:     globalSymbols[i].label,
+          price:     r.current,
+          changePct: r.changePct != null ? parseFloat(r.changePct.toFixed(2)) : null,
+        };
+      }
+    });
+  } catch (e) {
+    console.warn('[india/macro] globalSignals error:', e.message);
+  }
 
   return { sectors, usdInr, india10Y, crude, gold, globalSignals, updatedAt: Date.now() };
 }
