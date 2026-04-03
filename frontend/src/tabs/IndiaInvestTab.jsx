@@ -107,7 +107,7 @@ function PageHeader({ icon, title, subtitle, onBack }) {
         onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff9a0066'; e.currentTarget.style.color = '#ff9a00'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a40'; e.currentTarget.style.color = '#b0c0dd'; }}
       >
-        ← INVEST
+        ← BACK
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 28 }}>{icon}</span>
@@ -136,9 +136,9 @@ function SIPPage({ onBack }) {
 
   const Slider = ({ label, value, setValue, min, max, step, display }) => (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 12, color: '#99aacc' }}>{label}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#ff9a00' }}>{display}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8 }}>
+        <span style={{ fontSize: 12, color: '#99aacc', flexShrink: 1 }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#ff9a00', flexShrink: 0 }}>{display}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => setValue(Number(e.target.value))}
@@ -163,14 +163,14 @@ function SIPPage({ onBack }) {
       </div>
 
       {view === 'sip' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
           <div className="card">
             <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.15em', marginBottom: 20 }}>INPUTS</div>
             <Slider label="Monthly SIP Amount" value={monthly} setValue={setMonthly} min={500} max={100000} step={500} display={fmtRs(monthly)} />
             <Slider label="Investment Duration" value={years}   setValue={setYears}   min={1}   max={30}     step={1}   display={`${years} years`} />
             <Slider label="Expected Annual Return" value={rate} setValue={setRate}    min={4}   max={25}     step={0.5} display={`${rate}%`} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
               { label: 'MATURITY VALUE', value: fmtRs(maturity), color: '#00ff88', large: true },
               { label: 'TOTAL INVESTED', value: fmtRs(invested), color: '#e8e8f0' },
@@ -188,32 +188,38 @@ function SIPPage({ onBack }) {
       )}
 
       {view === 'compare' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Inputs */}
           <div className="card">
             <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.15em', marginBottom: 20 }}>INPUTS</div>
             <Slider label="Total Investment" value={lumpSum} setValue={setLumpSum} min={10000} max={10000000} step={10000} display={fmtRs(lumpSum)} />
             <Slider label="Duration"         value={years}   setValue={setYears}   min={1}     max={30}       step={1}     display={`${years} yrs`} />
             <Slider label="Expected Return"  value={rate}    setValue={setRate}    min={4}     max={25}       step={0.5}   display={`${rate}%`} />
           </div>
-          {[
-            { label: 'LUMP SUM',         color: '#4488ff', maturity: lsMaturity, invested: lumpSum },
-            { label: 'SIP (same total)', color: '#00ff88', maturity: sipTotal,   invested: lumpSum },
-          ].map((col, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 10, color: col.color, letterSpacing: '0.15em', textAlign: 'center', marginBottom: 4 }}>{col.label}</div>
-              {[
-                { label: 'MATURITY', value: fmtRs(col.maturity),              color: col.color, large: true },
-                { label: 'INVESTED', value: fmtRs(col.invested),              color: '#e8e8f0' },
-                { label: 'GAIN',     value: fmtRs(col.maturity - col.invested), color: col.color },
-              ].map((item, j) => (
-                <div key={j} className="card" style={{ textAlign: 'center', borderColor: item.color + '33' }}>
-                  <div style={{ fontSize: 10, color: '#7788aa', marginBottom: 6 }}>{item.label}</div>
-                  <div style={{ fontSize: item.large ? 28 : 18, fontWeight: 700, color: item.color,
-                    fontFamily: item.large ? "'Bebas Neue',sans-serif" : 'inherit' }}>{item.value}</div>
-                </div>
-              ))}
-            </div>
-          ))}
+          {/* Results — 2 cols side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            {[
+              { label: 'LUMP SUM',         color: '#4488ff', maturity: lsMaturity, invested: lumpSum },
+              { label: 'SIP (same total)', color: '#00ff88', maturity: sipTotal,   invested: lumpSum },
+            ].map((col, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 10, color: col.color, letterSpacing: '0.12em',
+                  textAlign: 'center', padding: '6px 0',
+                  borderBottom: `1px solid ${col.color}33`, marginBottom: 2 }}>{col.label}</div>
+                {[
+                  { label: 'MATURITY', value: fmtRs(col.maturity),                 color: col.color, large: true },
+                  { label: 'INVESTED', value: fmtRs(col.invested),                 color: '#e8e8f0' },
+                  { label: 'GAIN',     value: fmtRs(col.maturity - col.invested),  color: col.color },
+                ].map((item, j) => (
+                  <div key={j} className="card" style={{ textAlign: 'center', borderColor: item.color + '33', padding: '12px 10px' }}>
+                    <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.12em', marginBottom: 6 }}>{item.label}</div>
+                    <div style={{ fontSize: item.large ? 26 : 16, fontWeight: 700, color: item.color,
+                      fontFamily: item.large ? "'Bebas Neue',sans-serif" : 'inherit' }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <div style={{ fontSize: 11, color: '#445', marginTop: 20, textAlign: 'center' }}>
