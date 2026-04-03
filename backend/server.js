@@ -366,6 +366,10 @@ app.get('/search', async (req, res) => {
 });
 
 app.get('/movers', async (req, res) => {
+  // Serve from cache if fresh
+  if (usMoversCache.data && Date.now() - usMoversCache.ts < US_MOVERS_TTL) {
+    return res.json({ ...usMoversCache.data, cached: true });
+  }
   try {
     const TICKERS = [
       'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
@@ -400,8 +404,13 @@ app.get('/movers', async (req, res) => {
     const volume  = [...list].filter(s => s.price >= 5 && s.volume > 0)
       .sort((a, b) => b.volume - a.volume).slice(0, 10)
       .map(s => ({ ...s, volVsAvg: s.avgVolume > 0 ? parseFloat((s.volume / s.avgVolume).toFixed(1)) : null }));
+    usMoversCache.data = { gainers, losers, volume };
+    usMoversCache.ts   = Date.now();
     res.json({ gainers, losers, volume });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (usMoversCache.data) return res.json({ ...usMoversCache.data, stale: true });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/tradier/expirations/:ticker', async (req, res) => {
@@ -1329,6 +1338,10 @@ try {
 }
 
 const nseQuoteCache   = new Map();
+const indiaMoversCache = { data: null, ts: 0 };
+const usMoversCache    = { data: null, ts: 0 };
+const INDIA_MOVERS_TTL = 5 * 60 * 1000; // 5 minutes
+const US_MOVERS_TTL    = 2 * 60 * 1000; // 2 minutes (more active market)
 const nseHistoryCache = new Map();
 const NSE_QUOTE_TTL   = 5  * 60 * 1000;
 const NSE_HISTORY_TTL = 30 * 60 * 1000;
@@ -1593,34 +1606,59 @@ app.get('/india/history/:symbol', async (req, res) => {
   }
 });
 
-// ─── GET /india/movers ────────────────────────────────────────────────────────
+// ─── India movers — cached, background refresh ───────────────────────────────
+async function fetchIndiaMoversData() {
+  const batchSize = 10;
+  const results   = [];
+  for (let i = 0; i < NIFTY50.length; i += batchSize) {
+    const batch = NIFTY50.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(batch.map(async ticker => {
+      const q = await getNSEQuote(ticker);
+      if (!q || q.price == null) return null;
+      return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
+    }));
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled' && r.value) results.push(r.value);
+    }
+    if (i + batchSize < NIFTY50.length) await sleep(150); // reduced from 300ms
+  }
+  if (!results.length) return null;
+  return {
+    gainers: [...results].sort((a, b) => b.changePct - a.changePct).filter(s => s.changePct > 0).slice(0, 10),
+    losers:  [...results].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
+    volume:  [...results].sort((a, b) => b.volume - a.volume).slice(0, 10),
+  };
+}
+
+async function warmIndiaMoversCache() {
+  try {
+    console.log('[india/movers] warming cache...');
+    const data = await fetchIndiaMoversData();
+    if (data) { indiaMoversCache.data = data; indiaMoversCache.ts = Date.now(); }
+    console.log('[india/movers] cache warm');
+  } catch (e) { console.error('[india/movers] warm error', e.message); }
+}
+
+// Warm on startup and refresh every 5 minutes
+warmIndiaMoversCache();
+setInterval(warmIndiaMoversCache, INDIA_MOVERS_TTL);
+
 app.get('/india/movers', async (req, res) => {
   try {
-    const batchSize = 10;
-    const results   = [];
-    for (let i = 0; i < NIFTY50.length; i += batchSize) {
-      const batch = NIFTY50.slice(i, i + batchSize);
-      const batchResults = await Promise.allSettled(batch.map(async ticker => {
-        const q = await getNSEQuote(ticker);
-        if (!q || q.price == null) return null;
-        return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
-      }));
-      for (const r of batchResults) {
-        if (r.status === 'fulfilled' && r.value) results.push(r.value);
-      }
-      if (i + batchSize < NIFTY50.length) await sleep(300);
+    // Serve from cache instantly if fresh
+    if (indiaMoversCache.data && Date.now() - indiaMoversCache.ts < INDIA_MOVERS_TTL) {
+      return res.json({ ...indiaMoversCache.data, cached: true });
     }
-
-    if (!results.length) return res.json({ gainers: [], losers: [], volume: [], error: 'No data available' });
-
-    const sorted  = [...results].sort((a, b) => b.changePct - a.changePct);
-    res.json({
-      gainers: sorted.filter(s => s.changePct > 0).slice(0, 10),
-      losers:  [...results].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
-      volume:  [...results].sort((a, b) => b.volume - a.volume).slice(0, 10),
-    });
+    // Cache stale — fetch fresh and update cache
+    const data = await fetchIndiaMoversData();
+    if (!data) return res.json({ gainers: [], losers: [], volume: [], error: 'No data available' });
+    indiaMoversCache.data = data;
+    indiaMoversCache.ts   = Date.now();
+    res.json(data);
   } catch (e) {
     console.error('[india/movers]', e.message);
+    // Return stale cache if available rather than error
+    if (indiaMoversCache.data) return res.json({ ...indiaMoversCache.data, stale: true });
     res.status(500).json({ error: e.message });
   }
 });
