@@ -260,7 +260,10 @@ function PortfolioPage({ onBack }) {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setAiResult(data); setStep(1);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      console.error('[portfolio]', e);
+      setError(e.message || 'Something went wrong. Please try again.');
+    }
     setAiLoading(false);
   };
 
@@ -466,7 +469,12 @@ function PortfolioPage({ onBack }) {
                     </div>
                   ))}
                 </div>
-                {error && <div style={{ fontSize: 12, color: '#ff4444', marginBottom: 12 }}>{error}</div>}
+                {error && (
+                  <div style={{ fontSize: 13, color: '#ff4444', background: '#ff444411',
+                    border: '1px solid #ff444433', borderRadius: 4, padding: '10px 14px', marginBottom: 12, lineHeight: 1.5 }}>
+                    {error}
+                  </div>
+                )}
                 <button className="btn" onClick={getAIRecommendation} disabled={aiLoading} style={{ fontSize: 14, padding: '12px 32px' }}>
                   {aiLoading ? 'GENERATING...' : 'GET AI PORTFOLIO RECOMMENDATION'}
                 </button>

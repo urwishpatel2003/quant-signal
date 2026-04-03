@@ -755,10 +755,20 @@ async function callClaudeAPI(body) {
       response.on('end', () => {
         try {
           const parsed = JSON.parse(data);
+          if (parsed.error) { reject(new Error(parsed.error.message || 'Claude API error')); return; }
           const text   = parsed.content?.[0]?.text || '{}';
-          const clean  = text.replace(/```json|```/g, '').trim();
-          resolve(JSON.parse(clean));
-        } catch (e) { reject(new Error('Claude response parse error: ' + e.message)); }
+          const clean  = text.replace(/```json\n?|```/g, '').trim();
+          try {
+            resolve(JSON.parse(clean));
+          } catch (parseErr) {
+            console.error('[Claude parse error] raw text length:', text.length, 'stop_reason:', parsed.stop_reason);
+            console.error('[Claude parse error] text sample:', text.slice(-200));
+            reject(new Error('Response too long or malformed JSON. Try again.'));
+          }
+        } catch (e) {
+          console.error('[Claude raw error]', data.slice(0, 300));
+          reject(new Error('Claude response error: ' + e.message));
+        }
       });
     });
     request.on('error', reject);
@@ -1817,19 +1827,72 @@ app.post('/api/analyze/portfolio', async (req, res) => {
   const { riskProfile, score, sipAmount, horizon, reaction, goal } = req.body;
   try {
     const result = await callClaudeAPI({
-      model: 'claude-sonnet-4-20250514', max_tokens: 1000, temperature: 0,
-      system: `You are an Indian investment advisor specializing in ETFs and mutual funds for retail investors.
-Give practical, specific SIP recommendations using NSE-listed ETFs and popular Indian mutual funds.
-THESIS RULE: Be specific with fund names and NSE symbols. Focus on low-cost index ETFs.
-Return ONLY JSON: {"summary":"string","topPicks":[{"name":"string","type":"ETF|MF","symbol":"string","allocation":number,"reason":"string"}],"monthlyPlan":{"total":number,"breakdown":[{"instrument":"string","amount":number}]},"advice":"string"}`,
+      model: 'claude-sonnet-4-20250514', max_tokens: 3000, temperature: 0,
+      system: `You are a SEBI-registered investment advisor specializing in Indian mutual funds and NSE ETFs.
+You give detailed, actionable, India-specific SIP portfolio recommendations.
+
+RULES:
+- Always recommend a mix of asset classes appropriate for the risk profile
+- Prefer direct plans over regular plans (lower expense ratio)
+- Include specific NSE ETF symbols (e.g. NIFTYBEES, GOLDBEES, BANKBEES) where relevant
+- Include specific mutual fund names with "Direct Growth" suffix
+- Be precise about expense ratios, expected returns, and tax treatment
+- Account for Indian tax laws: LTCG >₹1.25L taxed at 12.5%, STCG at 20% for equity; debt funds at slab rate
+- Suggest rebalancing frequency based on horizon
+
+Return ONLY valid JSON matching this exact schema:
+{
+  "summary": "2-3 sentence overview of the recommended strategy and why it suits this investor",
+  "riskAssessment": {
+    "label": "Conservative|Moderate|Aggressive|Very Aggressive",
+    "score": number,
+    "expectedReturn": "X-Y% p.a. (historical estimate)",
+    "volatility": "Low|Moderate|High|Very High",
+    "suitability": "one sentence on why this profile fits the investor"
+  },
+  "topPicks": [
+    {
+      "name": "full fund/ETF name",
+      "type": "ETF|MF",
+      "symbol": "NSE symbol if ETF, else null",
+      "allocation": number,
+      "amount": number,
+      "expenseRatio": "0.XX%",
+      "expectedReturn": "X-Y% p.a.",
+      "taxCategory": "Equity|Debt|Hybrid",
+      "pros": ["point 1", "point 2"],
+      "cons": ["point 1"],
+      "reason": "2 sentence rationale specific to this investor"
+    }
+  ],
+  "monthlyPlan": {
+    "total": number,
+    "breakdown": [{"instrument": "string", "amount": number, "sipDate": "1st|5th|10th|15th|25th"}]
+  },
+  "assetAllocation": {
+    "equity": number,
+    "debt": number,
+    "gold": number,
+    "international": number
+  },
+  "rebalancing": "How often and how to rebalance — be specific",
+  "taxStrategy": "2-3 sentences on tax harvesting, LTCG exemption usage, and optimal holding period",
+  "redFlags": ["risk or concern specific to this investor's profile"],
+  "advice": "2-3 sentences of personalised final advice including what to do first"
+}`,
       messages: [{
         role: 'user',
-        content: `Risk profile: ${riskProfile} (score ${score}/16)
-Monthly SIP budget: ₹${sipAmount?.toLocaleString('en-IN') || '10,000'}
-Investment horizon: ${horizon}
-Market reaction: ${reaction}
-Goal: ${goal}
-Suggest 3-5 specific NSE ETFs or Indian mutual funds with exact allocation percentages. Focus on low-cost index ETFs and diversification. Keep monthly amounts adding up to the total budget.`,
+        content: `Investor profile:
+- Risk profile: ${riskProfile} (score ${score}/16)
+- Monthly SIP budget: ₹${Number(sipAmount).toLocaleString('en-IN')}
+- Investment horizon: ${horizon}
+- Market crash reaction: ${reaction}
+- Primary goal: ${goal}
+
+Current date: ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+Market context: Post-budget India, RBI in rate-cut cycle, Nifty 50 at ~22,000-24,000 range.
+
+Recommend 4-6 specific instruments. Make the monthly amounts add exactly to ₹${Number(sipAmount).toLocaleString('en-IN')}. Include at least one index ETF (NIFTYBEES or similar) and appropriate gold/debt allocation based on risk profile.`,
       }],
     });
     res.json(result);
