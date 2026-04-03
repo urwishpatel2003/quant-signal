@@ -2251,60 +2251,66 @@ function calcYoY(current, prior) {
   return parseFloat(((current - prior) / Math.abs(prior) * 100).toFixed(1));
 }
 
-// US — via Polygon vX reference/financials
+// US — via Yahoo Finance (Polygon vX requires paid plan for financials)
 app.get('/financials/us/:ticker', async (req, res) => {
-  const ticker = req.params.ticker.toUpperCase();
+  const ticker  = req.params.ticker.toUpperCase();
+  const modules = 'incomeStatementHistoryQuarterly,incomeStatementHistory,earningsHistory,calendarEvents,defaultKeyStatistics';
   try {
-    const [quarterly, annual] = await Promise.all([
-      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=8&timeframe=quarterly&order=desc`),
-      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=4&timeframe=annual&order=desc`),
-    ]);
+    let result = null;
+    for (const host of ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']) {
+      try {
+        const data = await httpsGet(host,
+          `/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`,
+          { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36', Accept: 'application/json' }
+        );
+        const r = data?.quoteSummary?.result?.[0];
+        if (!r) continue;
 
-    const parseQ = (q) => {
-      const is  = q.financials?.income_statement || {};
-      const revenue    = is.revenues?.value                   ?? null;
-      const netIncome  = is.net_income_loss?.value            ?? null;
-      const grossProfit= is.gross_profit?.value               ?? null;
-      const epsDiluted = is.diluted_earnings_per_share?.value ?? null;
-      const epsBasic   = is.basic_earnings_per_share?.value   ?? null;
-      return {
-        period:      `${q.fiscal_period} ${q.fiscal_year}`,
-        endDate:     q.end_date,
-        revenue,
-        netIncome,
-        grossProfit,
-        epsDiluted:  epsDiluted ?? epsBasic,
-        netMargin:   revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
-        grossMargin: revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
-      };
-    };
+        const parseStmt = (s) => {
+          const revenue    = s.totalRevenue?.raw    ?? null;
+          const netIncome  = s.netIncome?.raw        ?? null;
+          const grossProfit= s.grossProfit?.raw      ?? null;
+          const epsDiluted = s.dilutedEPS?.raw       ?? null;
+          return {
+            endDate:     s.endDate?.fmt ?? null,
+            revenue,
+            netIncome,
+            grossProfit,
+            epsDiluted,
+            netMargin:   revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
+            grossMargin: revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
+          };
+        };
 
-    const quarters = (quarterly?.results || []).slice(0, 4).map(parseQ);
+        const allQ    = (r.incomeStatementHistoryQuarterly?.incomeStatementHistory || []).map(parseStmt);
+        const quarters = allQ.slice(0, 4);
 
-    // YoY = compare q[0] to q[4] (same quarter last year)
-    const allQ  = (quarterly?.results || []).slice(0, 8).map(parseQ);
-    const yoy = allQ.length >= 5 ? {
-      revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4].revenue),
-      netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4].netIncome),
-      epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4].epsDiluted),
-      netMarginYoY: allQ[0].netMargin != null && allQ[4].netMargin != null
-        ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
-    } : {};
+        const yoy = allQ.length >= 8 ? {
+          revenueYoY:   calcYoY(allQ[0].revenue,    allQ[4].revenue),
+          netIncomeYoY: calcYoY(allQ[0].netIncome,   allQ[4].netIncome),
+          epsYoY:       calcYoY(allQ[0].epsDiluted,  allQ[4].epsDiluted),
+          netMarginYoY: allQ[0].netMargin != null && allQ[4].netMargin != null
+            ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+        } : {};
 
-    const annuals = (annual?.results || []).map(q => {
-      const is = q.financials?.income_statement || {};
-      const revenue   = is.revenues?.value                   ?? null;
-      const netIncome = is.net_income_loss?.value            ?? null;
-      const eps       = is.diluted_earnings_per_share?.value ?? is.basic_earnings_per_share?.value ?? null;
-      return {
-        period:    q.fiscal_year,
-        endDate:   q.end_date,
-        revenue, netIncome, epsDiluted: eps,
-        netMargin: revenue && netIncome ? parseFloat((netIncome / revenue * 100).toFixed(2)) : null,
-      };
-    });
+        const annuals = (r.incomeStatementHistory?.incomeStatementHistory || []).map(parseStmt);
 
-    res.json({ ticker, quarters, annuals, yoy });
+        const epsHistory = (r.earningsHistory?.history || []).slice(0, 4).map(e => ({
+          quarter:     e.quarter?.fmt      ?? null,
+          epsActual:   e.epsActual?.raw    ?? null,
+          epsEstimate: e.epsEstimate?.raw  ?? null,
+          surprisePct: e.surprisePercent?.raw ?? null,
+          beat:        (e.epsDifference?.raw ?? 0) > 0,
+        }));
+
+        const nextEarnings = r.calendarEvents?.earnings?.earningsDate?.[0]?.fmt ?? null;
+
+        result = { ticker, quarters, annuals, yoy, epsHistory, nextEarnings };
+        break;
+      } catch { continue; }
+    }
+    if (!result) return res.status(404).json({ error: `No financials found for ${ticker}` });
+    res.json(result);
   } catch (e) {
     console.error('[financials/us]', e.message);
     res.status(500).json({ error: e.message });
