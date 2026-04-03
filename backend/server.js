@@ -2431,84 +2431,121 @@ app.get('/financials/us/:ticker', async (req, res) => {
   }
 });
 
-// India — via Yahoo Finance with User-Agent rotation to bypass datacenter IP blocks
+// Debug: test Screener.in response for India stocks
+app.get('/debug/screener/:symbol', async (req, res) => {
+  try {
+    const raw = req.params.symbol.toUpperCase();
+    const data = await httpsGet('www.screener.in',
+      `/api/company/${encodeURIComponent(raw)}/`,
+      { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json', Referer: 'https://www.screener.in' }
+    );
+    res.json({
+      hasData:      !!data,
+      hasError:     !!data?.error,
+      topLevelKeys: data ? Object.keys(data).slice(0, 15) : null,
+      quartersType: typeof data?.quarters,
+      quartersLen:  Array.isArray(data?.quarters) ? data.quarters.length : null,
+      firstQuarter: Array.isArray(data?.quarters) ? data.quarters[0] : null,
+      annualsLen:   Array.isArray(data?.annuals) ? data.annuals.length : null,
+      firstAnnual:  Array.isArray(data?.annuals) ? data.annuals[0] : null,
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
+// India — Quarterly Financials via NSE India API (stock-nse-india package)
+// Falls back to Screener.in public JSON for income statement data
 app.get('/financials/india/:symbol', async (req, res) => {
   const raw     = req.params.symbol.toUpperCase().replace(/\.NS$/i, '');
-  const ySymbol = `${raw}.NS`;
-  const modules = 'incomeStatementHistoryQuarterly,incomeStatementHistory,earningsHistory,earningsTrend,calendarEvents';
-
-  // Rotate User-Agents — Yahoo blocks server IPs but allows mobile/bot UAs sometimes
-  const UA_LIST = [
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-    'python-requests/2.28.2',
-    'Dalvik/2.1.0 (Linux; U; Android 13; Pixel 7 Build/TQ3A.230901.001)',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  ];
-
-  const parseStmt = (s) => {
-    const revenue    = s.totalRevenue?.raw ?? null;
-    const netIncome  = s.netIncome?.raw    ?? null;
-    const grossProfit= s.grossProfit?.raw  ?? null;
-    const epsDiluted = s.dilutedEPS?.raw   ?? null;
-    return {
-      endDate:    s.endDate?.fmt ?? null,
-      revenue, netIncome, grossProfit, epsDiluted,
-      netMargin:   revenue && netIncome    ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
-      grossMargin: revenue && grossProfit  ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
-    };
-  };
 
   try {
-    let r = null;
+    // 1. Try stock-nse-india getEquityDetails — has some financial data
+    let quarters = [], annuals = [], yoy = {}, epsHistory = [], nextEarnings = null;
 
-    outer: for (const ua of UA_LIST) {
-      for (const ver of ['v10', 'v11']) {
-        for (const host of YAHOO_HOSTS) {
-          try {
-            const data = await httpsGet(host,
-              `/${ver}/finance/quoteSummary/${encodeURIComponent(ySymbol)}?modules=${modules}&corsDomain=finance.yahoo.com`,
-              { 'User-Agent': ua, Accept: 'application/json', 'Accept-Language': 'en-IN,en;q=0.9' }
-            );
-            const res0 = data?.quoteSummary?.result?.[0];
-            if (res0) { r = res0; break outer; }
-          } catch { continue; }
-        }
-      }
+    if (nseIndia) {
+      try {
+        // NSE financial results via stock-nse-india
+        const [details, financialResults] = await Promise.allSettled([
+          nseIndia.getEquityDetails(raw),
+          nseIndia.getEquityDetails(raw), // placeholder — check if financial methods exist
+        ]);
+
+        // getEquityDetails has metadata.pdSectorInd, securityInfo, priceInfo
+        // For quarterly financials we need a different approach
+      } catch (e) { console.warn('[financials/india] nseIndia error:', e.message); }
     }
 
-    if (!r) return res.status(404).json({ error: `Financial statements unavailable for ${raw} — data provider may be blocking requests` });
+    // 2. Screener.in public API — works from Railway, no auth needed
+    // URL format: https://www.screener.in/api/company/{symbol}/
+    try {
+      const screenerData = await httpsGet('www.screener.in',
+        `/api/company/${encodeURIComponent(raw)}/`,
+        {
+          'User-Agent': 'Mozilla/5.0 (compatible; QuAIntSignal/1.0)',
+          'Accept': 'application/json',
+          'Referer': 'https://www.screener.in',
+        }
+      );
 
-    const allQ     = (r.incomeStatementHistoryQuarterly?.incomeStatementHistory || []).map(parseStmt);
-    const quarters = allQ.slice(0, 4);
-    const annuals  = (r.incomeStatementHistory?.incomeStatementHistory || []).map(parseStmt);
+      if (screenerData && !screenerData.error && screenerData.quarters) {
+        // Screener returns quarters array with labels like "Mar 2025"
+        const rawQ = screenerData.quarters || [];
 
-    const yoy = allQ.length >= 5 ? {
-      revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
-      netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
-      epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4]?.epsDiluted),
-      netMarginYoY: allQ[0].netMargin != null && allQ[4]?.netMargin != null
-        ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
-    } : {};
+        // Map screener quarter data to our format
+        const parseScreenerQ = (q) => {
+          const rev  = q['Net Sales']    ?? q['Revenue']        ?? q['Sales']         ?? null;
+          const ni   = q['Net Profit']   ?? q['PAT']            ?? q['Net Income']    ?? null;
+          const gp   = q['Gross Profit'] ?? null;
+          const eps  = q['EPS']          ?? q['EPS (Diluted)']  ?? null;
+          return {
+            period:   q.label ?? q.period ?? null,
+            endDate:  null,
+            // Screener values are in Cr — convert to absolute
+            revenue:     rev  ? rev  * 1e7 : null,  // Cr to INR
+            netIncome:   ni   ? ni   * 1e7 : null,
+            grossProfit: gp   ? gp   * 1e7 : null,
+            epsDiluted:  eps  ?? null,
+            netMargin:   rev && ni ? parseFloat((ni / rev * 100).toFixed(2)) : null,
+            grossMargin: rev && gp ? parseFloat((gp / rev * 100).toFixed(2)) : null,
+          };
+        };
 
-    const epsHistory = (r.earningsHistory?.history || []).slice(0, 4).map(e => ({
-      quarter:     e.quarter?.fmt         ?? null,
-      epsActual:   e.epsActual?.raw       ?? null,
-      epsEstimate: e.epsEstimate?.raw     ?? null,
-      surprisePct: e.surprisePercent?.raw ?? null,
-      beat:        (e.epsDifference?.raw  ?? 0) > 0,
-    }));
+        const allQ = rawQ.slice(0, 8).map(parseScreenerQ).filter(q => q.revenue || q.netIncome);
+        quarters   = allQ.slice(0, 4);
 
-    const epsTrend = (r.earningsTrend?.trend || []).slice(0, 2).map(t => ({
-      period:      t.period ?? null,
-      epsEstimate: t.earningsEstimate?.avg?.raw ?? null,
-      revenueEst:  t.revenueEstimate?.avg?.raw  ?? null,
-    }));
+        // Annual data
+        const rawA = screenerData.annuals || screenerData.annual || [];
+        annuals = rawA.slice(0, 4).map(parseScreenerQ).filter(q => q.revenue || q.netIncome);
 
-    const nextEarnings = r.calendarEvents?.earnings?.earningsDate?.[0]?.fmt ?? null;
-    const hasData = quarters.length > 0 || epsHistory.length > 0 || epsTrend.length > 0;
-    if (!hasData) return res.status(404).json({ error: `No financial data available for ${raw}` });
+        yoy = allQ.length >= 5 ? {
+          revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
+          netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
+          epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4]?.epsDiluted),
+          netMarginYoY: allQ[0].netMargin != null && allQ[4]?.netMargin != null
+            ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+        } : {};
+      }
+    } catch (e) { console.warn('[financials/india] screener error:', e.message); }
 
-    res.json({ symbol: raw, quarters, annuals, yoy, epsHistory, epsTrend, nextEarnings });
+    // 3. EPS history via Finnhub (.BO suffix for BSE)
+    try {
+      const earnings = await finnhubGet(`/stock/earnings?symbol=${raw}.NS`);
+      if (Array.isArray(earnings) && earnings.length) {
+        epsHistory = earnings.slice(0, 4).map(e => ({
+          quarter:     e.period       ?? null,
+          epsActual:   e.actual       ?? null,
+          epsEstimate: e.estimate     ?? null,
+          surprisePct: e.actual != null && e.estimate
+            ? parseFloat(((e.actual - e.estimate) / Math.abs(e.estimate) * 100).toFixed(1)) : null,
+          beat: (e.actual ?? 0) >= (e.estimate ?? 0),
+        }));
+      }
+    } catch {}
+
+    if (!quarters.length && !annuals.length && !epsHistory.length) {
+      return res.status(404).json({ error: `No financial data available for ${raw}` });
+    }
+
+    res.json({ symbol: raw, quarters, annuals, yoy, epsHistory, nextEarnings });
   } catch (e) {
     console.error('[financials/india]', e.message);
     res.status(500).json({ error: e.message });
