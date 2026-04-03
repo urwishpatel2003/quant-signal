@@ -13,7 +13,7 @@ const US_STATS = {
     { value: '∞',      label: 'Options Analyses'      },
     { value: '∞',      label: 'Watchlist Items'       },
     { value: '4',      label: 'Timeframes'            },
-    { value: '$5',     label: 'Per Month'             },
+    { value: 'FREE',   label: 'No card required · $5 after' },
   ],
 };
 
@@ -29,7 +29,7 @@ const INDIA_STATS = {
     { value: 'SIP',    label: 'Planner + Calculator'  },
     { value: 'AI',     label: 'Portfolio Recommender' },
     { value: 'MF',     label: 'Mutual Fund Explorer'  },
-    { value: '₹249',   label: 'Per Month'             },
+    { value: 'FREE',   label: 'No card required · ₹249 after' },
   ],
 };
 
@@ -203,6 +203,21 @@ export default function WelcomePage({ onEnter, onNavigate }) {
           }}>
             HOW IT WORKS
           </button>
+        </div>
+
+        {/* Promo Banner */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+          background: '#00ff8808', border: '1px solid #00ff8833',
+          borderRadius: 6, padding: '12px 20px', flexWrap: 'wrap', textAlign: 'center',
+        }}>
+          <span style={{ fontSize: 18 }}>🎉</span>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#00ff88' }}>FIRST MONTH FREE FOR NEW SUBSCRIBERS</span>
+            <span style={{ fontSize: 12, color: '#7788aa', marginLeft: 8 }}>
+              No credit card required. Add details before trial ends to continue.
+            </span>
+          </div>
         </div>
 
         {/* Stats bars — US and India with Free/Pro split */}

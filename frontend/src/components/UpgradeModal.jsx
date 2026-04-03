@@ -13,8 +13,8 @@ const TYPE_COPY = {
 export default function UpgradeModal({ type = 'scan', onClose }) {
   const { user }   = useUser();
   const { market } = useMarket();
-  const [loading, setLoading]   = useState(false);
-  const [error,   setError]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
   const isIndia = market === 'INDIA';
   const copy    = TYPE_COPY[type] || TYPE_COPY.scan;
 
@@ -107,6 +107,18 @@ export default function UpgradeModal({ type = 'scan', onClose }) {
         )}
 
         {/* CTA */}
+        {/* First month free badge */}
+        <div style={{ marginBottom: 16, padding: '10px 14px', background: '#00ff8811',
+          border: '1px solid #00ff8833', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🎉</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#00ff88' }}>FIRST MONTH FREE</div>
+            <div style={{ fontSize: 11, color: '#7788aa', marginTop: 1 }}>
+              No credit card required. 30 days free — add payment details before trial ends to continue.
+            </div>
+          </div>
+        </div>
+
         <button onClick={handleUpgrade} disabled={loading} style={{
           width: '100%', padding: '14px',
           fontFamily: "'IBM Plex Mono',monospace",
