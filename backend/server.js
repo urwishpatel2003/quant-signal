@@ -2437,26 +2437,30 @@ app.get('/debug/screener/:symbol', async (req, res) => {
     const raw = req.params.symbol.toUpperCase();
     const results = {};
 
-    // Test 1: Tickertape API (popular Indian fintech, relatively open)
-    try {
-      const tt = await httpsGet('api.tickertape.in',
-        `/stocks/financials/${raw}/income-statement?count=8&period=quarterly`,
-        { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-      );
-      results.tickertape = { type: typeof tt, isArray: Array.isArray(tt), keys: tt ? Object.keys(tt).slice(0,8) : null, raw: JSON.stringify(tt).slice(0, 400) };
-    } catch(e) { results.tickertape = { error: e.message }; }
-
-    // Test 2: stock-nse-india — check if it has financial methods
     if (nseIndia) {
-      const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(nseIndia))
-        .filter(m => m !== 'constructor');
-      results.nseIndiaAllMethods = methods;
-      // Try getEquityTradeInfo which might have more data
+      // Test getEquityCorporateInfo
       try {
-        const eq = await nseIndia.getEquityDetails(raw);
-        results.nseIndiaKeys = eq ? Object.keys(eq) : null;
-        results.nseIndiaMetadataKeys = eq?.metadata ? Object.keys(eq.metadata) : null;
-      } catch(e) { results.nseIndiaDetailError = e.message; }
+        const corp = await nseIndia.getEquityCorporateInfo(raw);
+        results.corpKeys     = corp ? Object.keys(corp) : null;
+        results.corpRaw      = JSON.stringify(corp).slice(0, 600);
+      } catch(e) { results.corpError = e.message; }
+
+      // Test getEquityTradeInfo
+      try {
+        const trade = await nseIndia.getEquityTradeInfo(raw);
+        results.tradeKeys = trade ? Object.keys(trade) : null;
+        results.tradeRaw  = JSON.stringify(trade).slice(0, 400);
+      } catch(e) { results.tradeError = e.message; }
+
+      // Test getDataByEndpoint for financial results
+      try {
+        const fin = await nseIndia.getDataByEndpoint(
+          `/api/financial-results?index=equities&symbol=${raw}&period=Quarterly&from_date=01-01-2024&to_date=31-12-2025`
+        );
+        results.finKeys   = fin ? Object.keys(fin).slice(0, 8) : null;
+        results.finIsArray = Array.isArray(fin);
+        results.finRaw    = JSON.stringify(fin).slice(0, 600);
+      } catch(e) { results.finError = e.message; }
     }
 
     res.json(results);
