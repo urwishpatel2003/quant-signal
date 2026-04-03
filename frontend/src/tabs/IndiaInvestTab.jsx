@@ -232,15 +232,37 @@ function SIPPage({ onBack }) {
 
 // ── Page: AI Portfolio ────────────────────────────────────────────────────────
 function PortfolioPage({ onBack }) {
-  const [sipAmount,  setSipAmount]  = useState(10000);
-  const [language,   setLanguage]   = useState('en');
-  const [messages,   setMessages]   = useState([]);
-  const [input,      setInput]      = useState('');
-  const [loading,    setLoading]    = useState(false);
-  const [stage,      setStage]      = useState('budget'); // budget | chat | generating | result
-  const [aiResult,   setAiResult]   = useState(null);
-  const [error,      setError]      = useState('');
+  const { user }   = useUser();
+  const [sipAmount,    setSipAmount]    = useState(10000);
+  const [language,     setLanguage]     = useState('en');
+  const [messages,     setMessages]     = useState([]);
+  const [input,        setInput]        = useState('');
+  const [loading,      setLoading]      = useState(false);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const [saving,       setSaving]       = useState(false);
+  const [stage,        setStage]        = useState('budget');
+  const [aiResult,     setAiResult]     = useState(null);
+  const [savedAt,      setSavedAt]      = useState(null);
+  const [error,        setError]        = useState('');
   const chatEndRef = useRef(null);
+
+  // Load saved recommendation on mount
+  useEffect(() => {
+    if (!user?.id) { setLoadingSaved(false); return; }
+    fetch(`${BASE}/portfolio/${user.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.result) {
+          setAiResult(data.result);
+          setSipAmount(data.sip_amount || 10000);
+          setLanguage(data.language || 'en');
+          setSavedAt(data.updated_at);
+          setStage('result');
+        }
+        setLoadingSaved(false);
+      })
+      .catch(() => setLoadingSaved(false));
+  }, [user?.id]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -310,16 +332,42 @@ function PortfolioPage({ onBack }) {
       if (data.error) throw new Error(data.error);
       setAiResult(data);
       setStage('result');
+      // Save to Supabase
+      if (user?.id) {
+        setSaving(true);
+        try {
+          const saveRes = await fetch(`${BASE}/portfolio/${user.id}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ result: data, sipAmount, language }),
+          });
+          const saved = await saveRes.json();
+          if (saved?.updated_at) setSavedAt(saved.updated_at);
+        } catch (e) { console.error('[portfolio save]', e.message); }
+        setSaving(false);
+      }
     } catch (e) {
       setError(e.message);
       setStage('chat');
     }
   };
 
-  const reset = () => {
+  const reset = async () => {
     setMessages([]); setAiResult(null);
-    setStage('budget'); setError(''); setInput(''); setLanguage('en');
+    setStage('budget'); setError(''); setInput(''); setLanguage('en'); setSavedAt(null);
+    if (user?.id) {
+      try { await fetch(`${BASE}/portfolio/${user.id}`, { method: 'DELETE' }); } catch {}
+    }
   };
+
+  // ── Loading saved ────────────────────────────────────────────────────────────
+  if (loadingSaved) return (
+    <div className="fade-in">
+      <PageHeader icon="🤖" title="AI Portfolio Advisor" subtitle="" onBack={onBack} />
+      <div style={{ textAlign: 'center', padding: '60px 0', color: '#7788aa', fontSize: 13 }}>
+        Loading your saved portfolio...
+      </div>
+    </div>
+  );
 
   // ── Budget screen ────────────────────────────────────────────────────────────
   if (stage === 'budget') return (
@@ -406,7 +454,18 @@ function PortfolioPage({ onBack }) {
   if (stage === 'result' && aiResult) return (
     <div className="fade-in">
       <PageHeader icon="🤖" title="Your Portfolio" subtitle="Personalised by Arya" onBack={onBack} />
-      <button className="btn-sm" onClick={reset} style={{ marginBottom: 20 }}>← START OVER</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
+        <button className="btn-sm" onClick={reset}>← REGENERATE</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {saving && <span style={{ fontSize: 11, color: '#7788aa' }}>Saving...</span>}
+          {savedAt && !saving && (
+            <span style={{ fontSize: 11, color: '#00ff8877', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 10 }}>✓</span>
+              Saved {new Date(savedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Investor profile summary */}
       {aiResult.investorProfile && (

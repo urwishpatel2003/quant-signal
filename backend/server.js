@@ -2098,6 +2098,59 @@ Recommend 4-6 specific instruments. Make the monthly amounts add exactly to ₹$
   }
 });
 
+// ─── Portfolio recommendation persistence ─────────────────────────────────────
+app.get('/portfolio/:userId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('portfolio_recommendations')
+      .select('*')
+      .eq('user_id', req.params.userId)
+      .single();
+    if (error && error.code === 'PGRST116') return res.json(null);
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    console.error('[portfolio GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/portfolio/:userId', async (req, res) => {
+  const { result, sipAmount, language = 'en' } = req.body;
+  if (!result) return res.status(400).json({ error: 'result required' });
+  try {
+    const { data, error } = await supabase
+      .from('portfolio_recommendations')
+      .upsert({
+        user_id:    req.params.userId,
+        language,
+        sip_amount: sipAmount,
+        result,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+      .select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    console.error('[portfolio POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/portfolio/:userId', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('portfolio_recommendations')
+      .delete()
+      .eq('user_id', req.params.userId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[portfolio DELETE]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── MFAPI proxy — search and NAV ────────────────────────────────────────────
 app.get('/mf/search', async (req, res) => {
   const q = req.query.q || '';
