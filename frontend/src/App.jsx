@@ -12,7 +12,8 @@ import MacroBar       from './components/MacroBar';
 import MarketSelector from './components/MarketSelector';
 import ScannerTab     from './tabs/ScannerTab';
 import OptionsTab     from './tabs/OptionsTab';
-import MarketsTab     from './tabs/MarketsTab';
+import MarketsTab      from './tabs/MarketsTab';
+import IndiaMarketsTab from './tabs/IndiaMarketsTab';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
 import HelpTab        from './tabs/HelpTab';
@@ -67,13 +68,16 @@ export default function App() {
 
   // Hide Options tab for India market
   const baseTabs = market === 'INDIA'
-    ? TABS.filter(t => (typeof t === 'string' ? t : t.id) !== 'options')
+    ? TABS.filter(t => {
+        const id = typeof t === 'string' ? t : t.id;
+        return id !== 'options'; // remove options for India, keep markets (India version)
+      })
     : TABS;
   const visibleTabs = market === 'INDIA'
     ? baseTabs.reduce((acc, tab) => {
         const id = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
-        if (id === 'help') acc.push({ id: 'invest', label: 'INVEST' });
         acc.push(tab);
+        if (id === 'scanner') acc.push({ id: 'invest', label: 'INVEST' }); // Scanner → Invest → Markets → Watchlist → Help
         return acc;
       }, [])
     : baseTabs;
@@ -226,12 +230,15 @@ export default function App() {
             )}
 
             <div style={{ display: activeTab === 'markets' ? 'block' : 'none' }}>
-              <MarketsTab
-                intlMarkets={macro.intlMarkets}
-                bonds={macro.bonds}
-                macroNews={macro.macroNews}
-                calendar={macro.calendar}
-              />
+              {market === 'INDIA'
+                ? <IndiaMarketsTab />
+                : <MarketsTab
+                    intlMarkets={macro.intlMarkets}
+                    bonds={macro.bonds}
+                    macroNews={macro.macroNews}
+                    calendar={macro.calendar}
+                  />
+              }
             </div>
 
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>

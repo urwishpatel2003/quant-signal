@@ -1706,6 +1706,175 @@ app.get('/india/history/:symbol', async (req, res) => {
   }
 });
 
+// ─── India macro — sectoral indices + macro data ─────────────────────────────
+
+// Sectoral ETFs as proxies for sectoral indices (all NSE-listed)
+const SECTORAL_ETFS = [
+  { symbol: 'NIFTYBEES',  name: 'Nifty 50',       category: 'index'    },
+  { symbol: 'BANKBEES',   name: 'Nifty Bank',      category: 'sector'   },
+  { symbol: 'ITBEES',     name: 'Nifty IT',        category: 'sector'   },
+  { symbol: 'PHARMABEES', name: 'Nifty Pharma',    category: 'sector'   },
+  { symbol: 'AUTOBEES',   name: 'Nifty Auto',      category: 'sector'   },
+  { symbol: 'FMCGBEES',   name: 'Nifty FMCG',      category: 'sector'   },
+  { symbol: 'INFRABEES',  name: 'Nifty Infra',     category: 'sector'   },
+  { symbol: 'PSUBNKBEES', name: 'PSU Bank',        category: 'sector'   },
+  { symbol: 'GOLDBEES',   name: 'Gold',            category: 'commodity'},
+  { symbol: 'CPSEETF',    name: 'CPSE/Energy',     category: 'sector'   },
+];
+
+// Midcap/Smallcap index stocks as proxies
+const MIDSMALL_STOCKS = ['PERSISTENT','COFORGE','KPITTECH','DIXON','AMBER','POLYCAB','KEI','APLAPOLLO','KALYANKJIL','GODREJPROP'];
+
+const indiaMacroCache = { data: null, ts: 0 };
+const INDIA_MACRO_TTL = 5 * 60 * 1000;
+
+async function fetchIndiaMacroData() {
+  // 1. Fetch sectoral ETF quotes
+  const sectorData = await Promise.allSettled(
+    SECTORAL_ETFS.map(async etf => {
+      const q = await getNSEQuote(etf.symbol);
+      return { ...etf, price: q?.price || null, changePct: q?.changePct || null, change: q?.change || null };
+    })
+  );
+  const sectors = sectorData
+    .filter(r => r.status === 'fulfilled' && r.value?.price)
+    .map(r => r.value);
+
+  // 2. USD/INR via Yahoo Finance
+  let usdInr = null;
+  try {
+    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
+      try {
+        const d = await httpsGet(host,
+          '/v8/finance/chart/USDINR=X?interval=1d&range=5d',
+          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
+        );
+        const meta = d?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          usdInr = {
+            price:     meta.regularMarketPrice,
+            prevClose: meta.previousClose || meta.chartPreviousClose,
+            changePct: meta.previousClose
+              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
+              : null,
+          };
+          break;
+        }
+      } catch { continue; }
+    }
+  } catch {}
+
+  // 3. India 10Y bond yield via Yahoo Finance (^INBY10Y or proxy)
+  let india10Y = null;
+  try {
+    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
+      try {
+        const d = await httpsGet(host,
+          '/v8/finance/chart/%5EINBY?interval=1d&range=5d',
+          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
+        );
+        const meta = d?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          india10Y = { yield: meta.regularMarketPrice, prevYield: meta.previousClose };
+          break;
+        }
+      } catch { continue; }
+    }
+  } catch {}
+
+  // 4. Crude oil (Brent) — key for India (net importer)
+  let crude = null;
+  try {
+    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
+      try {
+        const d = await httpsGet(host,
+          '/v8/finance/chart/BZ=F?interval=1d&range=5d',
+          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
+        );
+        const meta = d?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          crude = {
+            price: meta.regularMarketPrice,
+            changePct: meta.previousClose
+              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
+              : null,
+          };
+          break;
+        }
+      } catch { continue; }
+    }
+  } catch {}
+
+  // 5. Gold MCX proxy via Yahoo Finance (GC=F in USD, convert)
+  let gold = null;
+  try {
+    for (const host of ['query2.finance.yahoo.com','query1.finance.yahoo.com']) {
+      try {
+        const d = await httpsGet(host,
+          '/v8/finance/chart/GC=F?interval=1d&range=5d',
+          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
+        );
+        const meta = d?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          const inrRate = usdInr?.price || 84;
+          gold = {
+            priceUsd: meta.regularMarketPrice,
+            priceInr: Math.round(meta.regularMarketPrice * inrRate / 31.1035), // per gram in INR
+            changePct: meta.previousClose
+              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
+              : null,
+          };
+          break;
+        }
+      } catch { continue; }
+    }
+  } catch {}
+
+  // 6. Global signals relevant to India (FII flows proxy)
+  let globalSignals = {};
+  try {
+    const symbols = [
+      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/%5EGSPC?interval=1d&range=5d', key: 'sp500',  label: 'S&P 500' },
+      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/DX-Y.NYB?interval=1d&range=5d', key: 'dxy',   label: 'DXY'     },
+      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/%5EN225?interval=1d&range=5d',  key: 'n225',  label: 'Nikkei'  },
+      { host: 'query2.finance.yahoo.com', path: '/v8/finance/chart/000001.SS?interval=1d&range=5d', key: 'china', label: 'Shanghai'},
+    ];
+    await Promise.allSettled(symbols.map(async s => {
+      try {
+        const d = await httpsGet(s.host, s.path, { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' });
+        const meta = d?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          globalSignals[s.key] = {
+            label: s.label,
+            price: meta.regularMarketPrice,
+            changePct: meta.previousClose
+              ? parseFloat(((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100).toFixed(2))
+              : null,
+          };
+        }
+      } catch {}
+    }));
+  } catch {}
+
+  return { sectors, usdInr, india10Y, crude, gold, globalSignals, updatedAt: Date.now() };
+}
+
+app.get('/india/macro', async (req, res) => {
+  try {
+    if (indiaMacroCache.data && Date.now() - indiaMacroCache.ts < INDIA_MACRO_TTL) {
+      return res.json({ ...indiaMacroCache.data, cached: true });
+    }
+    const data = await fetchIndiaMacroData();
+    indiaMacroCache.data = data;
+    indiaMacroCache.ts   = Date.now();
+    res.json(data);
+  } catch (e) {
+    console.error('[india/macro]', e.message);
+    if (indiaMacroCache.data) return res.json({ ...indiaMacroCache.data, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── India movers — cached, background refresh ───────────────────────────────
 async function fetchIndiaMoversData() {
   const batchSize = 10;
@@ -2299,4 +2468,3 @@ app.delete('/sips/:userId/:sipId', async (req, res) => {
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
   console.log(`✅ QuAInt Signal backend on port ${process.env.PORT || 3001}`));
-
