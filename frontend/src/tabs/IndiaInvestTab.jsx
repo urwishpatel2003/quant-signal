@@ -232,566 +232,387 @@ function SIPPage({ onBack }) {
 
 // ── Page: AI Portfolio ────────────────────────────────────────────────────────
 function PortfolioPage({ onBack }) {
-  const [sipAmount, setSipAmount] = useState(10000);
-  const [answers,   setAnswers]   = useState([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult,  setAiResult]  = useState(null);
-  const [step,      setStep]      = useState(0);
-  const [error,     setError]     = useState('');
+  const [sipAmount,  setSipAmount]  = useState(10000);
+  const [messages,   setMessages]   = useState([]);
+  const [input,      setInput]      = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [stage,      setStage]      = useState('budget'); // budget | chat | generating | result
+  const [aiResult,   setAiResult]   = useState(null);
+  const [error,      setError]      = useState('');
+  const chatEndRef = useRef(null);
 
-  const handleAnswer = (idx, score) => { const next = [...answers]; next[idx] = score; setAnswers(next); };
-  const allAnswered = answers.length === RISK_QUESTIONS.length && answers.every(a => a != null);
-  const totalScore  = answers.reduce((a, b) => a + (b || 0), 0);
-  const riskProfile = allAnswered ? getRiskProfile(totalScore) : null;
-  const allocation  = allAnswered ? getPortfolioAllocation(totalScore) : null;
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
 
-  const getAIRecommendation = async () => {
-    setAiLoading(true); setError('');
+  const startChat = async () => {
+    setStage('chat');
+    setLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/analyze/portfolio`, {
+      const res  = await fetch(`${BASE}/api/portfolio/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          riskProfile: riskProfile?.label, score: totalScore, sipAmount,
-          horizon:  ['','< 1yr','1-3yrs','3-7yrs','7+yrs'][answers[0]],
-          reaction: ['','panic sell','partial sell','hold','buy more'][answers[1]],
-          goal:     ['','capital preservation','regular income','balanced growth','maximum growth'][answers[2]],
-        }),
+        body: JSON.stringify({ messages: [], sipAmount }),
+      });
+      const data = await res.json();
+      setMessages([{ role: 'assistant', content: data.message }]);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg  = { role: 'user', content: input.trim() };
+    const newMsgs  = [...messages, userMsg];
+    setMessages(newMsgs);
+    setInput('');
+    setLoading(true);
+    setError('');
+    try {
+      const res  = await fetch(`${BASE}/api/portfolio/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMsgs, sipAmount }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setAiResult(data); setStep(1);
-    } catch (e) {
-      console.error('[portfolio]', e);
-      setError(e.message || 'Something went wrong. Please try again.');
-    }
-    setAiLoading(false);
+
+      if (data.done) {
+        // Advisor has enough info — add final message then generate
+        if (data.message) setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
+        setStage('generating');
+        await generatePortfolio(newMsgs);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
+      }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
   };
 
-  return (
+  const generatePortfolio = async (msgs) => {
+    try {
+      const res  = await fetch(`${BASE}/api/portfolio/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: msgs, sipAmount }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setAiResult(data);
+      setStage('result');
+    } catch (e) {
+      setError(e.message);
+      setStage('chat');
+    }
+  };
+
+  const reset = () => {
+    setMessages([]); setAiResult(null);
+    setStage('budget'); setError(''); setInput('');
+  };
+
+  // ── Budget screen ────────────────────────────────────────────────────────────
+  if (stage === 'budget') return (
     <div className="fade-in">
-      <PageHeader icon="🤖" title="AI Portfolio Recommender"
-        subtitle="Answer 4 questions to get a personalised ETF and mutual fund allocation"
+      <PageHeader icon="🤖" title="AI Portfolio Advisor"
+        subtitle="Have a conversation with Artha, your personal investment advisor"
         onBack={onBack} />
-
-      {step === 1 && aiResult ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <button className="btn-sm" onClick={() => { setStep(0); setAiResult(null); setAnswers([]); }}
-            style={{ alignSelf: 'flex-start' }}>← RETAKE QUIZ</button>
-
-          {/* Summary + Risk Profile */}
-          <div className="card" style={{ borderColor: '#ff9a0033' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 8 }}>AI PORTFOLIO RECOMMENDATION</div>
-                <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.summary}</div>
-              </div>
-              {aiResult.riskAssessment && (
-                <div style={{ background: '#0a0a14', borderRadius: 6, padding: '12px 16px', textAlign: 'center', flexShrink: 0 }}>
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: '#ff9a00' }}>{aiResult.riskAssessment.label}</div>
-                  <div style={{ fontSize: 11, color: '#00ff88', marginTop: 2 }}>{aiResult.riskAssessment.expectedReturn}</div>
-                  <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2 }}>Volatility: {aiResult.riskAssessment.volatility}</div>
-                </div>
-              )}
-            </div>
-            {aiResult.riskAssessment?.suitability && (
-              <div style={{ fontSize: 12, color: '#7788aa', borderTop: '1px solid #1e1e2e', paddingTop: 10, fontStyle: 'italic' }}>
-                {aiResult.riskAssessment.suitability}
-              </div>
-            )}
-          </div>
-
-          {/* Asset Allocation Bar */}
-          {aiResult.assetAllocation && (
-            <div className="card">
-              <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>ASSET ALLOCATION</div>
-              <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 10 }}>
-                {[
-                  { key: 'equity', color: '#00ff88' }, { key: 'debt', color: '#4488ff' },
-                  { key: 'gold', color: '#ffaa00' },   { key: 'international', color: '#ff8844' },
-                ].filter(a => aiResult.assetAllocation[a.key] > 0).map((a, i) => (
-                  <div key={i} style={{ width: `${aiResult.assetAllocation[a.key]}%`, background: a.color }} />
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {[
-                  { key: 'equity', color: '#00ff88', label: 'Equity' }, { key: 'debt', color: '#4488ff', label: 'Debt' },
-                  { key: 'gold', color: '#ffaa00', label: 'Gold' },     { key: 'international', color: '#ff8844', label: 'Intl' },
-                ].filter(a => aiResult.assetAllocation[a.key] > 0).map((a, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: 2, background: a.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: '#99aacc' }}>{a.label} {aiResult.assetAllocation[a.key]}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Fund Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {aiResult.topPicks?.map((pick, i) => (
-              <div key={i} className="card" style={{ borderColor: '#ff9a0022' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div style={{ flex: 1, marginRight: 12 }}>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                      <Pill label={pick.type} color={pick.type === 'ETF' ? '#ff9a00' : '#4488ff'} />
-                      {pick.taxCategory && <Pill label={pick.taxCategory} color="#7788aa" />}
-                      {pick.expenseRatio && <Pill label={`ER: ${pick.expenseRatio}`} color="#556677" />}
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0', marginBottom: 2 }}>{pick.name}</div>
-                    {pick.symbol && <div style={{ fontSize: 11, color: '#7788aa' }}>{pick.symbol}</div>}
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', lineHeight: 1 }}>{pick.allocation}%</div>
-                    {pick.amount && <div style={{ fontSize: 12, color: '#99aacc', marginTop: 2 }}>{fmtRs(pick.amount)}/mo</div>}
-                    {pick.expectedReturn && <div style={{ fontSize: 11, color: '#00ff88', marginTop: 2 }}>{pick.expectedReturn}</div>}
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: '#b0c0dd', lineHeight: 1.7, marginBottom: pick.pros?.length > 0 || pick.cons?.length > 0 ? 10 : 0 }}>{pick.reason}</div>
-                {(pick.pros?.length > 0 || pick.cons?.length > 0) && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, borderTop: '1px solid #1e1e2e', paddingTop: 10 }}>
-                    <div>{pick.pros?.map((p, j) => (
-                      <div key={j} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 4 }}>
-                        <span style={{ color: '#00ff88', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✓</span>
-                        <span style={{ fontSize: 11, color: '#7788aa' }}>{p}</span>
-                      </div>
-                    ))}</div>
-                    <div>{pick.cons?.map((c, j) => (
-                      <div key={j} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 4 }}>
-                        <span style={{ color: '#ff4444', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✗</span>
-                        <span style={{ fontSize: 11, color: '#7788aa' }}>{c}</span>
-                      </div>
-                    ))}</div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Monthly SIP Plan */}
-          {aiResult.monthlyPlan && (
-            <div className="card">
-              <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>
-                MONTHLY SIP PLAN — {fmtRs(aiResult.monthlyPlan.total)}/mo
-              </div>
-              {aiResult.monthlyPlan.breakdown?.map((b, i) => (
-                <div key={i} className="kv" style={{ paddingBottom: 8, marginBottom: 8, borderBottom: i < aiResult.monthlyPlan.breakdown.length - 1 ? '1px solid #1a1a2a' : 'none' }}>
-                  <div>
-                    <span className="kv-key">{b.instrument}</span>
-                    {b.sipDate && <span style={{ fontSize: 10, color: '#445', marginLeft: 8 }}>on {b.sipDate}</span>}
-                  </div>
-                  <span className="kv-value" style={{ color: '#ff9a00' }}>{fmtRs(b.amount)}/mo</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tax Strategy + Rebalancing */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-            {aiResult.taxStrategy && (
-              <div className="card" style={{ borderLeft: '3px solid #4488ff55' }}>
-                <div style={{ fontSize: 10, color: '#4488ff', letterSpacing: '0.15em', marginBottom: 8 }}>TAX STRATEGY</div>
-                <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.taxStrategy}</div>
-              </div>
-            )}
-            {aiResult.rebalancing && (
-              <div className="card" style={{ borderLeft: '3px solid #ffaa0055' }}>
-                <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>REBALANCING</div>
-                <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.rebalancing}</div>
-              </div>
-            )}
-          </div>
-
-          {/* Red Flags */}
-          {aiResult.redFlags?.length > 0 && (
-            <div className="card" style={{ borderColor: '#ff444433', borderLeft: '3px solid #ff4444' }}>
-              <div style={{ fontSize: 10, color: '#ff4444', letterSpacing: '0.15em', marginBottom: 8 }}>⚠ RISKS TO BE AWARE OF</div>
-              {aiResult.redFlags.map((flag, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                  <span style={{ color: '#ff4444', fontSize: 11, flexShrink: 0 }}>•</span>
-                  <span style={{ fontSize: 12, color: '#b0c0dd' }}>{flag}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Final Advice */}
-          {aiResult.advice && (
-            <div className="card" style={{ borderLeft: '3px solid #00ff8855', background: '#00ff8808' }}>
-              <div style={{ fontSize: 10, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 8 }}>NEXT STEPS</div>
-              <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.advice}</div>
-            </div>
-          )}
-
-          <div style={{ fontSize: 10, color: '#445', textAlign: 'center' }}>
-            AI-generated recommendations only. Not SEBI-registered advice. Consult a financial advisor before investing.
-          </div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8, marginBottom: 20 }}>
+          Artha will ask you a few questions about your financial situation — age, goals,
+          existing investments, risk comfort — and then build a personalised portfolio just for you.
         </div>
-      ) : (
-        <div>
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 12, color: '#99aacc', marginBottom: 10 }}>Monthly SIP budget</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <input type="range" min={500} max={100000} step={500} value={sipAmount}
-                onChange={e => setSipAmount(Number(e.target.value))}
-                style={{ flex: 1, accentColor: '#ff9a00' }} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#ff9a00', minWidth: 90 }}>{fmtRs(sipAmount)}</span>
-            </div>
+        <div style={{ fontSize: 12, color: '#99aacc', marginBottom: 10 }}>Monthly SIP budget</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+          <input type="range" min={500} max={200000} step={500} value={sipAmount}
+            onChange={e => setSipAmount(Number(e.target.value))}
+            style={{ flex: 1, accentColor: '#ff9a00' }} />
+          <span style={{ fontSize: 20, fontWeight: 700, color: '#ff9a00', minWidth: 100 }}>{fmtRs(sipAmount)}</span>
+        </div>
+        <button className="btn" onClick={startChat} style={{ width: '100%', fontSize: 15, padding: '14px' }}>
+          START CONVERSATION →
+        </button>
+      </div>
+      <div style={{ fontSize: 11, color: '#445', textAlign: 'center' }}>
+        AI-generated recommendations only. Not SEBI-registered advice.
+      </div>
+    </div>
+  );
+
+  // ── Generating screen ────────────────────────────────────────────────────────
+  if (stage === 'generating') return (
+    <div className="fade-in">
+      <PageHeader icon="🤖" title="AI Portfolio Advisor" subtitle="" onBack={onBack} />
+      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#ff9a00', marginBottom: 12 }}>
+          BUILDING YOUR PORTFOLIO
+        </div>
+        <div style={{ fontSize: 13, color: '#7788aa', lineHeight: 1.8, maxWidth: 380, margin: '0 auto' }}>
+          Analysing your responses and generating a personalised recommendation...
+        </div>
+        <div style={{ marginTop: 32, display: 'flex', justifyContent: 'center', gap: 8 }}>
+          {[0,1,2].map(i => (
+            <div key={i} style={{
+              width: 8, height: 8, borderRadius: '50%', background: '#ff9a00',
+              animation: `pulse 1.2s ease-in-out ${i * 0.4}s infinite`,
+            }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Result screen ────────────────────────────────────────────────────────────
+  if (stage === 'result' && aiResult) return (
+    <div className="fade-in">
+      <PageHeader icon="🤖" title="Your Portfolio" subtitle="Personalised by Artha" onBack={onBack} />
+      <button className="btn-sm" onClick={reset} style={{ marginBottom: 20 }}>← START OVER</button>
+
+      {/* Investor profile summary */}
+      {aiResult.investorProfile && (
+        <div className="card" style={{ marginBottom: 16, borderColor: '#ff9a0033' }}>
+          <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>YOUR PROFILE</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            {[
+              aiResult.investorProfile.age && `Age ${aiResult.investorProfile.age}`,
+              aiResult.investorProfile.goal,
+              aiResult.investorProfile.horizon,
+              aiResult.investorProfile.riskLabel,
+              aiResult.investorProfile.taxBracket,
+            ].filter(Boolean).map((item, i) => (
+              <Pill key={i} label={item} color="#ff9a00" />
+            ))}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {RISK_QUESTIONS.map((q, qi) => (
-              <div key={qi} className="card">
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#c8d8f0', marginBottom: 14 }}>
-                  <span style={{ color: '#ff9a00', marginRight: 10 }}>{qi + 1}.</span>{q.q}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  {q.options.map((opt, oi) => (
-                    <button key={oi} onClick={() => handleAnswer(qi, opt.score)} style={{
-                      padding: '11px 14px', textAlign: 'left', fontSize: 13,
-                      background: answers[qi] === opt.score ? '#ff9a0022' : '#0a0a14',
-                      border: `1px solid ${answers[qi] === opt.score ? '#ff9a00' : '#2a2a3e'}`,
-                      color: answers[qi] === opt.score ? '#ff9a00' : '#b0c0dd',
-                      cursor: 'pointer', borderRadius: 4, fontFamily: 'inherit', transition: 'all 0.12s',
-                    }}>{opt.label}</button>
-                  ))}
-                </div>
+          {aiResult.investorProfile.keyConsiderations?.map((c, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+              <span style={{ color: '#ff9a00', fontSize: 11, flexShrink: 0 }}>→</span>
+              <span style={{ fontSize: 12, color: '#99aacc' }}>{c}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Summary */}
+      <div className="card" style={{ marginBottom: 16, borderColor: '#00ff8833' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: aiResult.riskAssessment?.suitability ? 12 : 0 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.12em', marginBottom: 8 }}>RECOMMENDATION SUMMARY</div>
+            <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.summary}</div>
+          </div>
+          {aiResult.riskAssessment && (
+            <div style={{ background: '#0a0a14', borderRadius: 6, padding: '10px 14px', textAlign: 'center', flexShrink: 0 }}>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ff9a00' }}>{aiResult.riskAssessment.label}</div>
+              <div style={{ fontSize: 11, color: '#00ff88', marginTop: 2 }}>{aiResult.riskAssessment.expectedReturn}</div>
+              <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2 }}>{aiResult.riskAssessment.volatility} volatility</div>
+            </div>
+          )}
+        </div>
+        {aiResult.riskAssessment?.suitability && (
+          <div style={{ fontSize: 12, color: '#7788aa', borderTop: '1px solid #1e1e2e', paddingTop: 10, fontStyle: 'italic' }}>
+            {aiResult.riskAssessment.suitability}
+          </div>
+        )}
+      </div>
+
+      {/* Asset Allocation */}
+      {aiResult.assetAllocation && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>ASSET ALLOCATION</div>
+          <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 10 }}>
+            {[
+              { key: 'equity', color: '#00ff88' }, { key: 'debt', color: '#4488ff' },
+              { key: 'gold', color: '#ffaa00' },   { key: 'international', color: '#ff8844' },
+            ].filter(a => aiResult.assetAllocation[a.key] > 0).map((a, i) => (
+              <div key={i} style={{ width: `${aiResult.assetAllocation[a.key]}%`, background: a.color }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {[
+              { key: 'equity', color: '#00ff88', label: 'Equity' }, { key: 'debt', color: '#4488ff', label: 'Debt' },
+              { key: 'gold', color: '#ffaa00', label: 'Gold' },     { key: 'international', color: '#ff8844', label: 'Intl' },
+            ].filter(a => aiResult.assetAllocation[a.key] > 0).map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 8, height: 8, borderRadius: 2, background: a.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#99aacc' }}>{a.label} {aiResult.assetAllocation[a.key]}%</span>
               </div>
             ))}
-            {allAnswered && (
-              <div className="card" style={{ borderColor: riskProfile.color + '44', textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#7788aa', letterSpacing: '0.15em', marginBottom: 10 }}>YOUR RISK PROFILE</div>
-                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 36, color: riskProfile.color, marginBottom: 6 }}>{riskProfile.label}</div>
-                <div style={{ fontSize: 13, color: '#7788aa', marginBottom: 20 }}>Expected annual return: ~{riskProfile.expected}%</div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 24 }}>
-                  {Object.entries(allocation).map(([k, v]) => (
-                    <div key={k} style={{ background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 4, padding: '10px 16px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: riskProfile.color }}>{v}%</div>
-                      <div style={{ fontSize: 11, color: '#7788aa', marginTop: 2 }}>{k}</div>
-                    </div>
-                  ))}
-                </div>
-                {error && (
-                  <div style={{ fontSize: 13, color: '#ff4444', background: '#ff444411',
-                    border: '1px solid #ff444433', borderRadius: 4, padding: '10px 14px', marginBottom: 12, lineHeight: 1.5 }}>
-                    {error}
-                  </div>
-                )}
-                <button className="btn" onClick={getAIRecommendation} disabled={aiLoading} style={{ fontSize: 14, padding: '12px 32px' }}>
-                  {aiLoading ? 'GENERATING...' : 'GET AI PORTFOLIO RECOMMENDATION'}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-
-// ── SIP autocomplete options ──────────────────────────────────────────────────
-const SIP_OPTIONS = [
-  // Index ETFs
-  { label: 'NIFTYBEES — Nippon Nifty 50 BeES',     value: 'NIFTYBEES'  },
-  { label: 'JUNIORBEES — Nippon Junior BeES',       value: 'JUNIORBEES' },
-  { label: 'SETFNN50 — SBI Nifty Next 50 ETF',     value: 'SETFNN50'   },
-  { label: 'SETFNIF50 — SBI Nifty 50 ETF',         value: 'SETFNIF50'  },
-  { label: 'NV20IETF — Nippon Nifty 100 ETF',      value: 'NV20IETF'   },
-  { label: 'NIFTYETF — Mirae Asset Nifty 50 ETF',  value: 'NIFTYETF'   },
-  // Sectoral ETFs
-  { label: 'BANKBEES — Nippon Bank BeES',           value: 'BANKBEES'   },
-  { label: 'ITBEES — Nippon IT BeES',               value: 'ITBEES'     },
-  { label: 'PHARMABEES — Nippon Pharma BeES',       value: 'PHARMABEES' },
-  { label: 'INFRABEES — Nippon Infra BeES',         value: 'INFRABEES'  },
-  { label: 'PSUBNKBEES — Nippon PSU Bank BeES',     value: 'PSUBNKBEES' },
-  { label: 'AUTOBEES — Nippon Auto BeES',           value: 'AUTOBEES'   },
-  { label: 'FMCGBEES — Nippon FMCG BeES',           value: 'FMCGBEES'   },
-  // Commodity ETFs
-  { label: 'GOLDBEES — Nippon Gold BeES',           value: 'GOLDBEES'   },
-  { label: 'SILVERIETF — ICICI Silver ETF',         value: 'SILVERIETF' },
-  { label: 'SETFGOLD — SBI Gold ETF',               value: 'SETFGOLD'   },
-  { label: 'HDFCGOLD — HDFC Gold ETF',              value: 'HDFCGOLD'   },
-  // Debt ETFs
-  { label: 'LIQUIDBEES — Nippon Liquid BeES',       value: 'LIQUIDBEES' },
-  { label: 'LIQUIDETF — HDFC Liquid ETF',           value: 'LIQUIDETF'  },
-  { label: 'CPSEETF — Nippon CPSE ETF',             value: 'CPSEETF'    },
-  // Mutual Funds
-  { label: 'UTI Nifty 50 Index Fund Direct',        value: 'UTI Nifty 50 Index Fund Direct'        },
-  { label: 'HDFC Nifty 50 Index Fund Direct',       value: 'HDFC Nifty 50 Index Fund Direct'       },
-  { label: 'SBI Nifty Index Fund Direct',           value: 'SBI Nifty Index Fund Direct'           },
-  { label: 'Mirae Asset Large Cap Fund Direct',     value: 'Mirae Asset Large Cap Fund Direct'     },
-  { label: 'Axis Bluechip Fund Direct',             value: 'Axis Bluechip Fund Direct'             },
-  { label: 'Parag Parikh Flexi Cap Fund Direct',    value: 'Parag Parikh Flexi Cap Fund Direct'    },
-  { label: 'SBI Small Cap Fund Direct',             value: 'SBI Small Cap Fund Direct'             },
-  { label: 'HDFC Mid-Cap Opportunities Direct',     value: 'HDFC Mid-Cap Opportunities Direct'     },
-  { label: 'Nippon India Liquid Fund Direct',       value: 'Nippon India Liquid Fund Direct'       },
-  { label: 'ICICI Pru Short Term Fund Direct',      value: 'ICICI Pru Short Term Fund Direct'      },
-];
-
-
-// ── iOS-style scroll wheel date picker ───────────────────────────────────────
-function WheelColumn({ items, selectedIndex, onSelect, width = '33%' }) {
-  const ref = useRef(null);
-  const itemH = 44;
-
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.scrollTop = selectedIndex * itemH;
-    }
-  }, [selectedIndex]);
-
-  const handleScroll = () => {
-    if (!ref.current) return;
-    const idx = Math.round(ref.current.scrollTop / itemH);
-    if (idx !== selectedIndex && idx >= 0 && idx < items.length) {
-      onSelect(idx);
-    }
-  };
-
-  return (
-    <div style={{ width, position: 'relative', overflow: 'hidden' }}>
-      {/* Selection highlight */}
-      <div style={{
-        position: 'absolute', top: '50%', left: 4, right: 4,
-        height: itemH, transform: 'translateY(-50%)',
-        background: '#ff9a0018', border: '1px solid #ff9a0044',
-        borderRadius: 8, pointerEvents: 'none', zIndex: 1,
-      }} />
-      {/* Fade top */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 60,
-        background: 'linear-gradient(to bottom, #0f0f1a, transparent)',
-        pointerEvents: 'none', zIndex: 2,
-      }} />
-      {/* Fade bottom */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: 60,
-        background: 'linear-gradient(to top, #0f0f1a, transparent)',
-        pointerEvents: 'none', zIndex: 2,
-      }} />
-      {/* Scroll container */}
-      <div
-        ref={ref}
-        onScroll={handleScroll}
-        style={{
-          height: itemH * 5,
-          overflowY: 'scroll',
-          scrollSnapType: 'y mandatory',
-          scrollbarWidth: 'none',
-          paddingTop: itemH * 2,
-          paddingBottom: itemH * 2,
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        {items.map((item, i) => (
-          <div
-            key={i}
-            onClick={() => {
-              onSelect(i);
-              if (ref.current) ref.current.scrollTo({ top: i * itemH, behavior: 'smooth' });
-            }}
-            style={{
-              height: itemH,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              scrollSnapAlign: 'center',
-              fontSize: i === selectedIndex ? 17 : 14,
-              fontWeight: i === selectedIndex ? 700 : 400,
-              color: i === selectedIndex ? '#ff9a00' : '#556677',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              userSelect: 'none',
-            }}
-          >
-            {item}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DatePicker({ value, onChange }) {
-  const now    = new Date();
-  const curY   = now.getFullYear();
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const years  = Array.from({ length: 11 }, (_, i) => curY - 10 + i);
-
-  const parsed = value ? value.split('-') : [String(curY), '01', '01'];
-  const initY  = years.indexOf(Number(parsed[0]));
-  const initM  = Number(parsed[1]) - 1;
-  const initD  = Number(parsed[2]) - 1;
-
-  const [yIdx, setYIdx] = useState(initY >= 0 ? initY : years.length - 1);
-  const [mIdx, setMIdx] = useState(initM >= 0 ? initM : now.getMonth());
-  const [dIdx, setDIdx] = useState(initD >= 0 ? initD : now.getDate() - 1);
-
-  const selYear  = years[yIdx];
-  const selMonth = mIdx + 1;
-  const daysInM  = new Date(selYear, selMonth, 0).getDate();
-  const days     = Array.from({ length: daysInM }, (_, i) => i + 1);
-
-  // Clamp day index when month/year changes
-  const safeDIdx = Math.min(dIdx, daysInM - 1);
-
-  const emit = (y, m, d) => {
-    const dd = String(d + 1).padStart(2, '0');
-    const mm = String(m + 1).padStart(2, '0');
-    onChange(`${years[y]}-${mm}-${dd}`);
-  };
-
-  const handleY = (i) => { setYIdx(i); emit(i, mIdx, safeDIdx); };
-  const handleM = (i) => { setMIdx(i); emit(yIdx, i, safeDIdx); };
-  const handleD = (i) => { setDIdx(i); emit(yIdx, mIdx, i); };
-
-  return (
-    <div style={{
-      background: '#0f0f1a', border: '1px solid #2a2a40', borderRadius: 12,
-      overflow: 'hidden', padding: '0 8px',
-    }}>
-      {/* Labels */}
-      <div style={{ display: 'flex', padding: '10px 0 0', marginBottom: -4 }}>
-        {[['DAY', '33%'], ['MONTH', '34%'], ['YEAR', '33%']].map(([l, w]) => (
-          <div key={l} style={{ width: w, textAlign: 'center', fontSize: 9,
-            color: '#445', letterSpacing: '0.15em' }}>{l}</div>
-        ))}
-      </div>
-      {/* Wheels */}
-      <div style={{ display: 'flex' }}>
-        <WheelColumn
-          items={days.map(d => String(d).padStart(2, '0'))}
-          selectedIndex={safeDIdx}
-          onSelect={handleD}
-          width="33%"
-        />
-        <WheelColumn
-          items={months}
-          selectedIndex={mIdx}
-          onSelect={handleM}
-          width="34%"
-        />
-        <WheelColumn
-          items={years.map(String)}
-          selectedIndex={yIdx}
-          onSelect={handleY}
-          width="33%"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ── SIP Form with autocomplete ────────────────────────────────────────────────
-function SIPForm({ form, setForm, onAdd, onCancel, saving }) {
-  const [query,       setQuery]       = useState(form.name || '');
-  const [suggestions, setSuggestions] = useState([]);
-  const [showDrop,    setShowDrop]    = useState(false);
-
-  const handleSearch = (val) => {
-    setQuery(val);
-    setForm(f => ({ ...f, name: val }));
-    if (val.length < 1) { setSuggestions([]); setShowDrop(false); return; }
-    const q = val.toUpperCase();
-    const matches = SIP_OPTIONS.filter(o =>
-      o.value.toUpperCase().includes(q) || o.label.toUpperCase().includes(q)
-    ).slice(0, 8);
-    setSuggestions(matches);
-    setShowDrop(matches.length > 0);
-  };
-
-  const selectOption = (opt) => {
-    setQuery(opt.label);
-    setForm(f => ({ ...f, name: opt.value }));
-    setShowDrop(false);
-  };
-
-  return (
-    <div className="card" style={{ marginBottom: 20, borderColor: '#00ff8833' }}>
-      <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 16 }}>NEW SIP</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-        {/* Autocomplete fund/ETF picker */}
-        <div style={{ position: 'relative' }}>
-          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>
-            ETF OR MUTUAL FUND
-          </div>
-          <input
-            className="input"
-            type="text"
-            placeholder="Search ETF or fund name..."
-            value={query}
-            onChange={e => handleSearch(e.target.value)}
-            onFocus={() => query.length > 0 && setSuggestions(
-              SIP_OPTIONS.filter(o => o.label.toUpperCase().includes(query.toUpperCase())).slice(0, 8)
-            ) || setShowDrop(true)}
-            onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-            autoComplete="off"
-          />
-          {showDrop && suggestions.length > 0 && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-              background: '#0f0f1a', border: '1px solid #ff9a0044', borderRadius: 4,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.6)', maxHeight: 220, overflowY: 'auto',
-            }}>
-              {suggestions.map((opt, i) => (
-                <div key={i}
-                  onMouseDown={() => selectOption(opt)}
-                  style={{
-                    padding: '10px 14px', cursor: 'pointer', fontSize: 13,
-                    borderBottom: i < suggestions.length - 1 ? '1px solid #1a1a2a' : 'none',
-                    color: '#c8d8f0',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#ff9a0011'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <span style={{ color: '#ff9a00', fontWeight: 700 }}>
-                    {opt.value.length < 15 ? opt.value : ''}
-                  </span>
-                  {opt.value.length < 15 && <span style={{ color: '#556677' }}> — </span>}
-                  <span style={{ color: opt.value.length >= 15 ? '#c8d8f0' : '#7788aa' }}>
-                    {opt.value.length >= 15 ? opt.label : opt.label.split('—')[1]?.trim() || opt.label}
-                  </span>
+      {/* Fund Cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+        {aiResult.topPicks?.map((pick, i) => (
+          <div key={i} className="card" style={{ borderColor: '#ff9a0022' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+              <div style={{ flex: 1, marginRight: 12 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <Pill label={pick.type} color={pick.type === 'ETF' ? '#ff9a00' : '#4488ff'} />
+                  {pick.taxCategory && <Pill label={pick.taxCategory} color="#7788aa" />}
+                  {pick.expenseRatio && <Pill label={`ER: ${pick.expenseRatio}`} color="#556677" />}
                 </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8f0', marginBottom: 2 }}>{pick.name}</div>
+                {pick.symbol && <div style={{ fontSize: 11, color: '#7788aa' }}>{pick.symbol}</div>}
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#ff9a00', lineHeight: 1 }}>{pick.allocation}%</div>
+                {pick.amount && <div style={{ fontSize: 12, color: '#99aacc', marginTop: 2 }}>{fmtRs(pick.amount)}/mo</div>}
+                {pick.expectedReturn && <div style={{ fontSize: 11, color: '#00ff88', marginTop: 2 }}>{pick.expectedReturn}</div>}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#b0c0dd', lineHeight: 1.7, marginBottom: (pick.pros?.length || pick.cons?.length) ? 10 : 0 }}>{pick.reason}</div>
+            {(pick.pros?.length > 0 || pick.cons?.length > 0) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, borderTop: '1px solid #1e1e2e', paddingTop: 10 }}>
+                <div>{pick.pros?.map((p, j) => <div key={j} style={{ display: 'flex', gap: 5, marginBottom: 3 }}><span style={{ color: '#00ff88', fontSize: 10, flexShrink: 0 }}>✓</span><span style={{ fontSize: 11, color: '#7788aa' }}>{p}</span></div>)}</div>
+                <div>{pick.cons?.map((c, j) => <div key={j} style={{ display: 'flex', gap: 5, marginBottom: 3 }}><span style={{ color: '#ff4444', fontSize: 10, flexShrink: 0 }}>✗</span><span style={{ fontSize: 11, color: '#7788aa' }}>{c}</span></div>)}</div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Monthly plan */}
+      {aiResult.monthlyPlan && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: '#ff9a00', letterSpacing: '0.12em', marginBottom: 12 }}>
+            MONTHLY SIP PLAN — {fmtRs(aiResult.monthlyPlan.total)}/mo
+          </div>
+          {aiResult.monthlyPlan.breakdown?.map((b, i) => (
+            <div key={i} className="kv" style={{ paddingBottom: 8, marginBottom: 8, borderBottom: i < aiResult.monthlyPlan.breakdown.length - 1 ? '1px solid #1a1a2a' : 'none' }}>
+              <div><span className="kv-key">{b.instrument}</span>{b.sipDate && <span style={{ fontSize: 10, color: '#445', marginLeft: 8 }}>on {b.sipDate}</span>}</div>
+              <span className="kv-value" style={{ color: '#ff9a00' }}>{fmtRs(b.amount)}/mo</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tax + Rebalancing + Emergency */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 16 }}>
+        {aiResult.taxStrategy && (
+          <div className="card" style={{ borderLeft: '3px solid #4488ff55' }}>
+            <div style={{ fontSize: 10, color: '#4488ff', letterSpacing: '0.15em', marginBottom: 8 }}>TAX STRATEGY</div>
+            <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.taxStrategy}</div>
+          </div>
+        )}
+        {aiResult.rebalancing && (
+          <div className="card" style={{ borderLeft: '3px solid #ffaa0055' }}>
+            <div style={{ fontSize: 10, color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>REBALANCING</div>
+            <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.rebalancing}</div>
+          </div>
+        )}
+        {aiResult.emergencyFundAdvice && (
+          <div className="card" style={{ borderLeft: '3px solid #ff884455' }}>
+            <div style={{ fontSize: 10, color: '#ff8844', letterSpacing: '0.15em', marginBottom: 8 }}>EMERGENCY FUND</div>
+            <div style={{ fontSize: 12, color: '#99aacc', lineHeight: 1.7 }}>{aiResult.emergencyFundAdvice}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Red flags */}
+      {aiResult.redFlags?.length > 0 && (
+        <div className="card" style={{ borderLeft: '3px solid #ff4444', marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: '#ff4444', letterSpacing: '0.15em', marginBottom: 8 }}>⚠ RISKS TO BE AWARE OF</div>
+          {aiResult.redFlags.map((flag, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+              <span style={{ color: '#ff4444', fontSize: 11, flexShrink: 0 }}>•</span>
+              <span style={{ fontSize: 12, color: '#b0c0dd' }}>{flag}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Next steps */}
+      {aiResult.advice && (
+        <div className="card" style={{ borderLeft: '3px solid #00ff8855', background: '#00ff8808', marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 8 }}>NEXT STEPS</div>
+          <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8 }}>{aiResult.advice}</div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 10, color: '#445', textAlign: 'center' }}>
+        AI-generated recommendations only. Not SEBI-registered advice. Consult a financial advisor before investing.
+      </div>
+    </div>
+  );
+
+  // ── Chat screen ──────────────────────────────────────────────────────────────
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <PageHeader icon="🤖" title="Artha" subtitle="Your AI investment advisor" onBack={onBack} />
+
+      {/* Chat messages */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+        {messages.map((msg, i) => (
+          <div key={i} style={{
+            display: 'flex',
+            justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+          }}>
+            {msg.role === 'assistant' && (
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ff9a0022',
+                border: '1px solid #ff9a0044', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 14, flexShrink: 0, marginRight: 8, marginTop: 2 }}>
+                🤖
+              </div>
+            )}
+            <div style={{
+              maxWidth: '80%',
+              background: msg.role === 'user' ? '#ff9a0015' : '#0f0f1a',
+              border: `1px solid ${msg.role === 'user' ? '#ff9a0033' : '#2a2a40'}`,
+              borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+              padding: '10px 14px',
+              fontSize: 13,
+              color: '#c8d8f0',
+              lineHeight: 1.7,
+            }}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+
+        {/* Loading dots */}
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ff9a0022',
+              border: '1px solid #ff9a0044', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>🤖</div>
+            <div style={{ background: '#0f0f1a', border: '1px solid #2a2a40',
+              borderRadius: '16px 16px 16px 4px', padding: '10px 16px',
+              display: 'flex', gap: 5, alignItems: 'center' }}>
+              {[0,1,2].map(i => (
+                <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff9a00',
+                  animation: `pulse 1.2s ease-in-out ${i * 0.3}s infinite` }} />
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
 
-        {/* Amount */}
-        <div>
-          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>MONTHLY AMOUNT (₹)</div>
-          <input className="input" type="number" placeholder="5000" min="100"
-            value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+      {/* Error */}
+      {error && (
+        <div style={{ fontSize: 12, color: '#ff4444', background: '#ff444411',
+          border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px', marginBottom: 12 }}>
+          {error}
         </div>
+      )}
 
-        {/* Start date — iOS scroll wheel picker */}
-        <div>
-          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 8 }}>SIP START DATE</div>
-          <DatePicker value={form.startDate} onChange={v => setForm(f => ({ ...f, startDate: v }))} />
-          {form.startDate && (
-            <div style={{ fontSize: 11, color: '#ff9a00', textAlign: 'center', marginTop: 8 }}>
-              {new Date(form.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </div>
-          )}
-        </div>
-
-        {/* Frequency */}
-        <div>
-          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>FREQUENCY</div>
-          <select className="input" value={form.frequency}
-            onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}>
-            <option value="monthly">Monthly</option>
-            <option value="weekly">Weekly</option>
-            <option value="quarterly">Quarterly</option>
-          </select>
-        </div>
-
-        {/* Actions */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <button className="btn-sm" onClick={onCancel}
-            style={{ color: '#7788aa', borderColor: '#2a2a3e' }}>CANCEL</button>
-          <button className="btn" onClick={onAdd} disabled={saving}>
-            {saving ? 'SAVING...' : 'ADD SIP'}
-          </button>
-        </div>
+      {/* Input */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end',
+        position: 'sticky', bottom: 0, background: '#07070e', paddingTop: 12 }}>
+        <textarea
+          className="input"
+          placeholder="Type your answer..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+          rows={2}
+          style={{ flex: 1, resize: 'none', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5 }}
+          disabled={loading}
+        />
+        <button className="btn" onClick={sendMessage} disabled={loading || !input.trim()}
+          style={{ padding: '10px 16px', flexShrink: 0 }}>
+          SEND
+        </button>
+      </div>
+      <div style={{ fontSize: 10, color: '#445', textAlign: 'center', marginTop: 8 }}>
+        Press Enter to send · Shift+Enter for new line
       </div>
     </div>
   );
