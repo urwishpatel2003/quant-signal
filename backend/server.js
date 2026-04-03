@@ -2343,6 +2343,7 @@ app.get('/financials/us/:ticker', async (req, res) => {
       const ic = r.report?.ic || [];
 
       // Match by concept (XBRL tag) first — more reliable than label
+      // Finnhub uses underscores: us-gaap_Revenues (not colons)
       const getByConcept = (...concepts) => {
         for (const c of concepts) {
           const item = ic.find(i => i.concept === c);
@@ -2352,20 +2353,21 @@ app.get('/financials/us/:ticker', async (req, res) => {
       };
 
       const revenue    = getByConcept(
-        'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-        'us-gaap:Revenues', 'us-gaap:SalesRevenueNet',
-        'us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax',
-        'us-gaap:NetRevenues', 'us-gaap:SalesRevenueGoodsNet'
+        'us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax',
+        'us-gaap_Revenues', 'us-gaap_SalesRevenueNet',
+        'us-gaap_RevenueFromContractWithCustomerIncludingAssessedTax',
+        'us-gaap_NetRevenues', 'us-gaap_SalesRevenueGoodsNet',
+        'us-gaap_SalesRevenueGoodsGross', 'us-gaap_RevenueFromContractWithCustomer'
       );
       const netIncome  = getByConcept(
-        'us-gaap:NetIncomeLoss',
-        'us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic',
-        'us-gaap:ProfitLoss'
+        'us-gaap_NetIncomeLoss',
+        'us-gaap_NetIncomeLossAvailableToCommonStockholdersBasic',
+        'us-gaap_ProfitLoss', 'us-gaap_NetIncome'
       );
-      const grossProfit = getByConcept('us-gaap:GrossProfit');
+      const grossProfit = getByConcept('us-gaap_GrossProfit');
       const epsDiluted  = getByConcept(
-        'us-gaap:EarningsPerShareDiluted',
-        'us-gaap:EarningsPerShareBasic'
+        'us-gaap_EarningsPerShareDiluted',
+        'us-gaap_EarningsPerShareBasic'
       );
 
       return {
