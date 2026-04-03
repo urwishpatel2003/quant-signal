@@ -1849,25 +1849,41 @@ app.get('/india/fundamentals/:symbol', async (req, res) => {
 // Conversational advisor — takes message history, returns next advisor message
 // When advisor has enough info, returns { done: true, portfolioReady: true }
 app.post('/api/portfolio/chat', async (req, res) => {
-  const { messages, sipAmount } = req.body;
-  // messages can be empty for initial greeting
+  const { messages, sipAmount, language = 'en' } = req.body;
   const msgHistory = Array.isArray(messages) ? messages : [];
+
+  const LANG_INSTRUCTIONS = {
+    en: 'Converse in English.',
+    hi: 'Converse entirely in Hindi (हिंदी). Use simple conversational Hindi. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    ta: 'Converse entirely in Tamil (தமிழ்). Use simple conversational Tamil. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    te: 'Converse entirely in Telugu (తెలుగు). Use simple conversational Telugu. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    kn: 'Converse entirely in Kannada (ಕನ್ನಡ). Use simple conversational Kannada. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    ml: 'Converse entirely in Malayalam (മലയാളം). Use simple conversational Malayalam. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    mr: 'Converse entirely in Marathi (मराठी). Use simple conversational Marathi. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    bn: 'Converse entirely in Bengali (বাংলা). Use simple conversational Bengali. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+    gu: 'Converse entirely in Gujarati (ગુજરાતી). Use simple conversational Gujarati. Financial terms like SIP, ETF, NAV, mutual fund can stay in English.',
+  };
+  const langInstruction = LANG_INSTRUCTIONS[language] || LANG_INSTRUCTIONS.en;
+  const budget = `₹${Number(sipAmount || 10000).toLocaleString('en-IN')}/month`;
+
   try {
     const result = await callClaudeRaw({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 600,
-      system: `You are Artha, a friendly and knowledgeable Indian investment advisor at QuAInt Signal.
+      system: `You are Arya, a friendly and knowledgeable Indian investment advisor at QuAInt Signal.
 You are having a conversational intake with a new investor to understand their financial situation before recommending a portfolio.
 
+LANGUAGE: ${langInstruction}
+
 YOUR JOB: Ask questions ONE AT A TIME in a natural, conversational way to gather:
-1. Age
+1. Age and occupation
 2. Monthly income (approximate range is fine)
 3. Primary investment goal (retirement / child education / house / wealth creation / other)
 4. Investment timeline / horizon
 5. Existing investments if any (FDs, PPF, stocks, MFs)
 6. Monthly EMIs or financial obligations
 7. Emergency fund status (do they have 3-6 months expenses saved)
-8. Risk comfort (explain with a scenario: "if your portfolio dropped 20%, would you panic, hold, or buy more?")
+8. Risk comfort (scenario: "if your portfolio dropped 20%, would you panic, hold, or buy more?")
 9. Tax bracket (rough idea — helps with debt fund advice)
 
 RULES:
@@ -1877,8 +1893,8 @@ RULES:
 - After 6-8 exchanges when you have sufficient information, end with EXACTLY this JSON on its own line:
   {"PORTFOLIO_READY": true}
 - Do NOT generate the portfolio yourself — just signal when ready
-- The monthly SIP budget is already known: ₹${Number(sipAmount || 10000).toLocaleString('en-IN')}/month
-- Don't ask about SIP amount again
+- The monthly SIP budget is already known: ${budget}
+- Do not ask about SIP amount again
 
 Start by greeting them warmly and asking their age and occupation in one natural question.`,
       messages: msgHistory.length > 0
@@ -1917,7 +1933,12 @@ Start by greeting them warmly and asking their age and occupation in one natural
 // ─── POST /api/portfolio/generate ──────────────────────────────────────────────
 // Generate portfolio from full conversation transcript
 app.post('/api/portfolio/generate', async (req, res) => {
-  const { messages, sipAmount } = req.body;
+  const { messages, sipAmount, language = 'en' } = req.body;
+  const LANG_NAMES_GEN = {
+    en: 'English', hi: 'Hindi', ta: 'Tamil', te: 'Telugu',
+    kn: 'Kannada', ml: 'Malayalam', mr: 'Marathi', bn: 'Bengali', gu: 'Gujarati',
+  };
+  const langNameGen = LANG_NAMES_GEN[language] || 'English';
   if (!messages?.length) return res.status(400).json({ error: 'messages required' });
 
   // Build transcript for context
@@ -1931,6 +1952,8 @@ app.post('/api/portfolio/generate', async (req, res) => {
       max_tokens: 3000,
       temperature: 0,
       system: `You are a SEBI-registered investment advisor. Based on the intake conversation below, generate a detailed, personalised SIP portfolio recommendation for an Indian retail investor.
+
+LANGUAGE: Write "summary", "suitability", "reason", "taxStrategy", "rebalancing", "emergencyFundAdvice", "redFlags", "advice", and "keyConsiderations" in ${langNameGen}. Keep fund names, NSE symbols, numbers, and financial terms (SIP, ETF, NAV, LTCG) in English.
 
 Return ONLY valid JSON matching this exact schema:
 {

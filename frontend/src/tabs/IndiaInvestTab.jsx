@@ -233,6 +233,7 @@ function SIPPage({ onBack }) {
 // ── Page: AI Portfolio ────────────────────────────────────────────────────────
 function PortfolioPage({ onBack }) {
   const [sipAmount,  setSipAmount]  = useState(10000);
+  const [language,   setLanguage]   = useState('en');
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState('');
   const [loading,    setLoading]    = useState(false);
@@ -252,14 +253,14 @@ function PortfolioPage({ onBack }) {
     try {
       const res  = await fetch(`${BASE}/api/portfolio/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [], sipAmount }),
+        body: JSON.stringify({ messages: [], sipAmount, language }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       if (data.message) {
         setMessages([{ role: 'assistant', content: data.message }]);
       } else {
-        throw new Error('No response from Artha. Please try again.');
+        throw new Error('No response from Arya. Please try again.');
       }
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.');
@@ -279,7 +280,7 @@ function PortfolioPage({ onBack }) {
     try {
       const res  = await fetch(`${BASE}/api/portfolio/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMsgs, sipAmount }),
+        body: JSON.stringify({ messages: newMsgs, sipAmount, language }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -303,7 +304,7 @@ function PortfolioPage({ onBack }) {
     try {
       const res  = await fetch(`${BASE}/api/portfolio/generate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: msgs, sipAmount }),
+        body: JSON.stringify({ messages: msgs, sipAmount, language }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -317,20 +318,50 @@ function PortfolioPage({ onBack }) {
 
   const reset = () => {
     setMessages([]); setAiResult(null);
-    setStage('budget'); setError(''); setInput('');
+    setStage('budget'); setError(''); setInput(''); setLanguage('en');
   };
 
   // ── Budget screen ────────────────────────────────────────────────────────────
   if (stage === 'budget') return (
     <div className="fade-in">
       <PageHeader icon="🤖" title="AI Portfolio Advisor"
-        subtitle="Have a conversation with Artha, your personal investment advisor"
+        subtitle="Have a conversation with Arya, your personal investment advisor"
         onBack={onBack} />
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 13, color: '#b0c0dd', lineHeight: 1.8, marginBottom: 20 }}>
-          Artha will ask you a few questions about your financial situation — age, goals,
+          Arya will ask you a few questions about your financial situation — age, goals,
           existing investments, risk comfort — and then build a personalised portfolio just for you.
         </div>
+
+        {/* Language selector */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 10 }}>LANGUAGE / भाषा</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {[
+              { code: 'en',  label: 'English',    native: 'English'    },
+              { code: 'hi',  label: 'Hindi',      native: 'हिंदी'       },
+              { code: 'ta',  label: 'Tamil',      native: 'தமிழ்'       },
+              { code: 'te',  label: 'Telugu',     native: 'తెలుగు'      },
+              { code: 'kn',  label: 'Kannada',    native: 'ಕನ್ನಡ'       },
+              { code: 'ml',  label: 'Malayalam',  native: 'മലയാളം'     },
+              { code: 'mr',  label: 'Marathi',    native: 'मराठी'       },
+              { code: 'bn',  label: 'Bengali',    native: 'বাংলা'       },
+              { code: 'gu',  label: 'Gujarati',   native: 'ગુજરાતી'     },
+            ].map(lang => (
+              <button key={lang.code} onClick={() => setLanguage(lang.code)} style={{
+                padding: '8px 6px', borderRadius: 6, cursor: 'pointer',
+                border: `1px solid ${language === lang.code ? '#ff9a00' : '#2a2a3e'}`,
+                background: language === lang.code ? '#ff9a0018' : '#0a0a14',
+                fontFamily: 'inherit', transition: 'all 0.12s', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 12, fontWeight: language === lang.code ? 700 : 400,
+                  color: language === lang.code ? '#ff9a00' : '#c8d8f0' }}>{lang.native}</div>
+                <div style={{ fontSize: 10, color: '#556677', marginTop: 2 }}>{lang.label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ fontSize: 12, color: '#99aacc', marginBottom: 10 }}>Monthly SIP budget</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
           <input type="range" min={500} max={200000} step={500} value={sipAmount}
@@ -374,7 +405,7 @@ function PortfolioPage({ onBack }) {
   // ── Result screen ────────────────────────────────────────────────────────────
   if (stage === 'result' && aiResult) return (
     <div className="fade-in">
-      <PageHeader icon="🤖" title="Your Portfolio" subtitle="Personalised by Artha" onBack={onBack} />
+      <PageHeader icon="🤖" title="Your Portfolio" subtitle="Personalised by Arya" onBack={onBack} />
       <button className="btn-sm" onClick={reset} style={{ marginBottom: 20 }}>← START OVER</button>
 
       {/* Investor profile summary */}
@@ -547,7 +578,7 @@ function PortfolioPage({ onBack }) {
   // ── Chat screen ──────────────────────────────────────────────────────────────
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <PageHeader icon="🤖" title="Artha" subtitle="Your AI investment advisor" onBack={onBack} />
+      <PageHeader icon="🤖" title="Arya" subtitle={`Your AI investment advisor · ${{"en":"English","hi":"हिंदी","ta":"தமிழ்","te":"తెలుగు","kn":"ಕನ್ನಡ","ml":"മലയാളം","mr":"मराठी","bn":"বাংলা","gu":"ગુજરાતી"}[language] || "English"}`} onBack={onBack} />
 
       {/* Chat messages */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
@@ -1037,7 +1068,7 @@ export default function IndiaInvestTab({ onScanTicker }) {
         activePage === 'sip'       ? <SIPPage       onBack={goBack} /> :
         activePage === 'portfolio' ? <PortfolioPage  onBack={goBack} /> :
         activePage === 'tracker'   ? <SIPTrackerPage onBack={goBack} /> :
-        activePage === 'etfs'      ? <ETFPage        onBack={goBack} onScan={onScanTicker} />
+        activePage === 'etfs'      ? <ETFPage        onBack={goBack} onScan={onScanTicker} /> :
         activePage === 'mf'        ? <MFPage         onBack={goBack} /> :
         <Overview />
       }
