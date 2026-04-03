@@ -2435,20 +2435,31 @@ app.get('/financials/us/:ticker', async (req, res) => {
 app.get('/debug/screener/:symbol', async (req, res) => {
   try {
     const raw = req.params.symbol.toUpperCase();
-    const data = await httpsGet('www.screener.in',
-      `/api/company/${encodeURIComponent(raw)}/`,
-      { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json', Referer: 'https://www.screener.in' }
-    );
-    res.json({
-      hasData:      !!data,
-      hasError:     !!data?.error,
-      topLevelKeys: data ? Object.keys(data).slice(0, 15) : null,
-      quartersType: typeof data?.quarters,
-      quartersLen:  Array.isArray(data?.quarters) ? data.quarters.length : null,
-      firstQuarter: Array.isArray(data?.quarters) ? data.quarters[0] : null,
-      annualsLen:   Array.isArray(data?.annuals) ? data.annuals.length : null,
-      firstAnnual:  Array.isArray(data?.annuals) ? data.annuals[0] : null,
-    });
+    const results = {};
+
+    // Test 1: Tickertape API (popular Indian fintech, relatively open)
+    try {
+      const tt = await httpsGet('api.tickertape.in',
+        `/stocks/financials/${raw}/income-statement?count=8&period=quarterly`,
+        { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
+      );
+      results.tickertape = { type: typeof tt, isArray: Array.isArray(tt), keys: tt ? Object.keys(tt).slice(0,8) : null, raw: JSON.stringify(tt).slice(0, 400) };
+    } catch(e) { results.tickertape = { error: e.message }; }
+
+    // Test 2: stock-nse-india — check if it has financial methods
+    if (nseIndia) {
+      const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(nseIndia))
+        .filter(m => m !== 'constructor');
+      results.nseIndiaAllMethods = methods;
+      // Try getEquityTradeInfo which might have more data
+      try {
+        const eq = await nseIndia.getEquityDetails(raw);
+        results.nseIndiaKeys = eq ? Object.keys(eq) : null;
+        results.nseIndiaMetadataKeys = eq?.metadata ? Object.keys(eq.metadata) : null;
+      } catch(e) { results.nseIndiaDetailError = e.message; }
+    }
+
+    res.json(results);
   } catch(e) { res.json({ error: e.message }); }
 });
 
