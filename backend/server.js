@@ -2306,58 +2306,67 @@ async function fmpGet(path) {
   });
 }
 
-// Debug: test FMP connection directly
-app.get('/debug/fmp/:ticker', async (req, res) => {
-  try {
-    const ticker = req.params.ticker.toUpperCase();
-    const data = await fmpGet(`/api/v3/income-statement/${ticker}?period=quarter&limit=2`);
-    res.json({
-      fmpKeyPresent: !!FMP_KEY,
-      fmpKeyPrefix:  FMP_KEY?.slice(0, 8) + '...',
-      dataType:      typeof data,
-      isArray:       Array.isArray(data),
-      length:        Array.isArray(data) ? data.length : null,
-      firstKeys:     Array.isArray(data) && data[0] ? Object.keys(data[0]).slice(0, 8) : null,
-      raw:           data,
-    });
-  } catch (e) {
-    res.json({ error: e.message });
-  }
-});
-
+// US Quarterly Financials via Finnhub (free tier, already integrated)
+// /stock/financials-reported → actual SEC-filed income statements
+// /stock/earnings → EPS surprise history
 app.get('/financials/us/:ticker', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase();
-
-  if (!FMP_KEY) {
-    return res.status(503).json({ error: 'Financial data unavailable — FMP_API_KEY not configured. Add a free key from financialmodelingprep.com' });
-  }
-
   try {
-    const [quarterly, annual, earningsSurprise] = await Promise.all([
-      fmpGet(`/api/v3/income-statement/${ticker}?period=quarter&limit=8`),
-      fmpGet(`/api/v3/income-statement/${ticker}?period=annual&limit=4`),
-      fmpGet(`/api/v3/earnings-surprises/${ticker}`),
+    const [reported, earnings] = await Promise.all([
+      finnhubGet(`/stock/financials-reported?symbol=${ticker}&freq=quarterly`),
+      finnhubGet(`/stock/earnings?symbol=${ticker}`),
     ]);
 
-    const parseStmt = (s) => {
-      const revenue    = s.revenue      ?? null;
-      const netIncome  = s.netIncome    ?? null;
-      const grossProfit= s.grossProfit  ?? null;
-      const epsDiluted = s.epsdiluted   ?? s.eps ?? null;
+    // Parse SEC-filed quarterly reports
+    const reports = (reported?.data || []).slice(0, 8);
+
+    const parseReport = (r) => {
+      const ic = r.report?.ic || [];
+
+      // Match by concept (XBRL tag) first — more reliable than label
+      const getByConcept = (...concepts) => {
+        for (const c of concepts) {
+          const item = ic.find(i => i.concept === c);
+          if (item?.value != null) return item.value;
+        }
+        return null;
+      };
+
+      const revenue    = getByConcept(
+        'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+        'us-gaap:Revenues', 'us-gaap:SalesRevenueNet',
+        'us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax',
+        'us-gaap:NetRevenues', 'us-gaap:SalesRevenueGoodsNet'
+      );
+      const netIncome  = getByConcept(
+        'us-gaap:NetIncomeLoss',
+        'us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic',
+        'us-gaap:ProfitLoss'
+      );
+      const grossProfit = getByConcept('us-gaap:GrossProfit');
+      const epsDiluted  = getByConcept(
+        'us-gaap:EarningsPerShareDiluted',
+        'us-gaap:EarningsPerShareBasic'
+      );
+
       return {
-        period:      s.period ?? s.date?.slice(0, 7),
-        endDate:     s.date   ?? null,
-        revenue, netIncome, grossProfit, epsDiluted,
-        netMargin:   s.netIncomeRatio   != null ? parseFloat((s.netIncomeRatio   * 100).toFixed(2)) :
-                     revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
-        grossMargin: s.grossProfitRatio != null ? parseFloat((s.grossProfitRatio * 100).toFixed(2)) :
-                     revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
+        period:   r.report?.fp ? `${r.report.fp} ${r.report.fy}` : r.period?.slice(0, 7),
+        endDate:  r.period ?? null,
+        revenue,
+        netIncome,
+        grossProfit,
+        epsDiluted,
+        netMargin:   revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
+        grossMargin: revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
       };
     };
 
-    const allQ    = Array.isArray(quarterly) ? quarterly.map(parseStmt) : [];
+    const allQ    = reports.map(parseReport).filter(q => q.revenue || q.netIncome);
     const quarters = allQ.slice(0, 4);
-    const annuals  = Array.isArray(annual) ? annual.map(parseStmt) : [];
+
+    // Annual = group by year from quarterly or use annual endpoint
+    const annualReported = await finnhubGet(`/stock/financials-reported?symbol=${ticker}&freq=annual`).catch(() => ({ data: [] }));
+    const annuals = (annualReported?.data || []).slice(0, 4).map(parseReport).filter(q => q.revenue || q.netIncome);
 
     const yoy = allQ.length >= 5 ? {
       revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
@@ -2367,24 +2376,25 @@ app.get('/financials/us/:ticker', async (req, res) => {
         ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
     } : {};
 
-    // EPS beat/miss from FMP earnings surprises
-    const epsHistory = Array.isArray(earningsSurprise)
-      ? earningsSurprise.slice(0, 4).map(e => ({
-          quarter:     e.date          ?? null,
-          epsActual:   e.actualEarningResult ?? null,
-          epsEstimate: e.estimatedEarning    ?? null,
-          surprisePct: e.actualEarningResult != null && e.estimatedEarning
-            ? parseFloat(((e.actualEarningResult - e.estimatedEarning) / Math.abs(e.estimatedEarning) * 100).toFixed(1))
-            : null,
-          beat: (e.actualEarningResult ?? 0) >= (e.estimatedEarning ?? 0),
-        }))
-      : [];
+    // EPS beat/miss
+    const epsHistory = (earnings || []).slice(0, 4).map(e => ({
+      quarter:     e.period       ?? null,
+      epsActual:   e.actual       ?? null,
+      epsEstimate: e.estimate     ?? null,
+      surprisePct: e.actual != null && e.estimate
+        ? parseFloat(((e.actual - e.estimate) / Math.abs(e.estimate) * 100).toFixed(1)) : null,
+      beat: (e.actual ?? 0) >= (e.estimate ?? 0),
+    }));
 
-    if (!quarters.length && !annuals.length) {
+    // Next earnings date
+    const earningsCalendar = await finnhubGet(`/calendar/earnings?symbol=${ticker}&from=${new Date().toISOString().split('T')[0]}&to=${new Date(Date.now() + 90*24*60*60*1000).toISOString().split('T')[0]}`).catch(() => null);
+    const nextEarnings = earningsCalendar?.earningsCalendar?.[0]?.date ?? null;
+
+    if (!quarters.length && !annuals.length && !epsHistory.length) {
       return res.status(404).json({ error: `No financial data found for ${ticker}` });
     }
 
-    res.json({ ticker, quarters, annuals, yoy, epsHistory, nextEarnings: null });
+    res.json({ ticker, quarters, annuals, yoy, epsHistory, nextEarnings });
   } catch (e) {
     console.error('[financials/us]', e.message);
     res.status(500).json({ error: e.message });
