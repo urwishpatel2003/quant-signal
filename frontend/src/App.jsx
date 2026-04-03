@@ -70,7 +70,12 @@ export default function App() {
     ? TABS.filter(t => (typeof t === 'string' ? t : t.id) !== 'options')
     : TABS;
   const visibleTabs = market === 'INDIA'
-    ? [...baseTabs, { id: 'invest', label: 'INVEST' }]
+    ? baseTabs.reduce((acc, tab) => {
+        const id = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
+        if (id === 'help') acc.push({ id: 'invest', label: 'INVEST' });
+        acc.push(tab);
+        return acc;
+      }, [])
     : baseTabs;
 
   if (!isLoaded) {

@@ -1,9 +1,9 @@
 export const TABS = [
-  { id: 'scanner', label: 'SCANNER' },
-  { id: 'options', label: 'OPTIONS' },
-  { id: 'markets', label: 'MARKETS' },
+  { id: 'scanner',   label: 'SCANNER'   },
+  { id: 'options',   label: 'OPTIONS'   },
+  { id: 'markets',   label: 'MARKETS'   },
   { id: 'watchlist', label: 'WATCHLIST' },
-  { id: 'help',    label: 'HELP'    },
+  { id: 'help',      label: 'HELP'      },
 ];
 
 export const SC = { BUY: '#00ff88', SELL: '#ff4444', HOLD: '#ffaa00' };

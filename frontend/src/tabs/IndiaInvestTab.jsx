@@ -365,11 +365,80 @@ function PortfolioPage({ onBack }) {
 
 // ── Page: My SIPs ─────────────────────────────────────────────────────────────
 function SIPTrackerPage({ onBack }) {
-  const [sips,   setSips]   = useState(() => { try { return JSON.parse(localStorage.getItem('quaint_sips') || '[]'); } catch { return []; } });
-  const [form,   setForm]   = useState({ name: '', amount: '', startDate: '', frequency: 'monthly' });
-  const [adding, setAdding] = useState(false);
+  const { user }  = useUser();
+  const [sips,    setSips]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [form,    setForm]    = useState({ name: '', amount: '', startDate: '', frequency: 'monthly' });
+  const [adding,  setAdding]  = useState(false);
+  const [error,   setError]   = useState('');
 
-  const save = (u) => { setSips(u); localStorage.setItem('quaint_sips', JSON.stringify(u)); };
+  // Load SIPs from backend
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`${BASE}/sips/${user.id}`)
+      .then(r => r.json())
+      .then(data => {
+        setSips((data || []).map(s => ({
+          id: s.id, name: s.name, amount: s.amount,
+          startDate: s.start_date, frequency: s.frequency,
+        })));
+        setLoading(false);
+        // Migrate localStorage SIPs to backend on first load
+        const local = JSON.parse(localStorage.getItem('quaint_sips') || '[]');
+        if (local.length > 0) {
+          Promise.all(local.map(sip =>
+            fetch(`${BASE}/sips/${user.id}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: sip.name, amount: sip.amount, startDate: sip.startDate, frequency: sip.frequency }),
+            })
+          )).then(() => {
+            localStorage.removeItem('quaint_sips');
+            fetch(`${BASE}/sips/${user.id}`).then(r => r.json()).then(d =>
+              setSips((d || []).map(s => ({ id: s.id, name: s.name, amount: s.amount, startDate: s.start_date, frequency: s.frequency })))
+            );
+          });
+        }
+      })
+      .catch(() => setLoading(false));
+  }, [user?.id]);
+
+  const validate = () => {
+    if (!form.name.trim())            return 'Please enter a fund name or ETF symbol.';
+    const amt = Number(form.amount);
+    if (!form.amount || isNaN(amt))   return 'Please enter a valid amount.';
+    if (amt < 100)                    return 'Amount must be at least ₹100.';
+    if (amt > 10000000)               return 'Amount cannot exceed ₹1 Crore.';
+    if (!form.startDate)              return 'Please select a start date.';
+    if (new Date(form.startDate) > new Date()) return 'Start date cannot be in the future.';
+    return null;
+  };
+
+  const addSIP = async () => {
+    if (!user?.id) return;
+    const validationError = validate();
+    if (validationError) return setError(validationError);
+    setSaving(true); setError('');
+    try {
+      const res  = await fetch(`${BASE}/sips/${user.id}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name.trim(), amount: Number(form.amount), startDate: form.startDate, frequency: form.frequency }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setSips(prev => [{ id: data.id, name: data.name, amount: data.amount, startDate: data.start_date, frequency: data.frequency }, ...prev]);
+      setForm({ name: '', amount: '', startDate: '', frequency: 'monthly' });
+      setAdding(false);
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const removeSIP = async (id) => {
+    if (!user?.id) return;
+    setSips(prev => prev.filter(s => s.id !== id));
+    await fetch(`${BASE}/sips/${user.id}/${id}`, { method: 'DELETE' });
+  };
+
   const getStats = (sip) => {
     const s = new Date(sip.startDate), n = new Date();
     const m = Math.max(0, (n.getFullYear() - s.getFullYear()) * 12 + n.getMonth() - s.getMonth());
@@ -395,7 +464,7 @@ function SIPTrackerPage({ onBack }) {
           <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 16 }}>NEW SIP</div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
             {[
-              { label: 'FUND / ETF NAME', key: 'name',      type: 'text',   ph: 'e.g. NIFTYBEES or UTI Nifty 50' },
+              { label: 'NSE SYMBOL OR FUND NAME', key: 'name', type: 'text', ph: 'e.g. NIFTYBEES, GOLDBEES, UTI Nifty 50' },
               { label: 'AMOUNT (₹)',      key: 'amount',    type: 'number', ph: '5000'                            },
               { label: 'START DATE',      key: 'startDate', type: 'date',   ph: ''                                },
             ].map(f => (
@@ -415,17 +484,25 @@ function SIPTrackerPage({ onBack }) {
                 <option value="quarterly">Quarterly</option>
               </select>
             </div>
-            <button className="btn" onClick={() => {
-              if (!form.name || !form.amount || !form.startDate) return;
-              save([...sips, { ...form, id: Date.now(), amount: Number(form.amount) }]);
-              setForm({ name: '', amount: '', startDate: '', frequency: 'monthly' });
-              setAdding(false);
-            }}>ADD SIP</button>
+            <button className="btn" onClick={addSIP} disabled={saving}>
+              {saving ? 'SAVING...' : 'ADD SIP'}
+            </button>
           </div>
         </div>
       )}
 
-      {sips.length === 0 ? (
+      {error && (
+        <div style={{ fontSize: 13, color: '#ff4444', background: '#ff444411',
+          border: '1px solid #ff444433', borderRadius: 4, padding: '10px 14px', marginBottom: 14 }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#445' }}>
+          <div style={{ fontSize: 13 }}>Loading your SIPs...</div>
+        </div>
+      ) : sips.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#445' }}>
           <div style={{ fontSize: 48, marginBottom: 14 }}>📊</div>
           <div style={{ fontSize: 15, color: '#556', marginBottom: 8 }}>No SIPs tracked yet</div>
@@ -467,7 +544,7 @@ function SIPTrackerPage({ onBack }) {
                     </div>
                   ))}
                   <button className="btn-sm btn-danger"
-                    onClick={() => save(sips.filter(s => s.id !== sip.id))}>✕</button>
+                    onClick={() => removeSIP(sip.id)}>✕</button>
                 </div>
               </div>
             );

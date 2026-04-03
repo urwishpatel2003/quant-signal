@@ -1857,11 +1857,79 @@ app.get('/sips/:userId', async (req, res) => {
 
 app.post('/sips/:userId', async (req, res) => {
   const { name, amount, startDate, frequency } = req.body;
-  if (!name || !amount || !startDate) return res.status(400).json({ error: 'name, amount, startDate required' });
+
+  // ── Field validation ──────────────────────────────────────────────────────
+  if (!name || !amount || !startDate)
+    return res.status(400).json({ error: 'Fund name, amount, and start date are required.' });
+
+  const parsedAmount = Number(amount);
+  if (isNaN(parsedAmount) || parsedAmount < 100)
+    return res.status(400).json({ error: 'Amount must be at least ₹100.' });
+  if (parsedAmount > 10000000)
+    return res.status(400).json({ error: 'Amount cannot exceed ₹1 Crore per SIP.' });
+
+  const start = new Date(startDate);
+  if (isNaN(start.getTime()))
+    return res.status(400).json({ error: 'Invalid start date.' });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const tenYearsAgo = new Date(today); tenYearsAgo.setFullYear(today.getFullYear() - 10);
+  if (start > today)
+    return res.status(400).json({ error: 'Start date cannot be in the future.' });
+  if (start < tenYearsAgo)
+    return res.status(400).json({ error: 'Start date cannot be more than 10 years ago.' });
+
+  const validFrequencies = ['monthly', 'weekly', 'quarterly'];
+  if (frequency && !validFrequencies.includes(frequency))
+    return res.status(400).json({ error: 'Frequency must be monthly, weekly, or quarterly.' });
+
+  // ── Ticker validation — must be a known NSE stock/ETF or mutual fund ──────
+  const tickerName = name.trim().toUpperCase();
+  const isKnownNSE = NSE_NAMES[tickerName] !== undefined;
+
+  // Also allow common mutual fund names (free text) if they contain >= 3 words
+  // or are in our known ETF list
+  const ETF_SYMBOLS = [
+    'NIFTYBEES','JUNIORBEES','SETFNN50','MOM100','MIDCAPETF','SENSEXETF','ICICINIFTY',
+    'BANKBEES','ITBEES','PHARMABEES','INFRABEES','PSUBNKBEES','AUTOBEES','FMCGBEES',
+    'GOLDBEES','SILVERETF','SETFGOLD','HDFCGOLD','LIQUIDBEES','LIQUIDETF','CPSEETF',
+  ];
+  const isKnownETF = ETF_SYMBOLS.includes(tickerName);
+
+  // If it looks like a ticker (all caps, no spaces, <= 20 chars) it must be validated
+  const looksLikeTicker = /^[A-Z0-9&-]{1,20}$/.test(tickerName);
+
+  if (looksLikeTicker && !isKnownNSE && !isKnownETF) {
+    // Try live NSE lookup as a last resort
+    try {
+      const q = await getNSEQuote(tickerName);
+      if (!q || !q.price) {
+        return res.status(400).json({
+          error: `"${tickerName}" is not a recognised NSE stock or ETF. Please check the symbol and try again.`
+        });
+      }
+    } catch {
+      return res.status(400).json({
+        error: `"${tickerName}" could not be verified on NSE. Please check the symbol and try again.`
+      });
+    }
+  }
+
+  // For mutual funds (name has spaces / multiple words) we trust the user
+  // since we don't have a comprehensive MF name DB — just sanitise the input
+  const sanitisedName = name.trim().slice(0, 100);
+
+  // ── Duplicate check ───────────────────────────────────────────────────────
+  const { data: existing } = await supabase
+    .from('sips').select('id')
+    .eq('user_id', req.params.userId)
+    .ilike('name', sanitisedName)
+    .single();
+  if (existing) return res.status(409).json({ error: `You already have a SIP for "${sanitisedName}".` });
+
   try {
     const { data, error } = await supabase
       .from('sips')
-      .insert({ user_id: req.params.userId, name, amount: Number(amount), start_date: startDate, frequency: frequency || 'monthly' })
+      .insert({ user_id: req.params.userId, name: sanitisedName, amount: parsedAmount, start_date: startDate, frequency: frequency || 'monthly' })
       .select().single();
     if (error) throw error;
     res.json(data);
