@@ -462,20 +462,25 @@ function SIPTrackerPage({ onBack }) {
       {adding && (
         <div className="card" style={{ marginBottom: 20, borderColor: '#00ff8833' }}>
           <div style={{ fontSize: 11, color: '#00ff88', letterSpacing: '0.15em', marginBottom: 16 }}>NEW SIP</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
-            {[
-              { label: 'NSE SYMBOL OR FUND NAME', key: 'name', type: 'text', ph: 'e.g. NIFTYBEES, GOLDBEES, UTI Nifty 50' },
-              { label: 'AMOUNT (₹)',      key: 'amount',    type: 'number', ph: '5000'                            },
-              { label: 'START DATE',      key: 'startDate', type: 'date',   ph: ''                                },
-            ].map(f => (
-              <div key={f.key}>
-                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>{f.label}</div>
-                <input className="input" type={f.type} placeholder={f.ph}
-                  value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>NSE SYMBOL OR FUND NAME</div>
+              <input className="input" type="text" placeholder="e.g. NIFTYBEES, GOLDBEES, UTI Nifty 50"
+                value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                style={{ width: '100%' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>AMOUNT (₹)</div>
+                <input className="input" type="number" placeholder="5000"
+                  value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
               </div>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'end' }}>
+              <div>
+                <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>START DATE</div>
+                <input className="input" type="date"
+                  value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
+              </div>
+            </div>
             <div>
               <div style={{ fontSize: 10, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>FREQUENCY</div>
               <select className="input" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })}>
@@ -484,7 +489,7 @@ function SIPTrackerPage({ onBack }) {
                 <option value="quarterly">Quarterly</option>
               </select>
             </div>
-            <button className="btn" onClick={addSIP} disabled={saving}>
+            <button className="btn" onClick={addSIP} disabled={saving} style={{ width: '100%' }}>
               {saving ? 'SAVING...' : 'ADD SIP'}
             </button>
           </div>
@@ -512,39 +517,42 @@ function SIPTrackerPage({ onBack }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 8 }}>
             {[
-              { l: 'TOTAL MONTHLY',  v: fmtRs(sips.reduce((a, s) => a + s.amount, 0)),                     c: '#ff9a00' },
-              { l: 'TOTAL INVESTED', v: fmtRs(sips.reduce((a, s) => a + getStats(s).invested, 0)),         c: '#4488ff' },
-              { l: 'ACTIVE SIPs',    v: sips.length,                                                         c: '#00ff88' },
+              { l: 'MONTHLY', v: fmtRs(sips.reduce((a, s) => a + s.amount, 0)),               c: '#ff9a00' },
+              { l: 'INVESTED', v: fmtRs(sips.reduce((a, s) => a + getStats(s).invested, 0)),  c: '#4488ff' },
+              { l: 'SIPs', v: sips.length,                                                      c: '#00ff88' },
             ].map((s, i) => (
-              <div key={i} className="card" style={{ textAlign: 'center', borderColor: s.c + '33' }}>
-                <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.15em', marginBottom: 6 }}>{s.l}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: s.c }}>{s.v}</div>
+              <div key={i} className="card" style={{ textAlign: 'center', borderColor: s.c + '33', padding: '12px 8px' }}>
+                <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.1em', marginBottom: 6 }}>{s.l}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: s.c }}>{s.v}</div>
               </div>
             ))}
           </div>
           {sips.map(sip => {
             const { months, invested } = getStats(sip);
             return (
-              <div key={sip.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: '#e8e8f0' }}>{sip.name}</div>
-                  <div style={{ fontSize: 11, color: '#7788aa', marginTop: 3 }}>
-                    {sip.frequency} · since {new Date(sip.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+              <div key={sip.id} className="card" style={{ padding: '14px 16px' }}>
+                {/* Top row: name + remove */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#e8e8f0' }}>{sip.name}</div>
+                    <div style={{ fontSize: 11, color: '#7788aa', marginTop: 3 }}>
+                      {sip.frequency} · since {new Date(sip.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                    </div>
                   </div>
+                  <button className="btn-sm btn-danger" onClick={() => removeSIP(sip.id)}>✕</button>
                 </div>
-                <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+                {/* Stats row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {[
                     { l: 'MONTHLY',  v: fmtRs(sip.amount), c: '#ff9a00' },
                     { l: 'INVESTED', v: fmtRs(invested),   c: '#4488ff' },
                     { l: 'MONTHS',   v: months,             c: '#b0c0dd' },
                   ].map((x, i) => (
-                    <div key={i} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.1em' }}>{x.l}</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: x.c }}>{x.v}</div>
+                    <div key={i} style={{ background: '#0a0a14', borderRadius: 4, padding: '8px 6px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 9, color: '#7788aa', letterSpacing: '0.08em', marginBottom: 4 }}>{x.l}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: x.c }}>{x.v}</div>
                     </div>
                   ))}
-                  <button className="btn-sm btn-danger"
-                    onClick={() => removeSIP(sip.id)}>✕</button>
                 </div>
               </div>
             );
