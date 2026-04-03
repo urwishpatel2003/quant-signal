@@ -231,39 +231,29 @@ function SIPPage({ onBack }) {
 }
 
 // ── Page: AI Portfolio ────────────────────────────────────────────────────────
-function PortfolioPage({ onBack }) {
-  const { user, isLoaded } = useUser();
-  const [sipAmount,    setSipAmount]    = useState(10000);
-  const [language,     setLanguage]     = useState('en');
-  const [messages,     setMessages]     = useState([]);
-  const [input,        setInput]        = useState('');
-  const [loading,      setLoading]      = useState(false);
-  const [loadingSaved, setLoadingSaved] = useState(true);
-  const [saving,       setSaving]       = useState(false);
-  const [stage,        setStage]        = useState('budget');
-  const [aiResult,     setAiResult]     = useState(null);
-  const [savedAt,      setSavedAt]      = useState(null);
-  const [error,        setError]        = useState('');
+function PortfolioPage({ onBack, savedResult, savedSipAmount, savedLanguage, savedAt: initSavedAt, portfolioLoaded, userId, onSave, onReset }) {
+  const [sipAmount, setSipAmount] = useState(savedSipAmount || 10000);
+  const [language,  setLanguage]  = useState(savedLanguage  || 'en');
+  const [messages,  setMessages]  = useState([]);
+  const [input,     setInput]     = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [stage,     setStage]     = useState(savedResult ? 'result' : 'budget');
+  const [aiResult,  setAiResult]  = useState(savedResult || null);
+  const [savedAt,   setSavedAt]   = useState(initSavedAt || null);
+  const [error,     setError]     = useState('');
   const chatEndRef = useRef(null);
 
-  // Load saved recommendation on mount — wait for Clerk to load first
+  // Sync when parent loads saved data after first mount
   useEffect(() => {
-    if (!isLoaded) return;              // Clerk still initialising
-    if (!user?.id) { setLoadingSaved(false); return; } // not signed in
-    fetch(`${BASE}/portfolio/${user.id}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data?.result) {
-          setAiResult(data.result);
-          setSipAmount(data.sip_amount || 10000);
-          setLanguage(data.language || 'en');
-          setSavedAt(data.updated_at);
-          setStage('result');
-        }
-        setLoadingSaved(false);
-      })
-      .catch(() => setLoadingSaved(false));
-  }, [isLoaded, user?.id]);
+    if (savedResult && !aiResult) {
+      setAiResult(savedResult);
+      setSipAmount(savedSipAmount || 10000);
+      setLanguage(savedLanguage || 'en');
+      setSavedAt(initSavedAt);
+      setStage('result');
+    }
+  }, [savedResult]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -333,16 +323,19 @@ function PortfolioPage({ onBack }) {
       if (data.error) throw new Error(data.error);
       setAiResult(data);
       setStage('result');
-      // Save to Supabase
-      if (user?.id) {
+      // Save to Supabase + notify parent
+      if (userId) {
         setSaving(true);
         try {
-          const saveRes = await fetch(`${BASE}/portfolio/${user.id}`, {
+          const saveRes = await fetch(`${BASE}/portfolio/${userId}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ result: data, sipAmount, language }),
           });
           const saved = await saveRes.json();
-          if (saved?.updated_at) setSavedAt(saved.updated_at);
+          if (saved?.updated_at) {
+            setSavedAt(saved.updated_at);
+            onSave?.(data, sipAmount, language, saved.updated_at);
+          }
         } catch (e) { console.error('[portfolio save]', e.message); }
         setSaving(false);
       }
@@ -355,13 +348,14 @@ function PortfolioPage({ onBack }) {
   const reset = async () => {
     setMessages([]); setAiResult(null);
     setStage('budget'); setError(''); setInput(''); setLanguage('en'); setSavedAt(null);
-    if (user?.id) {
-      try { await fetch(`${BASE}/portfolio/${user.id}`, { method: 'DELETE' }); } catch {}
+    onReset?.();
+    if (userId) {
+      try { await fetch(`${BASE}/portfolio/${userId}`, { method: 'DELETE' }); } catch {}
     }
   };
 
   // ── Loading saved ────────────────────────────────────────────────────────────
-  if (loadingSaved) return (
+  if (!portfolioLoaded) return (
     <div className="fade-in">
       <PageHeader icon="🤖" title="AI Portfolio Advisor" subtitle="" onBack={onBack} />
       <div style={{ textAlign: 'center', padding: '60px 0', color: '#7788aa', fontSize: 13 }}>
@@ -1044,10 +1038,36 @@ const TABS = [
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function IndiaInvestTab({ onScanTicker }) {
-  const [activePage,  setActivePage]  = useState(null); // null = overview
+  const [activePage,  setActivePage]  = useState(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const { plan } = useUsage();
   const isPro = plan === 'pro';
+
+  // Portfolio state lifted here so it survives tab switches
+  const { user, isLoaded } = useUser();
+  const [portfolioResult,   setPortfolioResult]   = useState(null);
+  const [portfolioSipAmt,   setPortfolioSipAmt]   = useState(10000);
+  const [portfolioLang,     setPortfolioLang]      = useState('en');
+  const [portfolioSavedAt,  setPortfolioSavedAt]   = useState(null);
+  const [portfolioLoaded,   setPortfolioLoaded]    = useState(false);
+
+  // Load saved portfolio once on mount
+  useEffect(() => {
+    if (!isLoaded || portfolioLoaded) return;
+    if (!user?.id) { setPortfolioLoaded(true); return; }
+    fetch(`${BASE}/portfolio/${user.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.result) {
+          setPortfolioResult(data.result);
+          setPortfolioSipAmt(data.sip_amount || 10000);
+          setPortfolioLang(data.language || 'en');
+          setPortfolioSavedAt(data.updated_at);
+        }
+        setPortfolioLoaded(true);
+      })
+      .catch(() => setPortfolioLoaded(true));
+  }, [isLoaded, user?.id]);
 
   const goBack = () => setActivePage(null);
 
@@ -1126,7 +1146,25 @@ export default function IndiaInvestTab({ onScanTicker }) {
 
       {!isPro ? <UpgradeWall /> : activePage === null  ? <Overview /> :
         activePage === 'sip'       ? <SIPPage       onBack={goBack} /> :
-        activePage === 'portfolio' ? <PortfolioPage  onBack={goBack} /> :
+        activePage === 'portfolio' ? <PortfolioPage
+          onBack={goBack}
+          savedResult={portfolioResult}
+          savedSipAmount={portfolioSipAmt}
+          savedLanguage={portfolioLang}
+          savedAt={portfolioSavedAt}
+          portfolioLoaded={portfolioLoaded}
+          userId={user?.id}
+          onSave={(result, sipAmount, language, updatedAt) => {
+            setPortfolioResult(result);
+            setPortfolioSipAmt(sipAmount);
+            setPortfolioLang(language);
+            setPortfolioSavedAt(updatedAt);
+          }}
+          onReset={() => {
+            setPortfolioResult(null);
+            setPortfolioSavedAt(null);
+          }}
+        /> :
         activePage === 'tracker'   ? <SIPTrackerPage onBack={goBack} /> :
         activePage === 'etfs'      ? <ETFPage        onBack={goBack} onScan={onScanTicker} /> :
         activePage === 'mf'        ? <MFPage         onBack={goBack} /> :
