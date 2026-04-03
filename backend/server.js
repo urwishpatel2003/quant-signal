@@ -2372,9 +2372,16 @@ app.get('/financials/us/:ticker', async (req, res) => {
         'us-gaap_EarningsPerShareBasic'
       );
 
+      // Derive quarter from endDate month (no fp field in Finnhub)
+      const endD   = new Date(r.endDate || r.period || '');
+      const month  = endD.getMonth() + 1; // 1-12
+      const qNum   = month <= 1 ? 'Q4' : month <= 4 ? 'Q1' : month <= 7 ? 'Q2' : 'Q3';
+      const qYear  = r.year ?? endD.getFullYear();
+      const period = !isNaN(endD) ? `${qNum} FY${qYear}` : null;
+
       return {
-        period:   r.report?.fp ? `${r.report.fp} ${r.report.fy}` : r.period?.slice(0, 7),
-        endDate:  r.period ?? null,
+        period,
+        endDate:  r.endDate?.slice(0, 10) ?? r.period?.slice(0, 10) ?? null,
         revenue,
         netIncome,
         grossProfit,
