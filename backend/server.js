@@ -740,6 +740,29 @@ function buildSizingContext(calls, puts, budget = 1500) {
   return ctx;
 }
 
+async function callClaudeRaw(body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const request = https.request({
+      hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
+        'content-type': 'application/json', 'content-length': Buffer.byteLength(bodyStr),
+      }
+    }, response => {
+      let data = '';
+      response.on('data', c => (data += c));
+      response.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error('Parse error: ' + e.message)); }
+      });
+    });
+    request.on('error', reject);
+    request.write(bodyStr);
+    request.end();
+  });
+}
+
 async function callClaudeAPI(body) {
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
@@ -1818,6 +1841,143 @@ app.get('/india/fundamentals/:symbol', async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error('[india/fundamentals]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── POST /api/portfolio/chat ─────────────────────────────────────────────────
+// Conversational advisor — takes message history, returns next advisor message
+// When advisor has enough info, returns { done: true, portfolioReady: true }
+app.post('/api/portfolio/chat', async (req, res) => {
+  const { messages, sipAmount } = req.body;
+  if (!messages?.length) return res.status(400).json({ error: 'messages required' });
+  try {
+    const result = await callClaudeRaw({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 600,
+      system: `You are Artha, a friendly and knowledgeable Indian investment advisor at QuAInt Signal.
+You are having a conversational intake with a new investor to understand their financial situation before recommending a portfolio.
+
+YOUR JOB: Ask questions ONE AT A TIME in a natural, conversational way to gather:
+1. Age
+2. Monthly income (approximate range is fine)
+3. Primary investment goal (retirement / child education / house / wealth creation / other)
+4. Investment timeline / horizon
+5. Existing investments if any (FDs, PPF, stocks, MFs)
+6. Monthly EMIs or financial obligations
+7. Emergency fund status (do they have 3-6 months expenses saved)
+8. Risk comfort (explain with a scenario: "if your portfolio dropped 20%, would you panic, hold, or buy more?")
+9. Tax bracket (rough idea — helps with debt fund advice)
+
+RULES:
+- Ask only ONE question at a time
+- Keep responses SHORT — 1-2 sentences max
+- Be warm and conversational, not robotic
+- After 6-8 exchanges when you have sufficient information, end with EXACTLY this JSON on its own line:
+  {"PORTFOLIO_READY": true}
+- Do NOT generate the portfolio yourself — just signal when ready
+- The monthly SIP budget is already known: ₹${Number(sipAmount || 10000).toLocaleString('en-IN')}/month
+- Don't ask about SIP amount again
+
+Start by greeting them warmly and asking their age and occupation in one natural question.`,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    });
+
+    const text = result?.content?.[0]?.text || '';
+
+    // Check if advisor signals portfolio is ready
+    if (text.includes('"PORTFOLIO_READY": true')) {
+      return res.json({
+        message: text.replace(/\{"PORTFOLIO_READY":\s*true\}/g, '').trim() ||
+          "Great, I have everything I need! Let me build your personalised portfolio now...",
+        done: true,
+      });
+    }
+
+    res.json({ message: text, done: false });
+  } catch (e) {
+    console.error('[portfolio/chat]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── POST /api/portfolio/generate ──────────────────────────────────────────────
+// Generate portfolio from full conversation transcript
+app.post('/api/portfolio/generate', async (req, res) => {
+  const { messages, sipAmount } = req.body;
+  if (!messages?.length) return res.status(400).json({ error: 'messages required' });
+
+  // Build transcript for context
+  const transcript = messages
+    .map(m => `${m.role === 'user' ? 'Investor' : 'Advisor'}: ${m.content}`)
+    .join('\n');
+
+  try {
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      temperature: 0,
+      system: `You are a SEBI-registered investment advisor. Based on the intake conversation below, generate a detailed, personalised SIP portfolio recommendation for an Indian retail investor.
+
+Return ONLY valid JSON matching this exact schema:
+{
+  "summary": "2-3 sentence personalised overview mentioning their specific situation",
+  "investorProfile": {
+    "age": number,
+    "goal": "string",
+    "horizon": "string",
+    "riskLabel": "Conservative|Moderate|Aggressive|Very Aggressive",
+    "taxBracket": "string",
+    "keyConsiderations": ["point 1", "point 2"]
+  },
+  "riskAssessment": {
+    "label": "string",
+    "expectedReturn": "X-Y% p.a.",
+    "volatility": "Low|Moderate|High|Very High",
+    "suitability": "one sentence"
+  },
+  "topPicks": [
+    {
+      "name": "full fund name",
+      "type": "ETF|MF",
+      "symbol": "NSE symbol if ETF else null",
+      "allocation": number,
+      "amount": number,
+      "expenseRatio": "0.XX%",
+      "expectedReturn": "X-Y% p.a.",
+      "taxCategory": "Equity|Debt|Hybrid",
+      "pros": ["point 1", "point 2"],
+      "cons": ["point 1"],
+      "reason": "personalised 2 sentence rationale referencing their specific goal"
+    }
+  ],
+  "monthlyPlan": {
+    "total": number,
+    "breakdown": [{"instrument": "string", "amount": number, "sipDate": "1st|5th|10th|15th|25th"}]
+  },
+  "assetAllocation": { "equity": number, "debt": number, "gold": number, "international": number },
+  "rebalancing": "specific rebalancing advice based on their situation",
+  "taxStrategy": "personalised tax advice based on their bracket and goals",
+  "emergencyFundAdvice": "advice on emergency fund if relevant from conversation",
+  "redFlags": ["specific risk or concern from their situation"],
+  "advice": "personalised next steps referencing their specific goals and situation"
+}`,
+      messages: [{
+        role: 'user',
+        content: `Here is the intake conversation:
+
+${transcript}
+
+Monthly SIP budget: ₹${Number(sipAmount).toLocaleString('en-IN')}
+Current date: ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+
+Generate a comprehensive, personalised portfolio recommendation based on everything discussed. Make all amounts add up to exactly ₹${Number(sipAmount).toLocaleString('en-IN')}/month.`,
+      }],
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('[portfolio/generate]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
