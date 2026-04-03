@@ -1927,12 +1927,24 @@ app.get('/sips/:userId', async (req, res) => {
       .select('*')
       .eq('user_id', req.params.userId)
       .order('created_at', { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error('[sips GET] Supabase error:', error.code, error.message, error.hint);
+      throw error;
+    }
     res.json(data || []);
   } catch (e) {
     console.error('[sips GET]', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// Health check for sips table
+app.get('/sips-check', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('sips').select('count').limit(1);
+    if (error) return res.json({ ok: false, error: error.message, code: error.code, hint: error.hint });
+    res.json({ ok: true, message: 'sips table exists and is accessible' });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 app.post('/sips/:userId', async (req, res) => {
