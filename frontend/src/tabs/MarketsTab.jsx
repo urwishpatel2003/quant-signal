@@ -1,5 +1,5 @@
 import CalendarPanel from '../components/CalendarPanel';
-import USSectorHeatmap from '../components/USSectorHeatmap';
+import USSectorHeatmap from '../components/USSectorHeatMap';
 
 const REGIONS = [
   { label: '🇯🇵 JAPAN',     syms: [{ name: 'Nikkei 225', sym: '^N225', fmt: v => v ? `$${v.toFixed(2)}` : '—' }] },
