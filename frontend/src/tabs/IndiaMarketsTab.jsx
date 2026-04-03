@@ -86,29 +86,7 @@ function SectorRow({ sector }) {
   );
 }
 
-// ── Mover card ────────────────────────────────────────────────────────────────
-function MoverCard({ stock, type }) {
-  const color = type === 'gainer' ? '#00ff88' : '#ff4444';
-  return (
-    <div style={{
-      background: '#0f0f1a', border: `1px solid ${color}22`,
-      borderRadius: 6, padding: '10px 12px',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8f0' }}>{stock.ticker}</div>
-          <div style={{ fontSize: 10, color: '#556677', marginTop: 2 }}>
-            {stock.name?.length > 20 ? stock.name.slice(0, 20) + '…' : stock.name}
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 13, color: color, fontWeight: 700 }}>{fmtPct(stock.changePct)}</div>
-          <div style={{ fontSize: 11, color: '#7788aa', marginTop: 2 }}>₹{fmtPrice(stock.price)}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+
 
 // ── Global signal pill ────────────────────────────────────────────────────────
 function GlobalPill({ label, changePct }) {
@@ -128,33 +106,23 @@ function GlobalPill({ label, changePct }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function IndiaMarketsTab() {
   const [macro,   setMacro]   = useState(null);
-  const [movers,  setMovers]  = useState(null);
   const [loading, setLoading] = useState(true);
-  const [moverTab, setMoverTab] = useState('gainers');
   const [error,   setError]   = useState('');
 
   useEffect(() => {
     setLoading(true);
-    Promise.allSettled([
-      fetch(`${BASE}/india/macro`).then(r => r.json()),
-      fetch(`${BASE}/india/movers`).then(r => r.json()),
-    ]).then(([macroRes, moversRes]) => {
-      if (macroRes.status === 'fulfilled' && !macroRes.value?.error) setMacro(macroRes.value);
-      if (moversRes.status === 'fulfilled' && !moversRes.value?.error) setMovers(moversRes.value);
-      setLoading(false);
-    }).catch(e => { setError(e.message); setLoading(false); });
+    fetch(`${BASE}/india/macro`)
+      .then(r => r.json())
+      .then(data => { if (!data?.error) setMacro(data); setLoading(false); })
+      .catch(e => { setError(e.message); setLoading(false); });
   }, []);
 
   const refresh = () => {
     setLoading(true); setError('');
-    Promise.allSettled([
-      fetch(`${BASE}/india/macro`).then(r => r.json()),
-      fetch(`${BASE}/india/movers`).then(r => r.json()),
-    ]).then(([macroRes, moversRes]) => {
-      if (macroRes.status === 'fulfilled') setMacro(macroRes.value);
-      if (moversRes.status === 'fulfilled') setMovers(moversRes.value);
-      setLoading(false);
-    }).catch(e => { setError(e.message); setLoading(false); });
+    fetch(`${BASE}/india/macro`)
+      .then(r => r.json())
+      .then(data => { setMacro(data); setLoading(false); })
+      .catch(e => { setError(e.message); setLoading(false); });
   };
 
   if (loading) return (
@@ -283,29 +251,7 @@ export default function IndiaMarketsTab() {
         }
       </div>
 
-      {/* ── Market Movers ── */}
-      <SectionHeader icon="🚀" title="MARKET MOVERS" />
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        {[['gainers','🟢 GAINERS'], ['losers','🔴 LOSERS'], ['volume','📊 VOLUME']].map(([k, l]) => (
-          <button key={k} onClick={() => setMoverTab(k)} style={{
-            padding: '6px 14px', borderRadius: 4, cursor: 'pointer',
-            border: `1px solid ${moverTab === k ? '#ff9a00' : '#2a2a3e'}`,
-            background: moverTab === k ? '#ff9a0018' : '#0f0f1a',
-            color: moverTab === k ? '#ff9a00' : '#7788aa',
-            fontFamily: 'inherit', fontSize: 11, letterSpacing: '0.08em',
-          }}>{l}</button>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
-        {movers && (movers[moverTab] || []).slice(0, 10).map((s, i) => (
-          <MoverCard key={i} stock={s} type={moverTab === 'losers' ? 'loser' : 'gainer'} />
-        ))}
-        {(!movers || !(movers[moverTab] || []).length) && (
-          <div style={{ color: '#445', fontSize: 13, padding: '20px 0', gridColumn: '1/-1' }}>
-            No data available
-          </div>
-        )}
-      </div>
+
 
       {/* ── Global Signals ── */}
       {macro?.globalSignals && Object.keys(macro.globalSignals).length > 0 && (

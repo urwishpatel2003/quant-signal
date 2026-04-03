@@ -69,7 +69,6 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
-  const [view,    setView]    = useState('quarterly');
   const isInr = market === 'INDIA';
 
   useEffect(() => {
@@ -86,7 +85,7 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
   if (error)   return <div style={{ color: '#ff444488', fontSize: 12, padding: '8px 0' }}>Unavailable: {error}</div>;
   if (!data)   return null;
 
-  const rows  = view === 'quarterly' ? data.quarters : data.annuals;
+  const rows  = data.quarters || [];
   const yoy   = data.yoy || {};
   const eps   = data.epsHistory || [];
 
@@ -133,18 +132,7 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
         </div>
       )}
 
-      {/* ── View toggle ── */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        {[['quarterly', 'QUARTERLY'], ['annual', 'ANNUAL']].map(([k, l]) => (
-          <button key={k} onClick={() => setView(k)} style={{
-            padding: '4px 12px', fontSize: 10, cursor: 'pointer', borderRadius: 3,
-            border: `1px solid ${view === k ? '#ff9a00' : '#2a2a3e'}`,
-            background: view === k ? '#ff9a0011' : '#0a0a14',
-            color: view === k ? '#ff9a00' : '#556677',
-            fontFamily: 'inherit', letterSpacing: '0.08em',
-          }}>{l}</button>
-        ))}
-      </div>
+
 
       {/* ── Main table ── */}
       <div style={{ background: '#0f0f1a', border: '1px solid #2a2a3e', borderRadius: 6, overflowX: 'auto' }}>
@@ -204,12 +192,32 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
         })}
 
         {(!rows || rows.length === 0) && (
-          <div style={{ padding: '20px 12px', color: '#445', fontSize: 12 }}>No data available</div>
+          <div style={{ padding: '16px 12px', color: '#7788aa', fontSize: 12 }}>
+            {data.epsTrend?.length > 0
+              ? 'Income statement data unavailable — showing analyst estimates below'
+              : 'No quarterly data available for this ticker'}
+          </div>
         )}
       </div>
 
+      {/* Analyst forward estimates (for pre-revenue / early stage) */}
+      {data.epsTrend?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>ANALYST ESTIMATES</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {data.epsTrend.map((t, i) => (
+              <div key={i} style={{ background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6, padding: '8px 12px', minWidth: 120 }}>
+                <div style={{ fontSize: 10, color: '#556677', marginBottom: 4 }}>{t.period === '0q' ? 'This Quarter' : t.period === '+1q' ? 'Next Quarter' : t.period}</div>
+                {t.epsEstimate != null && <div style={{ fontSize: 12, color: '#c8d8f0' }}>EPS Est: {fmtEps(t.epsEstimate, isInr)}</div>}
+                {t.revenueEst  != null && <div style={{ fontSize: 12, color: '#c8d8f0', marginTop: 2 }}>Rev Est: {fmtVal(t.revenueEst, isInr)}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ fontSize: 10, color: '#2a2a3e' }}>
-        {market === 'INDIA' ? 'Source: Yahoo Finance · INR' : 'Source: Polygon.io · USD'} · Not investment advice
+        Source: Yahoo Finance · Not investment advice
       </div>
     </div>
   );
