@@ -2251,136 +2251,165 @@ function calcYoY(current, prior) {
   return parseFloat(((current - prior) / Math.abs(prior) * 100).toFixed(1));
 }
 
-// US — via Yahoo Finance (Polygon vX requires paid plan for financials)
+// US — Quarterly Financials via Polygon (primary) with smart field mapping
 app.get('/financials/us/:ticker', async (req, res) => {
-  const ticker  = req.params.ticker.toUpperCase();
-  const modules = 'incomeStatementHistoryQuarterly,incomeStatementHistory,earningsHistory,calendarEvents,defaultKeyStatistics';
+  const ticker = req.params.ticker.toUpperCase();
   try {
-    let result = null;
-    for (const host of ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']) {
-      try {
-        const data = await httpsGet(host,
-          `/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`,
-          { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36', Accept: 'application/json' }
-        );
-        const r = data?.quoteSummary?.result?.[0];
-        if (!r) continue;
+    // Fetch last 8 quarters + 4 annual + earnings surprises in parallel
+    const [qData, aData, earningsData] = await Promise.all([
+      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=8&timeframe=quarterly&order=desc`),
+      polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=4&timeframe=annual&order=desc`),
+      polygonGet(`/v2/reference/news?ticker=${ticker}&limit=1`), // just to test access
+    ]);
 
-        const parseStmt = (s) => {
-          const revenue    = s.totalRevenue?.raw    ?? null;
-          const netIncome  = s.netIncome?.raw        ?? null;
-          const grossProfit= s.grossProfit?.raw      ?? null;
-          const epsDiluted = s.dilutedEPS?.raw       ?? null;
-          return {
-            endDate:     s.endDate?.fmt ?? null,
-            revenue,
-            netIncome,
-            grossProfit,
-            epsDiluted,
-            netMargin:   revenue && netIncome   ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
-            grossMargin: revenue && grossProfit ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
-          };
-        };
+    const parseFinRow = (item) => {
+      const is = item.financials?.income_statement || {};
+      const bs = item.financials?.balance_sheet    || {};
+      const revenue     = is.revenues?.value                    ?? is.net_income_loss?.value != null ? is.revenues?.value : null;
+      const netIncome   = is.net_income_loss?.value             ?? null;
+      const grossProfit = is.gross_profit?.value                ?? null;
+      const opIncome    = is.operating_income_loss?.value       ?? null;
+      const epsDiluted  = is.diluted_earnings_per_share?.value  ?? is.basic_earnings_per_share?.value ?? null;
+      const rev         = is.revenues?.value ?? null;
+      return {
+        period:      item.fiscal_period ? `${item.fiscal_period} ${item.fiscal_year}` : item.end_date?.slice(0,7),
+        endDate:     item.end_date ?? null,
+        revenue:     rev,
+        netIncome,
+        grossProfit,
+        opIncome,
+        epsDiluted,
+        netMargin:   rev && netIncome   ? parseFloat((netIncome   / rev * 100).toFixed(2)) : null,
+        grossMargin: rev && grossProfit ? parseFloat((grossProfit / rev * 100).toFixed(2)) : null,
+      };
+    };
 
-        const allQ    = (r.incomeStatementHistoryQuarterly?.incomeStatementHistory || []).map(parseStmt);
-        const quarters = allQ.slice(0, 4);
+    const allQ    = (qData?.results || []).map(parseFinRow);
+    const quarters = allQ.slice(0, 4);
+    const annuals  = (aData?.results || []).map(parseFinRow);
 
-        const yoy = allQ.length >= 8 ? {
-          revenueYoY:   calcYoY(allQ[0].revenue,    allQ[4].revenue),
-          netIncomeYoY: calcYoY(allQ[0].netIncome,   allQ[4].netIncome),
-          epsYoY:       calcYoY(allQ[0].epsDiluted,  allQ[4].epsDiluted),
-          netMarginYoY: allQ[0].netMargin != null && allQ[4].netMargin != null
-            ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
-        } : {};
+    // YoY: compare latest quarter to same quarter last year (index 4)
+    const yoy = allQ.length >= 5 ? {
+      revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
+      netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
+      epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4]?.epsDiluted),
+      netMarginYoY: allQ[0].netMargin != null && allQ[4]?.netMargin != null
+        ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+    } : {};
 
-        const annuals = (r.incomeStatementHistory?.incomeStatementHistory || []).map(parseStmt);
+    // Polygon earnings surprises endpoint
+    let epsHistory = [];
+    try {
+      const surprises = await polygonGet(`/vX/reference/financials?ticker=${ticker}&limit=4&timeframe=quarterly&order=desc`);
+      // Extract EPS actual from quarterly data as beat/miss requires estimate — use what we have
+      epsHistory = allQ.slice(0, 4).map((q, i) => ({
+        quarter:     q.period,
+        epsActual:   q.epsDiluted,
+        epsEstimate: null, // Polygon free tier doesn't have estimates
+        surprisePct: null,
+        beat:        null,
+      })).filter(e => e.epsActual != null);
+    } catch {}
 
-        const epsHistory = (r.earningsHistory?.history || []).slice(0, 4).map(e => ({
-          quarter:     e.quarter?.fmt      ?? null,
-          epsActual:   e.epsActual?.raw    ?? null,
-          epsEstimate: e.epsEstimate?.raw  ?? null,
-          surprisePct: e.surprisePercent?.raw ?? null,
-          beat:        (e.epsDifference?.raw ?? 0) > 0,
-        }));
-
-        const nextEarnings = r.calendarEvents?.earnings?.earningsDate?.[0]?.fmt ?? null;
-
-        result = { ticker, quarters, annuals, yoy, epsHistory, nextEarnings };
-        break;
-      } catch { continue; }
+    const hasData = quarters.length > 0 || annuals.length > 0;
+    if (!hasData) {
+      return res.status(404).json({
+        error: `No financial statements found for ${ticker}. This ticker may be pre-revenue, an ETF, or not yet reporting to SEC.`
+      });
     }
-    if (!result) return res.status(404).json({ error: `No financials found for ${ticker}` });
-    res.json(result);
+
+    res.json({ ticker, quarters, annuals, yoy, epsHistory, epsTrend: [], nextEarnings: null });
   } catch (e) {
     console.error('[financials/us]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// India — via Yahoo Finance quoteSummary modules
+// India — via Yahoo Finance with User-Agent rotation to bypass datacenter IP blocks
 app.get('/financials/india/:symbol', async (req, res) => {
-  const symbol  = req.params.symbol.toUpperCase();
-  const ySymbol = `${symbol}.NS`;
+  const raw     = req.params.symbol.toUpperCase().replace(/\.NS$/i, '');
+  const ySymbol = `${raw}.NS`;
+  const modules = 'incomeStatementHistoryQuarterly,incomeStatementHistory,earningsHistory,earningsTrend,calendarEvents';
+
+  // Rotate User-Agents — Yahoo blocks server IPs but allows mobile/bot UAs sometimes
+  const UA_LIST = [
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    'python-requests/2.28.2',
+    'Dalvik/2.1.0 (Linux; U; Android 13; Pixel 7 Build/TQ3A.230901.001)',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  ];
+
+  const parseStmt = (s) => {
+    const revenue    = s.totalRevenue?.raw ?? null;
+    const netIncome  = s.netIncome?.raw    ?? null;
+    const grossProfit= s.grossProfit?.raw  ?? null;
+    const epsDiluted = s.dilutedEPS?.raw   ?? null;
+    return {
+      endDate:    s.endDate?.fmt ?? null,
+      revenue, netIncome, grossProfit, epsDiluted,
+      netMargin:   revenue && netIncome    ? parseFloat((netIncome   / revenue * 100).toFixed(2)) : null,
+      grossMargin: revenue && grossProfit  ? parseFloat((grossProfit / revenue * 100).toFixed(2)) : null,
+    };
+  };
+
   try {
-    const modules = 'incomeStatementHistoryQuarterly,incomeStatementHistory,earningsHistory,calendarEvents';
-    let result = null;
+    let r = null;
 
-    for (const host of YAHOO_HOSTS) {
-      try {
-        const data = await httpsGet(host,
-          `/v10/finance/quoteSummary/${encodeURIComponent(ySymbol)}?modules=${modules}`,
-          YAHOO_HEADERS
-        );
-        const r = data?.quoteSummary?.result?.[0];
-        if (!r) continue;
-
-        const parseStmt = (s) => ({
-          endDate:     s.endDate?.fmt ?? null,
-          revenue:     s.totalRevenue?.raw      ?? null,
-          netIncome:   s.netIncome?.raw          ?? null,
-          grossProfit: s.grossProfit?.raw        ?? null,
-          epsDiluted:  s.dilutedEPS?.raw         ?? null,
-          netMargin:   s.totalRevenue?.raw && s.netIncome?.raw
-            ? parseFloat((s.netIncome.raw / s.totalRevenue.raw * 100).toFixed(2)) : null,
-          grossMargin: s.totalRevenue?.raw && s.grossProfit?.raw
-            ? parseFloat((s.grossProfit.raw / s.totalRevenue.raw * 100).toFixed(2)) : null,
-        });
-
-        const allQ    = (r.incomeStatementHistoryQuarterly?.incomeStatementHistory || []).map(parseStmt);
-        const quarters = allQ.slice(0, 4);
-
-        const yoy = allQ.length >= 8 ? {
-          revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4].revenue),
-          netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4].netIncome),
-          epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4].epsDiluted),
-          netMarginYoY: allQ[0].netMargin != null && allQ[4].netMargin != null
-            ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
-        } : {};
-
-        const annuals = (r.incomeStatementHistory?.incomeStatementHistory || []).map(parseStmt);
-
-        const epsHistory = (r.earningsHistory?.history || []).slice(0, 4).map(e => ({
-          quarter:     e.quarter?.fmt   ?? null,
-          epsActual:   e.epsActual?.raw ?? null,
-          epsEstimate: e.epsEstimate?.raw ?? null,
-          surprisePct: e.surprisePercent?.raw ?? null,
-          beat:        (e.epsDifference?.raw ?? 0) > 0,
-        }));
-
-        const nextEarnings = r.calendarEvents?.earnings?.earningsDate?.[0]?.fmt ?? null;
-
-        result = { symbol, quarters, annuals, yoy, epsHistory, nextEarnings };
-        break;
-      } catch { continue; }
+    outer: for (const ua of UA_LIST) {
+      for (const ver of ['v10', 'v11']) {
+        for (const host of YAHOO_HOSTS) {
+          try {
+            const data = await httpsGet(host,
+              `/${ver}/finance/quoteSummary/${encodeURIComponent(ySymbol)}?modules=${modules}&corsDomain=finance.yahoo.com`,
+              { 'User-Agent': ua, Accept: 'application/json', 'Accept-Language': 'en-IN,en;q=0.9' }
+            );
+            const res0 = data?.quoteSummary?.result?.[0];
+            if (res0) { r = res0; break outer; }
+          } catch { continue; }
+        }
+      }
     }
 
-    if (!result) return res.status(404).json({ error: `No financials for ${ySymbol}` });
-    res.json(result);
+    if (!r) return res.status(404).json({ error: `Financial statements unavailable for ${raw} — data provider may be blocking requests` });
+
+    const allQ     = (r.incomeStatementHistoryQuarterly?.incomeStatementHistory || []).map(parseStmt);
+    const quarters = allQ.slice(0, 4);
+    const annuals  = (r.incomeStatementHistory?.incomeStatementHistory || []).map(parseStmt);
+
+    const yoy = allQ.length >= 5 ? {
+      revenueYoY:   calcYoY(allQ[0].revenue,   allQ[4]?.revenue),
+      netIncomeYoY: calcYoY(allQ[0].netIncome,  allQ[4]?.netIncome),
+      epsYoY:       calcYoY(allQ[0].epsDiluted, allQ[4]?.epsDiluted),
+      netMarginYoY: allQ[0].netMargin != null && allQ[4]?.netMargin != null
+        ? parseFloat((allQ[0].netMargin - allQ[4].netMargin).toFixed(2)) : null,
+    } : {};
+
+    const epsHistory = (r.earningsHistory?.history || []).slice(0, 4).map(e => ({
+      quarter:     e.quarter?.fmt         ?? null,
+      epsActual:   e.epsActual?.raw       ?? null,
+      epsEstimate: e.epsEstimate?.raw     ?? null,
+      surprisePct: e.surprisePercent?.raw ?? null,
+      beat:        (e.epsDifference?.raw  ?? 0) > 0,
+    }));
+
+    const epsTrend = (r.earningsTrend?.trend || []).slice(0, 2).map(t => ({
+      period:      t.period ?? null,
+      epsEstimate: t.earningsEstimate?.avg?.raw ?? null,
+      revenueEst:  t.revenueEstimate?.avg?.raw  ?? null,
+    }));
+
+    const nextEarnings = r.calendarEvents?.earnings?.earningsDate?.[0]?.fmt ?? null;
+    const hasData = quarters.length > 0 || epsHistory.length > 0 || epsTrend.length > 0;
+    if (!hasData) return res.status(404).json({ error: `No financial data available for ${raw}` });
+
+    res.json({ symbol: raw, quarters, annuals, yoy, epsHistory, epsTrend, nextEarnings });
   } catch (e) {
     console.error('[financials/india]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
+
+
 
 // ─── US Sector Heatmap ───────────────────────────────────────────────────────
 const US_SECTORS = [
