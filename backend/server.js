@@ -377,7 +377,7 @@ app.get('/movers', async (req, res) => {
   const marketOpen = !isMarketClosed();
   const ttl = marketOpen ? US_MOVERS_TTL : 10 * 60 * 1000;
   if (usMoversCache.data && Date.now() - usMoversCache.ts < ttl) {
-    return res.json({ ...usMoversCache.data, cached: true });
+    return res.json({ ...usMoversCache.data, marketStatus: getMarketStatus(), cached: true });
   }
   try {
     const TICKERS = [
@@ -399,7 +399,7 @@ app.get('/movers', async (req, res) => {
       'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
     ];
     // session_filter=all includes pre/post market, ensures today's data
-    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false&session_filter=all`);
+    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
     const raw  = data?.quotes?.quote || [];
     const list = (Array.isArray(raw) ? raw : [raw])
       .filter(q => q.last && q.change_percentage != null)
@@ -414,13 +414,40 @@ app.get('/movers', async (req, res) => {
     const volume  = [...list].filter(s => s.price >= 5 && s.volume > 0)
       .sort((a, b) => b.volume - a.volume).slice(0, 10)
       .map(s => ({ ...s, volVsAvg: s.avgVolume > 0 ? parseFloat((s.volume / s.avgVolume).toFixed(1)) : null }));
-    usMoversCache.data = { gainers, losers, volume };
+    const status = getMarketStatus();
+    const payload = { gainers, losers, volume, marketStatus: status };
+    usMoversCache.data = payload;
     usMoversCache.ts   = Date.now();
-    res.json({ gainers, losers, volume });
+    res.json(payload);
   } catch (e) {
     if (usMoversCache.data) return res.json({ ...usMoversCache.data, stale: true });
     res.status(500).json({ error: e.message });
   }
+});
+
+// ─── Debug: inspect raw Tradier quote for troubleshooting ───────────────────
+app.get('/debug/quote/:ticker', async (req, res) => {
+  try {
+    const data = await tradierGet(`/v1/markets/quotes?symbols=${req.params.ticker}&greeks=false`);
+    const q = data?.quotes?.quote || {};
+    res.json({
+      symbol:          q.symbol,
+      last:            q.last,
+      bid:             q.bid,
+      ask:             q.ask,
+      change:          q.change,
+      change_percentage: q.change_percentage,
+      volume:          q.volume,
+      trade_date:      q.trade_date,
+      last_volume:     q.last_volume,
+      prevclose:       q.prevclose,
+      open:            q.open,
+      high:            q.high,
+      low:             q.low,
+      timestamp:       new Date().toISOString(),
+      cache_ts:        usMoversCache.ts ? new Date(usMoversCache.ts).toISOString() : null,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/tradier/expirations/:ticker', async (req, res) => {
@@ -536,13 +563,42 @@ function calcEarningsProximity(calendar, ticker, selectedExpiry = null) {
   return { daysToEarnings, earningsDate: new Date(next.date).toISOString().split('T')[0], earningsBeforeExpiry, risk, advice };
 }
 
-function isMarketClosed() {
-  const now = new Date();
-  const et  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const day = et.getDay(), h = et.getHours(), m = et.getMinutes();
+// US market holidays 2025-2027
+const US_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-20','2025-02-17','2025-04-18','2025-05-26',
+  '2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25',
+  '2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+  '2027-01-01','2027-01-18','2027-02-15','2027-03-26','2027-05-31',
+  '2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24',
+]);
+
+function getMarketStatus() {
+  const now  = new Date();
+  const et   = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day  = et.getDay();
+  const h    = et.getHours(), m = et.getMinutes();
   const mins = h * 60 + m;
-  if (day === 0 || day === 6) return true;
-  return mins < 570 || mins >= 960;
+  const dateStr = et.toISOString().split('T')[0];
+
+  if (US_HOLIDAYS.has(dateStr)) {
+    const names = {
+      '2026-04-03': 'Good Friday', '2026-01-01': 'New Year's Day',
+      '2026-01-19': 'MLK Day', '2026-02-16': 'Presidents Day',
+      '2026-05-25': 'Memorial Day', '2026-06-19': 'Juneteenth',
+      '2026-07-03': 'Independence Day', '2026-09-07': 'Labor Day',
+      '2026-11-26': 'Thanksgiving', '2026-12-25': 'Christmas',
+    };
+    return { closed: true, reason: names[dateStr] || 'Market Holiday' };
+  }
+  if (day === 0 || day === 6) return { closed: true, reason: day === 6 ? 'Weekend' : 'Weekend' };
+  if (mins < 570) return { closed: true, reason: 'Pre-Market' };
+  if (mins >= 960) return { closed: true, reason: 'After Hours' };
+  return { closed: false, reason: 'Open' };
+}
+
+function isMarketClosed() {
+  return getMarketStatus().closed;
 }
 
 function categorizeNews(headlines) {

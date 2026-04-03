@@ -61,6 +61,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
   const [indiaMovers,  setIndiaMovers]  = useState({ gainers: [], losers: [], volume: [] });
   const [moversLoad,   setMoversLoad]   = useState(true);
   const [indiaLoad,    setIndiaLoad]    = useState(true);
+  const [marketStatus, setMarketStatus] = useState(null);
   const [showResults,  setShowResults]  = useState(false);
 
   const dropdownRef = useRef(null);
@@ -88,7 +89,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
   useEffect(() => {
     fetch(`${BASE}/movers`)
       .then(r => r.json())
-      .then(data => { setMovers(data); setMoversLoad(false); })
+      .then(data => { setMovers(data); setMoversLoad(false); if (data.marketStatus) setMarketStatus(data.marketStatus); })
       .catch(() => setMoversLoad(false));
   }, []);
 
@@ -211,6 +212,8 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
   const activeData = isIndia ? indiaMovers : movers;
   const isLoading  = isIndia ? indiaLoad   : moversLoad;
   const list       = activeData[moversTab] || [];
+  const isClosed   = marketStatus?.closed;
+  const closeReason = marketStatus?.reason;
 
   return (
     <div style={{ position: 'relative' }}>
