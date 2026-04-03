@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { SC, MC, GC } from '../utils/constants';
 import { TIMEFRAMES } from '../utils/indicators';
 import MiniChart from './MiniChart';
+import FinancialsPanel from './FinancialsPanel';
 
 function AccordionCard({ id, activeId, setActiveId, label, preview, children }) {
   const isOpen = activeId === id;
@@ -200,7 +201,25 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
         </div>
       </AccordionCard>
 
-      {/* ── Accordion 2: Signal Overview ── */}
+      {/* ── Accordion 2: Quarterly Financials ── */}
+      {scan.financials && (
+        <AccordionCard
+          id="financials" activeId={activeId} setActiveId={setActiveId}
+          label="QUARTERLY FINANCIALS"
+          preview={[
+            scan.financials.growth?.revenueYoY != null ? `Rev YoY ${scan.financials.growth.revenueYoY > 0 ? '+' : ''}${scan.financials.growth.revenueYoY}%` : null,
+            scan.financials.growth?.netIncomeYoY != null ? `NI YoY ${scan.financials.growth.netIncomeYoY > 0 ? '+' : ''}${scan.financials.growth.netIncomeYoY}%` : null,
+            scan.financials.epsHistory?.length ? `EPS ${scan.financials.epsHistory[0]?.beat ? 'BEAT' : 'MISS'} last qtr` : null,
+            scan.financials.nextEarnings ? `Earnings ${scan.financials.nextEarnings}` : null,
+          ].filter(Boolean).join(' · ') || 'Revenue, EPS, margins'}
+        >
+          <div style={{ paddingTop: 16 }}>
+            <FinancialsPanel ticker={scan.ticker} market={market} />
+          </div>
+        </AccordionCard>
+      )}
+
+      {/* ── Accordion 3: Signal Overview ── */}
       <AccordionCard
         id="signal" activeId={activeId} setActiveId={setActiveId}
         label="SIGNAL OVERVIEW"
@@ -299,7 +318,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
         </div>
       </AccordionCard>
 
-      {/* ── Accordion 3: Fundamentals & Technicals ── */}
+      {/* ── Accordion 4: Fundamentals & Technicals ── */}
       <AccordionCard
         id="fundamentals" activeId={activeId} setActiveId={setActiveId}
         label="FUNDAMENTALS & TECHNICALS"
