@@ -12,7 +12,7 @@ const ETF_UNIVERSE = {
     { symbol: 'JUNIORBEES',   name: 'Nippon Junior BeES',        tracking: 'Nifty Next 50'  },
     { symbol: 'SETFNN50',     name: 'SBI Nifty Next 50 ETF',     tracking: 'Nifty Next 50'  },
     { symbol: 'NV20IETF',     name: 'Nippon Nifty 100 ETF',      tracking: 'Nifty 100'      },
-    { symbol: 'MAFSETF',      name: 'Mirae Asset Nifty 50 ETF',  tracking: 'Nifty 50'       },
+    { symbol: 'NIFTYETF',     name: 'Mirae Asset Nifty 50 ETF',  tracking: 'Nifty 50'       },
     { symbol: 'SETFNIF50',    name: 'SBI Nifty 50 ETF',          tracking: 'Nifty 50'       },
     { symbol: 'HNGSNGBEES',   name: 'Nippon Hang Seng BeES',     tracking: 'Hang Seng'      },
   ],
@@ -496,7 +496,7 @@ const SIP_OPTIONS = [
   { label: 'SETFNN50 — SBI Nifty Next 50 ETF',     value: 'SETFNN50'   },
   { label: 'SETFNIF50 — SBI Nifty 50 ETF',         value: 'SETFNIF50'  },
   { label: 'NV20IETF — Nippon Nifty 100 ETF',      value: 'NV20IETF'   },
-  { label: 'MAFSETF — Mirae Asset Nifty 50 ETF',   value: 'MAFSETF'    },
+  { label: 'NIFTYETF — Mirae Asset Nifty 50 ETF',  value: 'NIFTYETF'   },
   // Sectoral ETFs
   { label: 'BANKBEES — Nippon Bank BeES',           value: 'BANKBEES'   },
   { label: 'ITBEES — Nippon IT BeES',               value: 'ITBEES'     },
@@ -1111,9 +1111,9 @@ function MFPage({ onBack }) {
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const TABS = [
+  { id: 'tracker',   icon: '📊', label: 'My SIPs',      desc: 'Track active SIPs · Monitor total invested amount'        },
   { id: 'sip',       icon: '🔄', label: 'SIP Planner',  desc: 'Calculate SIP returns · Compare with lump sum'            },
   { id: 'portfolio', icon: '🤖', label: 'AI Portfolio', desc: 'Risk quiz → personalised ETF & MF allocation'             },
-  { id: 'tracker',   icon: '📊', label: 'My SIPs',      desc: 'Track active SIPs · Monitor total invested amount'        },
   { id: 'etfs',      icon: '📈', label: 'ETFs',         desc: '28+ NSE ETFs with live prices · Click to run AI scan'     },
   { id: 'mf',        icon: '🏦', label: 'Mutual Funds', desc: 'Live NAV data for popular index and sectoral funds'       },
 ];
