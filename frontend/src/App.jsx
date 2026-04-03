@@ -13,7 +13,8 @@ import MarketSelector from './components/MarketSelector';
 import ScannerTab     from './tabs/ScannerTab';
 import OptionsTab     from './tabs/OptionsTab';
 import MarketsTab      from './tabs/MarketsTab';
-import IndiaMarketsTab from './tabs/IndiaMarketsTab';
+import IndiaMarketsTab  from './tabs/IndiaMarketsTab';
+import SimulatorTab    from './tabs/SimulatorTab';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
 import HelpTab        from './tabs/HelpTab';
@@ -32,6 +33,14 @@ export default function App() {
 
   const macro                    = useMacroData();
   const scan                     = useScan(macro);
+
+  const handleAddToSim = async (posData) => {
+    if (!user?.id) return;
+    await fetch(`${BASE}/sim/${user.id}/open`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(posData),
+    });
+  };
   const { market }               = useMarket();
   const { user }                 = useUser();
   const { isLoaded, isSignedIn } = useAuth();
@@ -239,6 +248,10 @@ export default function App() {
                     calendar={macro.calendar}
                   />
               }
+            </div>
+
+            <div style={{ display: activeTab === 'simulator' ? 'block' : 'none' }}>
+              <SimulatorTab market={market} />
             </div>
 
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>

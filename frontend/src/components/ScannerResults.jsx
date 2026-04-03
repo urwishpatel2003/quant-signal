@@ -40,11 +40,27 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
           {children}
         </div>
       )}
+      {/* ── Sim Modal ── */}
+      {showSimModal && (
+        <SimModal
+          scan={scan}
+          livePrice={livePrice}
+          currency={currency}
+          market={market}
+          onConfirm={async (pos) => {
+            await onAddToSim(pos);
+            setSimAdded(true);
+            setShowSimModal(false);
+          }}
+          onClose={() => setShowSimModal(false)}
+        />
+      )}
     </div>
   );
 }
 
-export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '', onAddToWatchlist }) {
+// ── Sim Modal ──────────────────────────────────────────────────────────────────
+export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '', onAddToWatchlist, onAddToSim }) {
   const [activeId, setActiveId] = useState('ticker');
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
@@ -55,6 +71,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
   const isIndia   = currency === '₹';
   const [watchlistAdded,   setWatchlistAdded]   = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [simAdded,         setSimAdded]         = useState(false);
+  const [showSimModal,     setShowSimModal]     = useState(false);
 
   const handleAddToWatchlist = async () => {
     if (!onAddToWatchlist || watchlistAdded || watchlistLoading) return;
@@ -105,6 +123,19 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
                 opacity:     watchlistLoading ? 0.6 : 1,
               }}>
               {watchlistAdded ? '✓ WATCHLIST' : watchlistLoading ? '...' : '+ WATCHLIST'}
+            </button>
+          )}
+          {onAddToSim && (
+            <button
+              className="btn-sm"
+              onClick={() => setShowSimModal(true)}
+              disabled={simAdded}
+              style={{
+                color:       simAdded ? '#00ff88' : '#aa66ff',
+                borderColor: simAdded ? '#00ff8844' : '#aa66ff44',
+                background:  simAdded ? '#00ff8811' : '#aa66ff11',
+              }}>
+              {simAdded ? '✓ IN SIMULATOR' : '📊 SIMULATE'}
             </button>
           )}
         </div>
@@ -452,6 +483,156 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           )}
         </div>
       </AccordionCard>
+      {/* ── Sim Modal ── */}
+      {showSimModal && (
+        <SimModal
+          scan={scan}
+          livePrice={livePrice}
+          currency={currency}
+          market={market}
+          onConfirm={async (pos) => {
+            await onAddToSim(pos);
+            setSimAdded(true);
+            setShowSimModal(false);
+          }}
+          onClose={() => setShowSimModal(false)}
+        />
+      )}
     </div>
   );
+}
+
+// ── Sim Modal ──────────────────────────────────────────────────────────────────
+function SimModal({ scan, livePrice, currency, market, onConfirm, onClose }) {
+  const isIndia  = currency === '₹';
+  const [direction, setDirection] = useState(scan.analysis?.signal === 'SELL' ? 'SHORT' : 'LONG');
+  const [quantity,  setQuantity]  = useState('1');
+  const [loading,   setLoading]   = useState(false);
+  const price     = livePrice || 0;
+  const notional  = price * parseFloat(quantity || 0);
+  const sigColor  = scan.analysis?.signal === 'BUY' ? '#00ff88' : scan.analysis?.signal === 'SELL' ? '#ff4444' : '#ffaa00';
+
+  const confirm = async () => {
+    const qty = parseFloat(quantity);
+    if (!qty || qty <= 0) return;
+    setLoading(true);
+    await onConfirm({
+      ticker:      scan.ticker,
+      market,
+      direction,
+      entryPrice:  price,
+      quantity:    qty,
+      signal:      scan.analysis?.signal,
+      confidence:  scan.analysis?.confidence,
+      timeframe:   scan.timeframe,
+      priceTarget: scan.analysis?.priceTarget,
+      stopLoss:    scan.analysis?.stopLoss,
+      thesis:      scan.analysis?.thesis,
+    });
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: '#0f0f1a', border: '1px solid #aa66ff44',
+        borderRadius: 10, padding: 24, width: '100%', maxWidth: 360,
+      }} onClick={e => e.stopPropagation()}>
+
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#aa66ff', marginBottom: 4 }}>
+          ADD TO SIMULATOR
+        </div>
+        <div style={{ fontSize: 12, color: '#556677', marginBottom: 20 }}>
+          Track this signal with virtual money
+        </div>
+
+        {/* Ticker + signal */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#e8e8f0' }}>{scan.ticker}</div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: sigColor }}>{scan.analysis?.signal} · {scan.analysis?.confidence}%</div>
+            <div style={{ fontSize: 11, color: '#7788aa' }}>Entry: {currency}{price.toFixed(2)}</div>
+          </div>
+        </div>
+
+        {/* Target / Stop */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <div style={{ flex: 1, background: '#0a0a14', border: '1px solid #00ff8833', borderRadius: 6, padding: '8px 12px' }}>
+            <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>TARGET</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#00ff88' }}>
+              {scan.analysis?.priceTarget ? `${currency}${parseFloat(scan.analysis.priceTarget).toFixed(2)}` : '—'}
+            </div>
+          </div>
+          <div style={{ flex: 1, background: '#0a0a14', border: '1px solid #ff444433', borderRadius: 6, padding: '8px 12px' }}>
+            <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>STOP LOSS</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#ff4444' }}>
+              {scan.analysis?.stopLoss ? `${currency}${parseFloat(scan.analysis.stopLoss).toFixed(2)}` : '—'}
+            </div>
+          </div>
+        </div>
+
+        {/* Direction */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>DIRECTION</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {['LONG', 'SHORT'].map(d => (
+              <button key={d} onClick={() => setDirection(d)} style={{
+                flex: 1, padding: '10px', borderRadius: 6, cursor: 'pointer',
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, letterSpacing: '0.1em',
+                border: `1px solid ${direction === d ? (d === 'LONG' ? '#00ff88' : '#ff4444') : '#2a2a3e'}`,
+                background: direction === d ? (d === 'LONG' ? '#00ff8811' : '#ff444411') : '#0a0a14',
+                color: direction === d ? (d === 'LONG' ? '#00ff88' : '#ff4444') : '#556677',
+              }}>
+                {d === 'LONG' ? '↑ LONG' : '↓ SHORT'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Quantity */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>
+            SHARES / UNITS
+          </div>
+          <input
+            type="number" min="0.01" step="0.01" value={quantity}
+            onChange={e => setQuantity(e.target.value)}
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6,
+              color: '#e8e8f0', fontSize: 18, fontWeight: 700, fontFamily: 'inherit',
+              padding: '10px 14px', textAlign: 'right',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+            <span style={{ fontSize: 11, color: '#556677' }}>Total notional</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#c8d8f0' }}>
+              {currency}{notional.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '12px', borderRadius: 6, cursor: 'pointer',
+            background: 'none', border: '1px solid #2a2a3e', color: '#556677',
+            fontFamily: 'inherit', fontSize: 13,
+          }}>CANCEL</button>
+          <button onClick={confirm} disabled={loading || !parseFloat(quantity)} style={{
+            flex: 2, padding: '12px', borderRadius: 6, cursor: 'pointer',
+            background: '#aa66ff22', border: '1px solid #aa66ff',
+            color: '#aa66ff', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+            letterSpacing: '0.08em', opacity: loading ? 0.6 : 1,
+          }}>
+            {loading ? 'ADDING...' : `OPEN ${direction}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
 }

@@ -2,7 +2,8 @@ export const TABS = [
   { id: 'scanner',   label: 'SCANNER'   },
   { id: 'options',   label: 'OPTIONS'   },
   { id: 'markets',   label: 'MARKETS'   },
-  { id: 'watchlist', label: 'WATCHLIST' },
+  { id: 'watchlist',  label: 'WATCHLIST'  },
+  { id: 'simulator',  label: 'SIMULATE'   },
   { id: 'help',      label: 'HELP'      },
 ];
 
