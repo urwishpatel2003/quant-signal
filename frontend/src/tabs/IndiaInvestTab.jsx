@@ -232,7 +232,7 @@ function SIPPage({ onBack }) {
 
 // ── Page: AI Portfolio ────────────────────────────────────────────────────────
 function PortfolioPage({ onBack }) {
-  const { user }   = useUser();
+  const { user, isLoaded } = useUser();
   const [sipAmount,    setSipAmount]    = useState(10000);
   const [language,     setLanguage]     = useState('en');
   const [messages,     setMessages]     = useState([]);
@@ -246,9 +246,10 @@ function PortfolioPage({ onBack }) {
   const [error,        setError]        = useState('');
   const chatEndRef = useRef(null);
 
-  // Load saved recommendation on mount
+  // Load saved recommendation on mount — wait for Clerk to load first
   useEffect(() => {
-    if (!user?.id) { setLoadingSaved(false); return; }
+    if (!isLoaded) return;              // Clerk still initialising
+    if (!user?.id) { setLoadingSaved(false); return; } // not signed in
     fetch(`${BASE}/portfolio/${user.id}`)
       .then(r => r.json())
       .then(data => {
@@ -262,7 +263,7 @@ function PortfolioPage({ onBack }) {
         setLoadingSaved(false);
       })
       .catch(() => setLoadingSaved(false));
-  }, [user?.id]);
+  }, [isLoaded, user?.id]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1036,7 +1037,7 @@ function MFPage({ onBack }) {
 const TABS = [
   { id: 'tracker',   icon: '📊', label: 'My SIPs',      desc: 'Track active SIPs · Monitor total invested amount'        },
   { id: 'sip',       icon: '🔄', label: 'SIP Planner',  desc: 'Calculate SIP returns · Compare with lump sum'            },
-  { id: 'portfolio', icon: '🤖', label: 'AI Portfolio', desc: 'Risk quiz → personalised ETF & MF allocation'             },
+  { id: 'portfolio', icon: '🤖', label: 'AI Portfolio', desc: 'Chat with Arya → personalised ETF & MF allocation'             },
   { id: 'etfs',      icon: '📈', label: 'ETFs',         desc: '28+ NSE ETFs with live prices · Click to run AI scan'     },
   { id: 'mf',        icon: '🏦', label: 'Mutual Funds', desc: 'Live NAV data for popular index and sectoral funds'       },
 ];
