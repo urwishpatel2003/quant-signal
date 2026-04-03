@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUsage } from '../hooks/useUsage';
+import { useUser } from '@clerk/clerk-react';
 import UpgradeModal from '../components/UpgradeModal';
 
 const BASE = import.meta.env.VITE_API_BASE;
@@ -7,48 +8,48 @@ const BASE = import.meta.env.VITE_API_BASE;
 // ── ETF Universe ──────────────────────────────────────────────────────────────
 const ETF_UNIVERSE = {
   INDEX: [
-    { symbol: 'NIFTYBEES',  name: 'Nippon Nifty BeES',     tracking: 'Nifty 50'       },
-    { symbol: 'JUNIORBEES', name: 'Nippon Junior BeES',    tracking: 'Nifty Next 50'  },
-    { symbol: 'SETFNN50',   name: 'SBI Nifty Next 50 ETF', tracking: 'Nifty Next 50'  },
-    { symbol: 'MOM100',     name: 'Nippon Nifty 100 ETF',  tracking: 'Nifty 100'      },
-    { symbol: 'MIDCAPETF',  name: 'SBI Nifty Midcap ETF',  tracking: 'Nifty Midcap'   },
-    { symbol: 'SENSEXETF',  name: 'SBI Sensex ETF',        tracking: 'BSE Sensex'     },
-    { symbol: 'ICICINIFTY', name: 'ICICI Nifty ETF',       tracking: 'Nifty 50'       },
+    { symbol: 'NIFTYBEES',    name: 'Nippon Nifty BeES',         tracking: 'Nifty 50'       },
+    { symbol: 'JUNIORBEES',   name: 'Nippon Junior BeES',        tracking: 'Nifty Next 50'  },
+    { symbol: 'SETFNN50',     name: 'SBI Nifty Next 50 ETF',     tracking: 'Nifty Next 50'  },
+    { symbol: 'NV20IETF',     name: 'Nippon Nifty 100 ETF',      tracking: 'Nifty 100'      },
+    { symbol: 'MAFSETF',      name: 'Mirae Asset Nifty 50 ETF',  tracking: 'Nifty 50'       },
+    { symbol: 'SETFNIF50',    name: 'SBI Nifty 50 ETF',          tracking: 'Nifty 50'       },
+    { symbol: 'HNGSNGBEES',   name: 'Nippon Hang Seng BeES',     tracking: 'Hang Seng'      },
   ],
   SECTORAL: [
-    { symbol: 'BANKBEES',   name: 'Nippon Bank BeES',      tracking: 'Nifty Bank'     },
-    { symbol: 'ITBEES',     name: 'Nippon IT BeES',        tracking: 'Nifty IT'       },
-    { symbol: 'PHARMABEES', name: 'Nippon Pharma BeES',    tracking: 'Nifty Pharma'   },
-    { symbol: 'INFRABEES',  name: 'Nippon Infra BeES',     tracking: 'Nifty Infra'    },
-    { symbol: 'PSUBNKBEES', name: 'Nippon PSU Bank BeES',  tracking: 'Nifty PSU Bank' },
-    { symbol: 'AUTOBEES',   name: 'Nippon Auto BeES',      tracking: 'Nifty Auto'     },
-    { symbol: 'FMCGBEES',   name: 'Nippon FMCG BeES',      tracking: 'Nifty FMCG'    },
+    { symbol: 'BANKBEES',     name: 'Nippon Bank BeES',          tracking: 'Nifty Bank'     },
+    { symbol: 'ITBEES',       name: 'Nippon IT BeES',            tracking: 'Nifty IT'       },
+    { symbol: 'PHARMABEES',   name: 'Nippon Pharma BeES',        tracking: 'Nifty Pharma'   },
+    { symbol: 'INFRABEES',    name: 'Nippon Infra BeES',         tracking: 'Nifty Infra'    },
+    { symbol: 'PSUBNKBEES',   name: 'Nippon PSU Bank BeES',      tracking: 'Nifty PSU Bank' },
+    { symbol: 'AUTOBEES',     name: 'Nippon Auto BeES',          tracking: 'Nifty Auto'     },
+    { symbol: 'FMCGBEES',     name: 'Nippon FMCG BeES',          tracking: 'Nifty FMCG'    },
   ],
   COMMODITY: [
-    { symbol: 'GOLDBEES',   name: 'Nippon Gold BeES',      tracking: 'Gold'           },
-    { symbol: 'SILVERETF',  name: 'ICICI Silver ETF',      tracking: 'Silver'         },
-    { symbol: 'SETFGOLD',   name: 'SBI Gold ETF',          tracking: 'Gold'           },
-    { symbol: 'HDFCGOLD',   name: 'HDFC Gold ETF',         tracking: 'Gold'           },
+    { symbol: 'GOLDBEES',     name: 'Nippon Gold BeES',          tracking: 'Gold'           },
+    { symbol: 'SILVERIETF',   name: 'ICICI Silver ETF',          tracking: 'Silver'         },
+    { symbol: 'SETFGOLD',     name: 'SBI Gold ETF',              tracking: 'Gold'           },
+    { symbol: 'HDFCGOLD',     name: 'HDFC Gold ETF',             tracking: 'Gold'           },
   ],
   DEBT: [
-    { symbol: 'LIQUIDBEES', name: 'Nippon Liquid BeES',    tracking: 'Overnight Rate' },
-    { symbol: 'LIQUIDETF',  name: 'HDFC Liquid ETF',       tracking: 'Overnight Rate' },
-    { symbol: 'CPSEETF',    name: 'Nippon CPSE ETF',       tracking: 'Nifty CPSE'    },
+    { symbol: 'LIQUIDBEES',   name: 'Nippon Liquid BeES',        tracking: 'Overnight Rate' },
+    { symbol: 'LIQUIDETF',    name: 'HDFC Liquid ETF',           tracking: 'Overnight Rate' },
+    { symbol: 'CPSEETF',      name: 'Nippon CPSE ETF',           tracking: 'Nifty CPSE'    },
   ],
 };
 
 // ── Mutual Funds ──────────────────────────────────────────────────────────────
 const MF_LIST = [
-  { schemeCode: '120503', name: 'UTI Nifty 50 Index Fund',       category: 'Index',    risk: 'Moderate' },
-  { schemeCode: '120465', name: 'HDFC Index Fund Nifty 50',      category: 'Index',    risk: 'Moderate' },
-  { schemeCode: '125494', name: 'SBI Nifty Index Fund',          category: 'Index',    risk: 'Moderate' },
-  { schemeCode: '147622', name: 'Mirae Asset Large Cap Fund',    category: 'Large Cap', risk: 'Moderate' },
-  { schemeCode: '119598', name: 'Axis Bluechip Fund',            category: 'Large Cap', risk: 'Moderate' },
-  { schemeCode: '100356', name: 'Parag Parikh Flexi Cap Fund',   category: 'Flexi Cap', risk: 'Moderate' },
-  { schemeCode: '135781', name: 'SBI Small Cap Fund',            category: 'Small Cap', risk: 'High'     },
-  { schemeCode: '120828', name: 'HDFC Mid-Cap Opportunities',    category: 'Mid Cap',   risk: 'High'     },
-  { schemeCode: '125497', name: 'SBI Magnum Gilt Fund',          category: 'Debt',      risk: 'Low'      },
-  { schemeCode: '119756', name: 'HDFC Liquid Fund',              category: 'Liquid',    risk: 'Low'      },
+  { schemeCode: '120503', name: 'UTI Nifty 50 Index Fund Direct',          category: 'Index',    risk: 'Moderate' },
+  { schemeCode: '120465', name: 'HDFC Nifty 50 Index Fund Direct',         category: 'Index',    risk: 'Moderate' },
+  { schemeCode: '125494', name: 'SBI Nifty Index Fund Direct',             category: 'Index',    risk: 'Moderate' },
+  { schemeCode: '119598', name: 'Mirae Asset Large Cap Fund Direct',       category: 'Large Cap', risk: 'Moderate' },
+  { schemeCode: '120837', name: 'Axis Bluechip Fund Direct',               category: 'Large Cap', risk: 'Moderate' },
+  { schemeCode: '122639', name: 'Parag Parikh Flexi Cap Fund Direct',      category: 'Flexi Cap', risk: 'Moderate' },
+  { schemeCode: '125354', name: 'SBI Small Cap Fund Direct',               category: 'Small Cap', risk: 'High'     },
+  { schemeCode: '118577', name: 'HDFC Mid-Cap Opportunities Direct',       category: 'Mid Cap',   risk: 'High'     },
+  { schemeCode: '119760', name: 'Nippon India Liquid Fund Direct',         category: 'Liquid',    risk: 'Low'      },
+  { schemeCode: '119775', name: 'ICICI Pru Short Term Fund Direct',        category: 'Debt',      risk: 'Low'      },
 ];
 
 // ── Risk quiz ─────────────────────────────────────────────────────────────────
@@ -635,11 +636,17 @@ function MFPage({ onBack }) {
   const [filter,  setFilter]  = useState('All');
 
   useEffect(() => {
-    Promise.allSettled(MF_LIST.slice(0, 6).map(async mf => {
+    Promise.allSettled(MF_LIST.map(async mf => {
       try {
-        const res  = await fetch(`https://api.mfapi.in/mf/${mf.schemeCode}/latest`);
+        const res  = await fetch(`${BASE}/mf/nav/${mf.schemeCode}`);
         const data = await res.json();
-        setNavData(prev => ({ ...prev, [mf.schemeCode]: { nav: parseFloat(data.data?.[0]?.nav), date: data.data?.[0]?.date } }));
+        if (data?.data?.[0]?.nav) {
+          setNavData(prev => ({ ...prev, [mf.schemeCode]: {
+            nav:  parseFloat(data.data[0].nav),
+            date: data.data[0].date,
+            name: data.meta?.scheme_name,
+          }}));
+        }
       } catch {}
     })).finally(() => setLoading(false));
   }, []);

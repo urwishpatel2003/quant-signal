@@ -1839,6 +1839,23 @@ Suggest 3-5 specific NSE ETFs or Indian mutual funds with exact allocation perce
   }
 });
 
+// ─── MFAPI proxy — search and NAV ────────────────────────────────────────────
+app.get('/mf/search', async (req, res) => {
+  const q = req.query.q || '';
+  if (!q) return res.json([]);
+  try {
+    const data = await httpsGet('api.mfapi.in', `/mf/search?q=${encodeURIComponent(q)}`);
+    res.json(Array.isArray(data) ? data.slice(0, 10) : []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/mf/nav/:schemeCode', async (req, res) => {
+  try {
+    const data = await httpsGet('api.mfapi.in', `/mf/${req.params.schemeCode}/latest`);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── SIPs CRUD ────────────────────────────────────────────────────────────────
 app.get('/sips/:userId', async (req, res) => {
   try {
