@@ -138,9 +138,6 @@ app.post('/stripe/checkout', async (req, res) => {
       metadata:    { clerk_user_id: userId, market },
       subscription_data:        { trial_period_days: 30 },
       payment_method_collection: 'if_required', // no card needed during free trial
-      trial_settings: {
-        end_behavior: { missing_payment_method: 'cancel' }, // cancel if no card added before trial ends
-      },
     });
     res.json({ url: session.url });
   } catch (e) {
