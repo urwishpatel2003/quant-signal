@@ -2256,10 +2256,74 @@ function calcYoY(current, prior) {
 // Get free key at: https://financialmodelingprep.com/developer/docs/
 const FMP_KEY = process.env.FMP_API_KEY || 'SOfbx10EQBKh8R5HLptRDLxt7A3nAGxl';
 
+// FMP cache — avoid re-fetching same ticker on same day (saves quota)
+const fmpCache = new Map();
+const FMP_TTL  = 6 * 60 * 60 * 1000; // 6 hours
+
 async function fmpGet(path) {
-  const sep = path.includes('?') ? '&' : '?';
-  return httpsGet('financialmodelingprep.com', `${path}${sep}apikey=${FMP_KEY}`);
+  const sep      = path.includes('?') ? '&' : '?';
+  const fullPath = `${path}${sep}apikey=${FMP_KEY}`;
+  const cached   = fmpCache.get(fullPath);
+  if (cached && Date.now() - cached.ts < FMP_TTL) return cached.data;
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'financialmodelingprep.com',
+      path: fullPath,
+      method: 'GET',
+      headers: { Accept: 'application/json', 'User-Agent': 'QuAIntSignal/1.0' },
+    }, response => {
+      let data = '';
+      response.on('data', c => (data += c));
+      response.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          // FMP returns { 'Error Message': '...' } on bad key or limit hit
+          if (parsed?.['Error Message']) {
+            console.error('[fmpGet] FMP error:', parsed['Error Message'], 'path:', path);
+            resolve(null);
+            return;
+          }
+          if (parsed?.['Note']) {
+            console.error('[fmpGet] FMP note (rate limit?):', parsed['Note']);
+            resolve(null);
+            return;
+          }
+          if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) {
+            fmpCache.set(fullPath, { data: parsed, ts: Date.now() });
+            resolve(parsed);
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          console.error('[fmpGet] parse error for', path, '- raw:', data.slice(0, 200));
+          resolve(null);
+        }
+      });
+    });
+    req.on('error', e => { console.error('[fmpGet] request error:', e.message); resolve(null); });
+    req.end();
+  });
 }
+
+// Debug: test FMP connection directly
+app.get('/debug/fmp/:ticker', async (req, res) => {
+  try {
+    const ticker = req.params.ticker.toUpperCase();
+    const data = await fmpGet(`/api/v3/income-statement/${ticker}?period=quarter&limit=2`);
+    res.json({
+      fmpKeyPresent: !!FMP_KEY,
+      fmpKeyPrefix:  FMP_KEY?.slice(0, 8) + '...',
+      dataType:      typeof data,
+      isArray:       Array.isArray(data),
+      length:        Array.isArray(data) ? data.length : null,
+      firstKeys:     Array.isArray(data) && data[0] ? Object.keys(data[0]).slice(0, 8) : null,
+      raw:           data,
+    });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
 
 app.get('/financials/us/:ticker', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase();
