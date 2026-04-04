@@ -3151,6 +3151,55 @@ const DEFAULT_BACKTEST_TICKERS = [
   'PLTR','SNOW','COIN','RIVN','LCID',
 ];
 
+async function optimizeWeights(correlations, summary) {
+  const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
+
+  // Key insight: factors with NEGATIVE correlation should get LOWER weight (not higher).
+  // A negative correlation means the factor predicts wrong — we should reduce its weight.
+  // Factors with zero correlation (no data) get a small floor weight.
+  // Formula: weight proportional to max(0, correlation) — negative factors get near-zero weight.
+
+  const posCorr = {};
+  let totalPos = 0;
+  for (const f of factorNames) {
+    const c = correlations[f] || 0;
+    posCorr[f] = Math.max(0.005, c); // floor at 0.005 so no factor fully disappears
+    totalPos += posCorr[f];
+  }
+
+  const currentWeights = await getSignalWeights() || {
+    swing: { momentum:0.20, trend:0.15, rsi:0.10, macd:0.10, volume:0.05, revenue:0.15, quality:0.10, analyst:0.10, macro:0.05 }
+  };
+
+  const newSwing = {};
+  for (const f of factorNames) {
+    const dataWeight  = posCorr[f] / totalPos;
+    const priorWeight = currentWeights.swing?.[f] || (1/factorNames.length);
+    // Blend: 60% data-driven, 40% prior (more aggressive update)
+    newSwing[f] = parseFloat((dataWeight * 0.6 + priorWeight * 0.4).toFixed(4));
+  }
+
+  // Re-normalize
+  const tot = Object.values(newSwing).reduce((s,v)=>s+v,0);
+  for (const f of factorNames) newSwing[f] = parseFloat((newSwing[f]/tot).toFixed(4));
+
+  // Log which factors were penalized
+  const penalized = factorNames.filter(f => (correlations[f]||0) < 0);
+  console.log('[optimizer] penalized (negative correlation):', penalized);
+
+  const newWeights = {
+    swing:    newSwing,
+    short:    { ...newSwing, momentum: Math.min(0.35, +(newSwing.momentum+0.05).toFixed(4)), revenue: Math.max(0.01, +(newSwing.revenue-0.03).toFixed(4)) },
+    position: { ...newSwing, revenue: Math.min(0.30, +(newSwing.revenue+0.05).toFixed(4)),   momentum: Math.max(0.03, +(newSwing.momentum-0.05).toFixed(4)) },
+    longterm: { ...newSwing, revenue: Math.min(0.35, +(newSwing.revenue+0.10).toFixed(4)),   momentum: Math.max(0.02, +(newSwing.momentum-0.08).toFixed(4)) },
+  };
+
+  await saveSignalWeights(newWeights, { summary, correlations, penalized, optimizedAt: new Date().toISOString() });
+  console.log('[optimizer] weights updated:', newSwing);
+  return newWeights;
+}
+
+
 async function runBacktest(tickers, startDate, endDate, market) {
   const results = [];
   // Fetch SPY as market regime indicator via Tradier
@@ -3321,53 +3370,6 @@ app.post('/backtest/run', async (req, res) => {
 });
 
 
-async function optimizeWeights(correlations, summary) {
-  const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
-
-  // Key insight: factors with NEGATIVE correlation should get LOWER weight (not higher).
-  // A negative correlation means the factor predicts wrong — we should reduce its weight.
-  // Factors with zero correlation (no data) get a small floor weight.
-  // Formula: weight proportional to max(0, correlation) — negative factors get near-zero weight.
-
-  const posCorr = {};
-  let totalPos = 0;
-  for (const f of factorNames) {
-    const c = correlations[f] || 0;
-    posCorr[f] = Math.max(0.005, c); // floor at 0.005 so no factor fully disappears
-    totalPos += posCorr[f];
-  }
-
-  const currentWeights = await getSignalWeights() || {
-    swing: { momentum:0.20, trend:0.15, rsi:0.10, macd:0.10, volume:0.05, revenue:0.15, quality:0.10, analyst:0.10, macro:0.05 }
-  };
-
-  const newSwing = {};
-  for (const f of factorNames) {
-    const dataWeight  = posCorr[f] / totalPos;
-    const priorWeight = currentWeights.swing?.[f] || (1/factorNames.length);
-    // Blend: 60% data-driven, 40% prior (more aggressive update)
-    newSwing[f] = parseFloat((dataWeight * 0.6 + priorWeight * 0.4).toFixed(4));
-  }
-
-  // Re-normalize
-  const tot = Object.values(newSwing).reduce((s,v)=>s+v,0);
-  for (const f of factorNames) newSwing[f] = parseFloat((newSwing[f]/tot).toFixed(4));
-
-  // Log which factors were penalized
-  const penalized = factorNames.filter(f => (correlations[f]||0) < 0);
-  console.log('[optimizer] penalized (negative correlation):', penalized);
-
-  const newWeights = {
-    swing:    newSwing,
-    short:    { ...newSwing, momentum: Math.min(0.35, +(newSwing.momentum+0.05).toFixed(4)), revenue: Math.max(0.01, +(newSwing.revenue-0.03).toFixed(4)) },
-    position: { ...newSwing, revenue: Math.min(0.30, +(newSwing.revenue+0.05).toFixed(4)),   momentum: Math.max(0.03, +(newSwing.momentum-0.05).toFixed(4)) },
-    longterm: { ...newSwing, revenue: Math.min(0.35, +(newSwing.revenue+0.10).toFixed(4)),   momentum: Math.max(0.02, +(newSwing.momentum-0.08).toFixed(4)) },
-  };
-
-  await saveSignalWeights(newWeights, { summary, correlations, penalized, optimizedAt: new Date().toISOString() });
-  console.log('[optimizer] weights updated:', newSwing);
-  return newWeights;
-}
 
 app.get('/backtest/weights', async (req, res) => {
   try { const w = await getSignalWeights(); res.json({ weights: w, hasOptimized: !!w }); }
