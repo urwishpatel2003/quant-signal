@@ -1,12 +1,10 @@
 // SharePage.jsx  — public page at /share/:id, no auth required
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
 import { SignalCard, SimulatorCard } from '../components/ShareCard';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
-export default function SharePage() {
-  const { id }    = useParams();
+export default function SharePage({ id }) {
   const [card,    setCard]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');

@@ -15,6 +15,7 @@ import OptionsTab     from './tabs/OptionsTab';
 import MarketsTab      from './tabs/MarketsTab';
 import IndiaMarketsTab  from './tabs/IndiaMarketsTab';
 import SimulatorTab    from './tabs/SimulatorTab';
+import SharePage      from './pages/SharePage';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
 import HelpTab        from './tabs/HelpTab';
@@ -25,6 +26,12 @@ import BlogTab        from './tabs/BlogTab';
 import BlogAdmin      from './tabs/BlogAdmin';
 
 export default function App() {
+  // Handle /share/:id routes without React Router
+  const sharePath = window.location.pathname.match(/^\/share\/([a-f0-9-]+)$/i);
+  if (sharePath) {
+    return <SharePage id={sharePath[1]} />;
+  }
+
   const [enteredApp,    setEnteredApp]    = useState(false);
   const [activeTab,     setActiveTab]     = useState('scanner');
   const [optionsTicker, setOptionsTicker] = useState('');
