@@ -86,13 +86,18 @@ export default function SimulatorTab({ market = 'US' }) {
 
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
+    // Reset state when market changes
+    setAccount(null);
+    setPositions([]);
+    setPrices({});
+    setLoading(true);
     load();
     // Refresh prices every 60s
     const interval = setInterval(() => {
       fetch(`${BASE}/sim/${user.id}/prices?market=${market}`).then(r => r.json()).then(setPrices).catch(() => {});
     }, 60000);
     return () => clearInterval(interval);
-  }, [isLoaded, user?.id]);
+  }, [isLoaded, user?.id, market]);  // re-run when market changes
 
 
 
