@@ -362,8 +362,105 @@ app.get('/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/movers', async (req, res) => {
-  // Invalidate cache at market open — if cache is from before 9:30 AM ET today, force refresh
+
+function getMarketStatus() {
+  const now  = new Date();
+  const et   = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day  = et.getDay();
+  const h    = et.getHours(), m = et.getMinutes();
+  const mins = h * 60 + m;
+  const dateStr = et.toISOString().split('T')[0];
+
+  if (US_HOLIDAYS.has(dateStr)) {
+    const names = {
+      '2025-01-01': "New Year's Day", '2025-01-20': 'MLK Day', '2025-02-17': 'Presidents Day',
+      '2025-04-18': 'Good Friday', '2025-05-26': 'Memorial Day', '2025-06-19': 'Juneteenth',
+      '2025-07-04': 'Independence Day', '2025-09-01': 'Labor Day', '2025-11-27': 'Thanksgiving', '2025-12-25': 'Christmas',
+      '2026-01-01': "New Year's Day", '2026-01-19': 'MLK Day', '2026-02-16': 'Presidents Day',
+      '2026-04-03': 'Good Friday', '2026-05-25': 'Memorial Day', '2026-06-19': 'Juneteenth',
+      '2026-07-03': 'Independence Day', '2026-09-07': 'Labor Day', '2026-11-26': 'Thanksgiving', '2026-12-25': 'Christmas',
+      '2027-01-01': "New Year's Day", '2027-01-18': 'MLK Day', '2027-02-15': 'Presidents Day',
+      '2027-03-26': 'Good Friday', '2027-05-31': 'Memorial Day', '2027-06-18': 'Juneteenth',
+      '2027-07-05': 'Independence Day', '2027-09-06': 'Labor Day', '2027-11-25': 'Thanksgiving', '2027-12-24': 'Christmas',
+    };
+    return { closed: true, reason: names[dateStr] || 'Market Holiday' };
+  }
+  if (day === 0 || day === 6) return { closed: true, reason: day === 6 ? 'Weekend' : 'Weekend' };
+  if (mins < 570) return { closed: true, reason: 'Pre-Market' };
+  if (mins >= 960) return { closed: true, reason: 'After Hours' };
+  return { closed: false, reason: 'Open' };
+}app.get('/movers', async (req, res) => {
+  // Invalidate cache at 
+
+async function yahooNSEQuote(symbol) {
+  try {
+    const ySymbol = `${symbol}.NS`;
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const data = await httpsGet(host,
+          `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
+          YAHOO_HEADERS
+        );
+        const meta = data?.chart?.result?.[0]?.meta;
+        if (!meta?.regularMarketPrice) continue;
+        const price     = meta.regularMarketPrice;
+        const prevClose = meta.previousClose || meta.chartPreviousClose;
+        const change    = price && prevClose ? price - prevClose : null;
+        const changePct = change && prevClose ? (change / prevClose) * 100 : null;
+        return {
+          price, prevClose,
+          change:    change    ? parseFloat(change.toFixed(2))    : null,
+          changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
+          volume: meta.regularMarketVolume || 0,
+          open: meta.regularMarketOpen    || null,
+          high: meta.regularMarketDayHigh || null,
+          low:  meta.regularMarketDayLow  || null,
+        };
+      } catch { continue; }
+    }
+    return null;
+  } catch { return null; }
+}
+
+async function getNSEQuote(symbol) {
+  const cached = nseQuoteCache.get(symbol);
+  if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL) return cached.data;
+
+  let result = null;
+
+  // Primary: stock-nse-india (direct NSE API, no IP blocks)
+  if (nseIndia) {
+    try {
+      const details = await nseIndia.getEquityDetails(symbol);
+      const p = details?.priceInfo;
+      if (p?.lastPrice) {
+        result = {
+          price:     p.lastPrice,
+          prevClose: p.previousClose || p.close,
+          change:    p.change  ? parseFloat(p.change.toFixed(2))  : null,
+          changePct: p.pChange ? parseFloat(p.pChange.toFixed(2)) : null,
+          volume:    details?.preOpenMarket?.totalTradedVolume || details?.securityInfo?.tradedVolume || 0,
+          open: p.open || null,
+          high: p.intraDayHighLow?.max || null,
+          low:  p.intraDayHighLow?.min || null,
+        };
+      }
+    } catch (e) { console.warn(`[NSE] primary quote failed ${symbol}:`, e.message); }
+  }
+
+  // Fallback: Yahoo Finance
+  if (!result) result = await yahooNSEQuote(symbol);
+
+  if (result) {
+    nseQuoteCache.set(symbol, { data: result, ts: Date.now() });
+  } else if (cached) {
+    console.warn(`[NSE] stale cache for ${symbol}`);
+    return cached.data;
+  }
+  return result;
+}
+
+  // market open — if cache is from before 9:30 AM ET today, force refresh
   const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const marketOpenToday = new Date(nowET);
   marketOpenToday.setHours(9, 30, 0, 0);
@@ -559,49 +656,6 @@ function calcEarningsProximity(calendar, ticker, selectedExpiry = null) {
     : 'No imminent earnings risk.';
   return { daysToEarnings, earningsDate: new Date(next.date).toISOString().split('T')[0], earningsBeforeExpiry, risk, advice };
 }
-
-// US market holidays 2025-2027
-const US_HOLIDAYS = new Set([
-  '2025-01-01','2025-01-20','2025-02-17','2025-04-18','2025-05-26',
-  '2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
-  '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25',
-  '2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
-  '2027-01-01','2027-01-18','2027-02-15','2027-03-26','2027-05-31',
-  '2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24',
-]);
-
-function getMarketStatus() {
-  const now  = new Date();
-  const et   = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const day  = et.getDay();
-  const h    = et.getHours(), m = et.getMinutes();
-  const mins = h * 60 + m;
-  const dateStr = et.toISOString().split('T')[0];
-
-  if (US_HOLIDAYS.has(dateStr)) {
-    const names = {
-      '2025-01-01': "New Year's Day", '2025-01-20': 'MLK Day', '2025-02-17': 'Presidents Day',
-      '2025-04-18': 'Good Friday', '2025-05-26': 'Memorial Day', '2025-06-19': 'Juneteenth',
-      '2025-07-04': 'Independence Day', '2025-09-01': 'Labor Day', '2025-11-27': 'Thanksgiving', '2025-12-25': 'Christmas',
-      '2026-01-01': "New Year's Day", '2026-01-19': 'MLK Day', '2026-02-16': 'Presidents Day',
-      '2026-04-03': 'Good Friday', '2026-05-25': 'Memorial Day', '2026-06-19': 'Juneteenth',
-      '2026-07-03': 'Independence Day', '2026-09-07': 'Labor Day', '2026-11-26': 'Thanksgiving', '2026-12-25': 'Christmas',
-      '2027-01-01': "New Year's Day", '2027-01-18': 'MLK Day', '2027-02-15': 'Presidents Day',
-      '2027-03-26': 'Good Friday', '2027-05-31': 'Memorial Day', '2027-06-18': 'Juneteenth',
-      '2027-07-05': 'Independence Day', '2027-09-06': 'Labor Day', '2027-11-25': 'Thanksgiving', '2027-12-24': 'Christmas',
-    };
-    return { closed: true, reason: names[dateStr] || 'Market Holiday' };
-  }
-  if (day === 0 || day === 6) return { closed: true, reason: day === 6 ? 'Weekend' : 'Weekend' };
-  if (mins < 570) return { closed: true, reason: 'Pre-Market' };
-  if (mins >= 960) return { closed: true, reason: 'After Hours' };
-  return { closed: false, reason: 'Open' };
-}
-
-function isMarketClosed() {
-  return getMarketStatus().closed;
-}
-
 function categorizeNews(headlines) {
   return (headlines || []).map(n => {
     const t = n.title?.toLowerCase() || '';
@@ -1073,7 +1127,19 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   return { signal, confidence, totalScore: total, scores, debug };
 }
 
-app.post('/api/analyze/price', async (req, res) => {
+
+async function getSignalWeights() {
+  try {
+    const { data, error } = await supabase
+      .from('signal_weights')
+      .select('weights')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();  // maybeSingle returns null instead of error when no rows
+    if (error) return null;
+    return data?.weights || null;
+  } catch { return null; }
+}app.post('/api/analyze/price', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials, enhanced } = req.body;
     const isIndia = market === 'INDIA';
@@ -1724,77 +1790,7 @@ const YAHOO_HEADERS = {
   'Accept': 'application/json, */*',
   'Accept-Language': 'en-US,en;q=0.9',
 };
-const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
-
-async function yahooNSEQuote(symbol) {
-  try {
-    const ySymbol = `${symbol}.NS`;
-    for (const host of YAHOO_HOSTS) {
-      try {
-        const data = await httpsGet(host,
-          `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
-          YAHOO_HEADERS
-        );
-        const meta = data?.chart?.result?.[0]?.meta;
-        if (!meta?.regularMarketPrice) continue;
-        const price     = meta.regularMarketPrice;
-        const prevClose = meta.previousClose || meta.chartPreviousClose;
-        const change    = price && prevClose ? price - prevClose : null;
-        const changePct = change && prevClose ? (change / prevClose) * 100 : null;
-        return {
-          price, prevClose,
-          change:    change    ? parseFloat(change.toFixed(2))    : null,
-          changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
-          volume: meta.regularMarketVolume || 0,
-          open: meta.regularMarketOpen    || null,
-          high: meta.regularMarketDayHigh || null,
-          low:  meta.regularMarketDayLow  || null,
-        };
-      } catch { continue; }
-    }
-    return null;
-  } catch { return null; }
-}
-
-async function getNSEQuote(symbol) {
-  const cached = nseQuoteCache.get(symbol);
-  if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL) return cached.data;
-
-  let result = null;
-
-  // Primary: stock-nse-india (direct NSE API, no IP blocks)
-  if (nseIndia) {
-    try {
-      const details = await nseIndia.getEquityDetails(symbol);
-      const p = details?.priceInfo;
-      if (p?.lastPrice) {
-        result = {
-          price:     p.lastPrice,
-          prevClose: p.previousClose || p.close,
-          change:    p.change  ? parseFloat(p.change.toFixed(2))  : null,
-          changePct: p.pChange ? parseFloat(p.pChange.toFixed(2)) : null,
-          volume:    details?.preOpenMarket?.totalTradedVolume || details?.securityInfo?.tradedVolume || 0,
-          open: p.open || null,
-          high: p.intraDayHighLow?.max || null,
-          low:  p.intraDayHighLow?.min || null,
-        };
-      }
-    } catch (e) { console.warn(`[NSE] primary quote failed ${symbol}:`, e.message); }
-  }
-
-  // Fallback: Yahoo Finance
-  if (!result) result = await yahooNSEQuote(symbol);
-
-  if (result) {
-    nseQuoteCache.set(symbol, { data: result, ts: Date.now() });
-  } else if (cached) {
-    console.warn(`[NSE] stale cache for ${symbol}`);
-    return cached.data;
-  }
-  return result;
-}
-
-async function getNSEHistory(symbol, range = '3mo') {
+const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];async function getNSEHistory(symbol, range = '3mo') {
   const cacheKey = `${symbol}:${range}`;
   const cached   = nseHistoryCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < NSE_HISTORY_TTL) return cached.data;
@@ -3109,28 +3105,6 @@ app.get('/tiingo/:ticker/fundamentals', async (req, res) => {
     res.json(quarterly);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ─── Backtest Engine ──────────────────────────────────────────────────────────
-
-async function getSignalWeights() {
-  try {
-    const { data, error } = await supabase
-      .from('signal_weights')
-      .select('weights')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();  // maybeSingle returns null instead of error when no rows
-    if (error) return null;
-    return data?.weights || null;
-  } catch { return null; }
-}
-
-async function saveSignalWeights(weights, metadata) {
-  try {
-    await supabase.from('signal_weights').insert({ weights, metadata, created_at: new Date().toISOString() });
-  } catch (e) { console.error('[saveWeights]', e.message); }
-}
-
 // 50+ tickers across all S&P 500 sectors for comprehensive backtesting
 const DEFAULT_BACKTEST_TICKERS = [
   // Technology
