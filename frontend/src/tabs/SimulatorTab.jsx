@@ -86,10 +86,11 @@ export default function SimulatorTab({ market = 'US' }) {
 
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
-    // Reset state when market changes
+    // Immediately clear state when market switches to prevent stale data showing
     setAccount(null);
     setPositions([]);
     setPrices({});
+    setError('');
     setLoading(true);
     load();
     // Refresh prices every 60s
@@ -121,6 +122,14 @@ export default function SimulatorTab({ market = 'US' }) {
   const avgLoss           = losses ? closedPositions.filter(p => p.realized_pnl < 0).reduce((s, p) => s + p.realized_pct, 0) / losses : null;
 
   // Unrealized P&L across open positions
+  // For each open position, compute current market value
+  const openLongValue = openPositions.reduce((sum, p) => {
+    if (p.direction !== 'LONG') return sum;
+    const cur = prices[p.ticker];
+    // If no live price yet, use entry notional (conservative)
+    return sum + (cur ? cur * p.quantity : p.notional);
+  }, 0);
+
   const unrealizedPnl = openPositions.reduce((sum, p) => {
     const cur = prices[p.ticker];
     if (!cur) return sum;
@@ -130,8 +139,13 @@ export default function SimulatorTab({ market = 'US' }) {
     return sum + pnl;
   }, 0);
 
+  // totalEquity = cash balance + current value of open longs + unrealized short pnl
   const totalEquity = account
-    ? account.balance + openPositions.reduce((s, p) => s + (p.direction === 'LONG' ? p.notional : 0), 0) + unrealizedPnl
+    ? account.balance + openLongValue + openPositions.reduce((s, p) => {
+        if (p.direction !== 'SHORT') return s;
+        const cur = prices[p.ticker];
+        return s + (cur ? (p.entry_price - cur) * p.quantity : 0);
+      }, 0)
     : 0;
   const totalReturn = account ? totalEquity - account.starting_balance : 0;
   const totalReturnPct = account ? (totalReturn / account.starting_balance * 100) : 0;

@@ -2872,15 +2872,15 @@ app.post('/sim/:userId/open', async (req, res) => {
   if (!ticker || !entryPrice || !quantity)
     return res.status(400).json({ error: 'ticker, entryPrice, quantity required' });
 
-  if (confidence != null && confidence < 75)
-    return res.status(400).json({ error: `Signal confidence too low (${confidence}%) — need 75%+ to simulate` });
+  if (confidence != null && confidence < 65)
+    return res.status(400).json({ error: `Signal confidence too low (${confidence}%) — need 65%+ to simulate` });
 
   try {
     const account  = await getOrCreateSimAccount(req.params.userId, market);
     const notional = parseFloat(entryPrice) * parseFloat(quantity);
 
     if (direction === 'LONG' && notional > account.balance)
-      return res.status(400).json({ error: `Insufficient balance. Available: $${account.balance.toFixed(2)}` });
+      return res.status(400).json({ error: `Insufficient balance. Available: ${market === 'INDIA' ? '₹' : '$'}${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}` });
 
     // Deduct from balance for LONG (SHORT uses margin but we'll keep it simple)
     const newBalance = direction === 'LONG'
