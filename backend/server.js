@@ -3131,12 +3131,32 @@ async function saveSignalWeights(weights, metadata) {
   } catch (e) { console.error('[saveWeights]', e.message); }
 }
 
+// 50+ tickers across all S&P 500 sectors for comprehensive backtesting
+const DEFAULT_BACKTEST_TICKERS = [
+  // Technology
+  'AAPL','MSFT','NVDA','GOOGL','META','AMZN','TSLA','AMD','INTC','CRM','ORCL','ADBE','QCOM','TXN','AVGO',
+  // Financials
+  'JPM','BAC','WFC','GS','MS','V','MA','AXP','BLK','C',
+  // Healthcare
+  'JNJ','UNH','PFE','MRK','ABBV','LLY','TMO','ABT','MDT','AMGN',
+  // Consumer
+  'PG','KO','PEP','WMT','COST','MCD','NKE','SBUX','HD','TGT',
+  // Energy
+  'XOM','CVX','COP','SLB','EOG',
+  // Industrials
+  'CAT','DE','BA','HON','GE','MMM','UPS','FDX',
+  // Real Estate & Utilities
+  'AMT','PLD','NEE','DUK',
+  // Small/Mid cap for diversity
+  'PLTR','SNOW','COIN','RIVN','LCID',
+];
+
 app.post('/backtest/run', async (req, res) => {
-  if (!TIINGO_TOKEN) return res.status(503).json({ error: 'Tiingo token required. Set TIINGO_TOKEN in Railway env vars.' });
-  const { tickers = [], startDate = '2022-01-01', endDate, market = 'US' } = req.body;
-  if (!tickers.length) return res.status(400).json({ error: 'tickers array required' });
-  res.json({ message: 'Backtest started in background', tickers: tickers.length, startDate, endDate });
-  runBacktest(tickers, startDate, endDate || new Date().toISOString().split('T')[0], market)
+  const { tickers, startDate = '2020-01-01', endDate, market = 'US' } = req.body;
+  // Use comprehensive default list if none provided
+  const tickerList = (tickers && tickers.length > 0) ? tickers : DEFAULT_BACKTEST_TICKERS;
+  res.json({ message: 'Backtest started in background', tickers: tickerList.length, startDate, endDate: endDate || 'today' });
+  runBacktest(tickerList, startDate, endDate || new Date().toISOString().split('T')[0], market)
     .then(r => console.log('[backtest] complete:', r.summary))
     .catch(e => console.error('[backtest] error:', e.message));
 });
@@ -3153,6 +3173,7 @@ async function runBacktest(tickers, startDate, endDate, market) {
     console.log(`[backtest] SPY: got ${spyPrices.length} days`);
   } catch (e) { console.warn('[backtest] SPY fetch:', e.message); }
 
+  console.log(`[backtest] Starting backtest: ${tickers.length} tickers from ${startDate} to ${endDate}`);
   for (const ticker of tickers) {
     try {
       const tradierHist = await tradierGet(`/v1/markets/history?symbol=${ticker}&interval=daily&start=${startDate}&end=${endDate}`);
@@ -3246,7 +3267,7 @@ async function runBacktest(tickers, startDate, endDate, market) {
           : null;
         results.push({ ticker, date, signal, confidence, totalScore, scores, ...returns, correct20d, bearMarket });
       }
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 300)); // Tradier rate limit: 200 req/min
     } catch (e) { console.warn(`[backtest] ${ticker}:`, e.message); }
   }
 
