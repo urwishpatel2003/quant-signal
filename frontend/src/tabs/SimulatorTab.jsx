@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 
 import ShareModal from '../components/ShareModal';
@@ -70,35 +70,45 @@ export default function SimulatorTab({ market = 'US' }) {
   const [showShare,    setShowShare]    = useState(false);
   const [error,        setError]        = useState('');
 
-  const load = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const [simRes, priceRes] = await Promise.all([
-        fetch(`${BASE}/sim/${user.id}?market=${market}`).then(r => r.json()),
-        fetch(`${BASE}/sim/${user.id}/prices?market=${market}`).then(r => r.json()),
-      ]);
-      setAccount(simRes.account);
-      setPositions(simRes.positions || []);
-      setPrices(priceRes || {});
-    } catch (e) { setError(e.message); }
-    setLoading(false);
-  }, [user?.id]);
-
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
-    // Immediately clear state when market switches to prevent stale data showing
+    // Clear stale state immediately on market switch
     setAccount(null);
     setPositions([]);
     setPrices({});
     setError('');
     setLoading(true);
-    load();
+
+    let cancelled = false;
+    const fetchData = async () => {
+      try {
+        const [simRes, priceRes] = await Promise.all([
+          fetch(`${BASE}/sim/${user.id}?market=${market}`).then(r => r.json()),
+          fetch(`${BASE}/sim/${user.id}/prices?market=${market}`).then(r => r.json()),
+        ]);
+        if (cancelled) return;
+        setAccount(simRes.account || null);
+        setPositions(simRes.positions || []);
+        setPrices(priceRes || {});
+      } catch (e) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchData();
+
     // Refresh prices every 60s
     const interval = setInterval(() => {
-      fetch(`${BASE}/sim/${user.id}/prices?market=${market}`).then(r => r.json()).then(setPrices).catch(() => {});
+      if (!cancelled)
+        fetch(`${BASE}/sim/${user.id}/prices?market=${market}`)
+          .then(r => r.json()).then(d => { if (!cancelled) setPrices(d); })
+          .catch(() => {});
     }, 60000);
-    return () => clearInterval(interval);
-  }, [isLoaded, user?.id, market]);  // re-run when market changes
+
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [isLoaded, user?.id, market]);
 
 
 
@@ -107,7 +117,9 @@ export default function SimulatorTab({ market = 'US' }) {
     setResetting(true);
     await fetch(`${BASE}/sim/${user.id}/reset?market=${market}`, { method: 'POST' });
     setResetting(false);
-    load();
+    // Trigger re-fetch by toggling a reload state
+    setLoading(true);
+    fetch(`${BASE}/sim/${user.id}?market=${market}`).then(r=>r.json()).then(d=>{ setAccount(d.account); setPositions(d.positions||[]); setLoading(false); }).catch(()=>setLoading(false));
   };
 
   const openPositions   = positions.filter(p => p.status === 'OPEN');
