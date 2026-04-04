@@ -3938,7 +3938,6 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
