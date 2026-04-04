@@ -25,6 +25,8 @@ import ErrorBoundary  from './components/ErrorBoundary';
 import BlogTab        from './tabs/BlogTab';
 import BlogAdmin      from './tabs/BlogAdmin';
 
+const BASE = import.meta.env.VITE_API_BASE;
+
 export default function App() {
   // Handle /share/:id routes without React Router
   const sharePath = window.location.pathname.match(/^\/share\/([a-f0-9-]+)$/i);
