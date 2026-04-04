@@ -3192,7 +3192,9 @@ async function runBacktest(tickers, startDate, endDate, market) {
   const summary = { tickers:tickers.length, signals:results.length, resolved:resolved.length, accuracy:(accuracy*100).toFixed(1)+'%', factorCorrelations };
 
   if (resolved.length >= 50) {
-    await supabase.from('backtest_results').insert({ run_at: new Date().toISOString(), market, start_date: startDate, end_date: endDate, summary, factor_correlations: factorCorrelations }).catch(()=>{});
+    try {
+      await supabase.from('backtest_results').insert({ run_at: new Date().toISOString(), market, start_date: startDate, end_date: endDate, summary, factor_correlations: factorCorrelations });
+    } catch (e) { console.warn('[backtest] save error:', e.message); }
     await optimizeWeights(factorCorrelations, summary);
   }
   return { summary, factorCorrelations };
