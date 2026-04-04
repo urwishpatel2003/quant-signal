@@ -4,6 +4,7 @@ import { SC, MC, GC } from '../utils/constants';
 import { TIMEFRAMES } from '../utils/indicators';
 import MiniChart from './MiniChart';
 import FinancialsPanel from './FinancialsPanel';
+import ShareModal from './ShareModal';
 
 function AccordionCard({ id, activeId, setActiveId, label, preview, children }) {
   const isOpen = activeId === id;
@@ -73,6 +74,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [simAdded,         setSimAdded]         = useState(false);
   const [showSimModal,     setShowSimModal]     = useState(false);
+  const [showShareModal,   setShowShareModal]   = useState(false);
 
   const handleAddToWatchlist = async () => {
     if (!onAddToWatchlist || watchlistAdded || watchlistLoading) return;
@@ -155,8 +157,38 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               </div>
             );
           })()}
+          {/* Share button */}
+          <button
+            className="btn-sm"
+            onClick={() => setShowShareModal(true)}
+            style={{ color: '#ffaa00', borderColor: '#ffaa0044', background: '#ffaa0011' }}>
+            📤 SHARE
+          </button>
         </div>
       </div>
+
+      {/* ── Share Modal ── */}
+      {showShareModal && (
+        <ShareModal
+          type="signal"
+          data={{
+            ticker:      scan.ticker,
+            signal:      scan.analysis?.signal,
+            confidence:  scan.analysis?.confidence,
+            priceTarget: scan.analysis?.priceTarget,
+            stopLoss:    scan.analysis?.stopLoss,
+            thesis:      scan.analysis?.thesis,
+            timeframe:   scan.timeframe,
+            price:       livePrice,
+            market,
+            companyName,
+            bullFactors: scan.analysis?.bullFactors || [],
+            riskLevel:   scan.analysis?.riskLevel,
+            macroImpact: scan.analysis?.macroImpact,
+          }}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
 
       {/* ── Price summary bar ── */}
       <div style={{
