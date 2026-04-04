@@ -389,7 +389,9 @@ function getMarketStatus() {
   if (mins < 570) return { closed: true, reason: 'Pre-Market' };
   if (mins >= 960) return { closed: true, reason: 'After Hours' };
   return { closed: false, reason: 'Open' };
-}app.get('/movers', async (req, res) => {
+}
+
+app.get('/movers', async (req, res) => {
   // Invalidate cache at 
 
 async function yahooNSEQuote(symbol) {
@@ -1139,7 +1141,9 @@ async function getSignalWeights() {
     if (error) return null;
     return data?.weights || null;
   } catch { return null; }
-}app.post('/api/analyze/price', async (req, res) => {
+}
+
+app.post('/api/analyze/price', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials, enhanced } = req.body;
     const isIndia = market === 'INDIA';
@@ -3824,58 +3828,7 @@ async function runSimAutoClose() {
 // Run auto-close every 60 seconds
 setInterval(runSimAutoClose, 60 * 1000);
 // Also run on startup after 10s delay
-setTimeout(runSimAutoClose, 10000);
-
-// Remove manual close route — positions close automatically
-// Keep it for emergency/admin use only with a header check
-app.post('/sim/:userId/close/:positionId', async (req, res) => {
-  // Only allow if position has no target/stop (edge case)
-  const { exitPrice, exitReason = 'MANUAL' } = req.body;
-  if (!exitPrice) return res.status(400).json({ error: 'exitPrice required' });
-
-  try {
-    const { data: pos, error: posErr } = await supabase
-      .from('sim_positions').select('*')
-      .eq('id', req.params.positionId)
-      .eq('user_id', req.params.userId)
-      .single();
-    if (posErr || !pos) return res.status(404).json({ error: 'Position not found' });
-    if (pos.status === 'CLOSED') return res.status(400).json({ error: 'Already closed' });
-    if (pos.price_target || pos.stop_loss)
-      return res.status(400).json({ error: 'Position has target/stop — will close automatically' });
-
-    const exit = parseFloat(exitPrice);
-    const pnl  = pos.direction === 'LONG'
-      ? (exit - pos.entry_price) * pos.quantity
-      : (pos.entry_price - exit) * pos.quantity;
-    const pct  = pos.direction === 'LONG'
-      ? ((exit - pos.entry_price) / pos.entry_price) * 100
-      : ((pos.entry_price - exit) / pos.entry_price) * 100;
-
-    const account    = await getOrCreateSimAccount(req.params.userId, pos.market);
-    const simId      = `${req.params.userId}_${pos.market}`;
-    const newBalance = pos.direction === 'LONG'
-      ? account.balance + (exit * pos.quantity)
-      : account.balance + pnl;
-
-    await Promise.all([
-      supabase.from('sim_positions').update({
-        status: 'CLOSED', exit_price: exit, exit_reason: exitReason,
-        closed_at: new Date().toISOString(),
-        realized_pnl: parseFloat(pnl.toFixed(2)),
-        realized_pct: parseFloat(pct.toFixed(2)),
-      }).eq('id', req.params.positionId),
-      supabase.from('sim_account').update({
-        balance: parseFloat(newBalance.toFixed(2)), updated_at: new Date().toISOString(),
-      }).eq('user_id', simId),
-    ]);
-
-    res.json({ pnl, pct, newBalance });
-  } catch (e) {
-    console.error('[sim close]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
+setTimeout(runSimAutoClose, 10000);;
 
 // POST /sim/:userId/check-expiry — auto-close expired options
 app.post('/sim/:userId/check-expiry', async (req, res) => {
@@ -3938,6 +3891,7 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
