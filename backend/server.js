@@ -18,6 +18,35 @@ const supabase = createClient(
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 
+
+// ─── Market Status ───────────────────────────────────────────────────────────
+function isMarketClosed() {
+  const now = new Date();
+  const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = etNow.getDay();
+  const hours = etNow.getHours();
+  const minutes = etNow.getMinutes();
+  const timeInMinutes = hours * 60 + minutes;
+  // Weekend
+  if (day === 0 || day === 6) return true;
+  // Before 9:30 AM or after 4:00 PM ET
+  if (timeInMinutes < 570 || timeInMinutes >= 960) return true;
+  return false;
+}
+
+function getMarketStatus() {
+  const now = new Date();
+  const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = etNow.getDay();
+  const hours = etNow.getHours();
+  const minutes = etNow.getMinutes();
+  const timeInMinutes = hours * 60 + minutes;
+  if (day === 0 || day === 6) return { open: false, reason: 'Weekend' };
+  if (timeInMinutes < 570) return { open: false, reason: 'Pre-market', opensIn: `${Math.floor((570 - timeInMinutes)/60)}h ${(570 - timeInMinutes)%60}m` };
+  if (timeInMinutes >= 960) return { open: false, reason: 'After-hours' };
+  return { open: true, reason: 'Regular hours' };
+}
+
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Surrogate-Control', 'no-store');
@@ -361,35 +390,6 @@ app.get('/search', async (req, res) => {
     res.json(results.slice(0, 8));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-
-function getMarketStatus() {
-  const now  = new Date();
-  const et   = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const day  = et.getDay();
-  const h    = et.getHours(), m = et.getMinutes();
-  const mins = h * 60 + m;
-  const dateStr = et.toISOString().split('T')[0];
-
-  if (US_HOLIDAYS.has(dateStr)) {
-    const names = {
-      '2025-01-01': "New Year's Day", '2025-01-20': 'MLK Day', '2025-02-17': 'Presidents Day',
-      '2025-04-18': 'Good Friday', '2025-05-26': 'Memorial Day', '2025-06-19': 'Juneteenth',
-      '2025-07-04': 'Independence Day', '2025-09-01': 'Labor Day', '2025-11-27': 'Thanksgiving', '2025-12-25': 'Christmas',
-      '2026-01-01': "New Year's Day", '2026-01-19': 'MLK Day', '2026-02-16': 'Presidents Day',
-      '2026-04-03': 'Good Friday', '2026-05-25': 'Memorial Day', '2026-06-19': 'Juneteenth',
-      '2026-07-03': 'Independence Day', '2026-09-07': 'Labor Day', '2026-11-26': 'Thanksgiving', '2026-12-25': 'Christmas',
-      '2027-01-01': "New Year's Day", '2027-01-18': 'MLK Day', '2027-02-15': 'Presidents Day',
-      '2027-03-26': 'Good Friday', '2027-05-31': 'Memorial Day', '2027-06-18': 'Juneteenth',
-      '2027-07-05': 'Independence Day', '2027-09-06': 'Labor Day', '2027-11-25': 'Thanksgiving', '2027-12-24': 'Christmas',
-    };
-    return { closed: true, reason: names[dateStr] || 'Market Holiday' };
-  }
-  if (day === 0 || day === 6) return { closed: true, reason: day === 6 ? 'Weekend' : 'Weekend' };
-  if (mins < 570) return { closed: true, reason: 'Pre-Market' };
-  if (mins >= 960) return { closed: true, reason: 'After Hours' };
-  return { closed: false, reason: 'Open' };
-}
 
 app.get('/movers', async (req, res) => {
   // Invalidate cache at 
