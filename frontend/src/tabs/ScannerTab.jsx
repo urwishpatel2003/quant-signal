@@ -56,7 +56,7 @@ function fmtPrice(p, currency = '$') {
   return `${currency}${p.toFixed(6)}`;
 }
 
-export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlist, onAddToSim, market = 'US' }) {
+export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlist, onAddToSim, getSimBalance, market = 'US' }) {
   const { user } = useUser();
   const isIndia  = market === 'INDIA';
   const currency = isIndia ? '₹' : '$';
@@ -246,6 +246,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
           companyName={scan.companyName || ""}
           onAddToWatchlist={handleAddToWatchlist}
           onAddToSim={onAddToSim}
+          getSimBalance={getSimBalance}
         />
       )}
 

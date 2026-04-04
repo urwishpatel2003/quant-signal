@@ -77,7 +77,7 @@ function ActionBtn({ onClick, disabled, color = '#b0c0dd', children, title }) {
   );
 }
 
-export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '', onAddToWatchlist, onAddToSim }) {
+export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '', onAddToWatchlist, onAddToSim, getSimBalance }) {
   const [activeId, setActiveId] = useState('ticker');
 
   const livePrice = scan.quote?.last || scan.ohlcv?.current;
@@ -90,6 +90,15 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [simAdded,         setSimAdded]         = useState(false);
   const [showSimModal,     setShowSimModal]     = useState(false);
+  const [simBalance,       setSimBalance]        = useState(null);
+
+  const openSimModal = async () => {
+    if (getSimBalance) {
+      const bal = await getSimBalance(market);
+      setSimBalance(bal);
+    }
+    setShowSimModal(true);
+  };
   const [showShareModal,   setShowShareModal]   = useState(false);
 
   const handleAddToWatchlist = async () => {
@@ -146,7 +155,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             const tip      = !canSim ? `Need 65%+ confidence (current: ${conf}%)` : '';
             return (
               <ActionBtn
-                onClick={() => canSim && !simAdded && setShowSimModal(true)}
+                onClick={() => canSim && !simAdded && openSimModal()}
                 disabled={simAdded || !canSim}
                 color={simAdded ? '#00ff88' : canSim ? '#aa66ff' : '#445566'}
                 title={tip}>
@@ -192,6 +201,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           livePrice={livePrice}
           currency={currency}
           market={market}
+          availableBalance={simBalance}
           onConfirm={async (pos) => {
             await onAddToSim(pos);
             setSimAdded(true);
@@ -548,15 +558,21 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
 }
 
 // ── Sim Modal ──────────────────────────────────────────────────────────────────
-function SimModal({ scan, livePrice, currency, market, onConfirm, onClose }) {
-  const isIndia  = currency === '₹';
-  const [direction, setDirection] = useState(scan.analysis?.signal === 'SELL' ? 'SHORT' : 'LONG');
-  const [quantity,  setQuantity]  = useState('1');
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState('');
-  const price     = livePrice || 0;
-  const notional  = price * parseFloat(quantity || 0);
-  const sigColor  = scan.analysis?.signal === 'BUY' ? '#00ff88' : scan.analysis?.signal === 'SELL' ? '#ff4444' : '#ffaa00';
+function SimModal({ scan, livePrice, currency, market, onConfirm, onClose, availableBalance }) {
+  const isIndia   = currency === '₹';
+  // Direction locked to signal — BUY=LONG, SELL=SHORT, HOLD=LONG
+  const direction = scan.analysis?.signal === 'SELL' ? 'SHORT' : 'LONG';
+  const [quantity, setQuantity] = useState('1');
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
+  const price    = livePrice || 0;
+  const notional = price * parseFloat(quantity || 0);
+  const sigColor = scan.analysis?.signal === 'BUY' ? '#00ff88' : scan.analysis?.signal === 'SELL' ? '#ff4444' : '#ffaa00';
+  const startBal = isIndia ? 1000000 : 10000;
+  const balance  = availableBalance ?? startBal;
+  const exceedsBalance = direction === 'LONG' && notional > balance;
+  // Max quantity user can afford
+  const maxQty   = price > 0 ? Math.floor(balance / price) : 0;
 
   const confirm = async () => {
     const qty = parseFloat(quantity);
@@ -624,21 +640,16 @@ function SimModal({ scan, livePrice, currency, market, onConfirm, onClose }) {
           </div>
         </div>
 
-        {/* Direction */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>DIRECTION</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {['LONG', 'SHORT'].map(d => (
-              <button key={d} onClick={() => setDirection(d)} style={{
-                flex: 1, padding: '10px', borderRadius: 6, cursor: 'pointer',
-                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, letterSpacing: '0.1em',
-                border: `1px solid ${direction === d ? (d === 'LONG' ? '#00ff88' : '#ff4444') : '#2a2a3e'}`,
-                background: direction === d ? (d === 'LONG' ? '#00ff8811' : '#ff444411') : '#0a0a14',
-                color: direction === d ? (d === 'LONG' ? '#00ff88' : '#ff4444') : '#556677',
-              }}>
-                {d === 'LONG' ? '↑ LONG' : '↓ SHORT'}
-              </button>
-            ))}
+        {/* Direction — locked to signal */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em' }}>DIRECTION</div>
+          <div style={{
+            fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 5,
+            background: direction === 'LONG' ? '#00ff8811' : '#ff444411',
+            border: `1px solid ${direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
+            color: direction === 'LONG' ? '#00ff88' : '#ff4444',
+          }}>
+            {direction === 'LONG' ? '↑ LONG' : '↓ SHORT'} · Signal: {scan.analysis?.signal}
           </div>
         </div>
 
@@ -658,14 +669,27 @@ function SimModal({ scan, livePrice, currency, market, onConfirm, onClose }) {
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>Total notional</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#c8d8f0' }}>
+            <span style={{ fontSize: 11, color: '#556677' }}>Total cost</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: exceedsBalance ? '#ff4444' : '#c8d8f0' }}>
               {currency}{notional.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </span>
           </div>
-          {direction === 'LONG' && notional > (isIndia ? 1000000 : 10000) && (
-            <div style={{ fontSize: 10, color: '#ffaa00', marginTop: 4 }}>
-              ⚠ Exceeds starting balance — reduce quantity or use SHORT
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: '#556677' }}>Available balance</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#7788aa' }}>
+              {currency}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          {exceedsBalance && (
+            <div style={{ fontSize: 11, color: '#ff4444', marginTop: 6,
+              background: '#ff444411', border: '1px solid #ff444433',
+              borderRadius: 5, padding: '6px 10px' }}>
+              ⚠ Exceeds available balance — max {maxQty} shares at this price
+              <button onClick={() => setQuantity(String(maxQty))} style={{
+                marginLeft: 8, fontSize: 10, cursor: 'pointer', background: 'none',
+                border: '1px solid #ff444466', color: '#ff4444', borderRadius: 3,
+                padding: '1px 6px', fontFamily: 'inherit',
+              }}>USE MAX</button>
             </div>
           )}
         </div>

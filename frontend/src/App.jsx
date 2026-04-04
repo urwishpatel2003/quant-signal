@@ -41,6 +41,15 @@ export default function App() {
   const macro                    = useMacroData();
   const scan                     = useScan(macro);
 
+  const getSimBalance = async (market) => {
+    if (!user?.id) return null;
+    try {
+      const res  = await fetch(`${BASE}/sim/${user.id}?market=${market}`);
+      const data = await res.json();
+      return data.account?.balance ?? null;
+    } catch { return null; }
+  };
+
   const handleAddToSim = async (posData) => {
     if (!user?.id) throw new Error('Not signed in');
     const res  = await fetch(`${BASE}/sim/${user.id}/open`, {
@@ -237,6 +246,7 @@ export default function App() {
                 onOpenOptions={openOptions}
                 onAddToWatchlist={ticker => setWatchlistTickers(prev => [...new Set([...prev, ticker])])}
                 onAddToSim={handleAddToSim}
+                getSimBalance={getSimBalance}
                 market={market}
               />
             </div>
