@@ -42,11 +42,13 @@ export default function App() {
   const scan                     = useScan(macro);
 
   const handleAddToSim = async (posData) => {
-    if (!user?.id) return;
-    await fetch(`${BASE}/sim/${user.id}/open`, {
+    if (!user?.id) throw new Error('Not signed in');
+    const res  = await fetch(`${BASE}/sim/${user.id}/open`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(posData),
     });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Failed to open position');
   };
   const { market }               = useMarket();
   const { user }                 = useUser();

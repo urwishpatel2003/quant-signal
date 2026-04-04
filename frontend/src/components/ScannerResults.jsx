@@ -553,28 +553,33 @@ function SimModal({ scan, livePrice, currency, market, onConfirm, onClose }) {
   const [direction, setDirection] = useState(scan.analysis?.signal === 'SELL' ? 'SHORT' : 'LONG');
   const [quantity,  setQuantity]  = useState('1');
   const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState('');
   const price     = livePrice || 0;
   const notional  = price * parseFloat(quantity || 0);
   const sigColor  = scan.analysis?.signal === 'BUY' ? '#00ff88' : scan.analysis?.signal === 'SELL' ? '#ff4444' : '#ffaa00';
 
   const confirm = async () => {
     const qty = parseFloat(quantity);
-    if (!qty || qty <= 0) return;
-    setLoading(true);
-    await onConfirm({
-      ticker:      scan.ticker,
-      market,
-      direction,
-      entryPrice:  price,
-      quantity:    qty,
-      signal:      scan.analysis?.signal,
-      confidence:  scan.analysis?.confidence,
-      timeframe:   scan.timeframe,
-      priceTarget: scan.analysis?.priceTarget,
-      stopLoss:    scan.analysis?.stopLoss,
-      thesis:      scan.analysis?.thesis,
-    });
-    setLoading(false);
+    if (!qty || qty <= 0) { setError('Enter a valid quantity'); return; }
+    setLoading(true); setError('');
+    try {
+      await onConfirm({
+        ticker:      scan.ticker,
+        market,
+        direction,
+        entryPrice:  price,
+        quantity:    qty,
+        signal:      scan.analysis?.signal,
+        confidence:  scan.analysis?.confidence,
+        timeframe:   scan.timeframe,
+        priceTarget: scan.analysis?.priceTarget,
+        stopLoss:    scan.analysis?.stopLoss,
+        thesis:      scan.analysis?.thesis,
+      });
+    } catch (e) {
+      setError(e.message);
+      setLoading(false);
+    }
   };
 
   return (
@@ -658,7 +663,23 @@ function SimModal({ scan, livePrice, currency, market, onConfirm, onClose }) {
               {currency}{notional.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </span>
           </div>
+          {direction === 'LONG' && notional > (isIndia ? 1000000 : 10000) && (
+            <div style={{ fontSize: 10, color: '#ffaa00', marginTop: 4 }}>
+              ⚠ Exceeds starting balance — reduce quantity or use SHORT
+            </div>
+          )}
         </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            fontSize: 12, color: '#ff4444', background: '#ff444411',
+            border: '1px solid #ff444433', borderRadius: 6,
+            padding: '8px 12px', marginBottom: 4,
+          }}>
+            {error}
+          </div>
+        )}
 
         {/* Buttons */}
         <div style={{ display: 'flex', gap: 10 }}>
