@@ -1,222 +1,187 @@
-// src/components/ScannerModals.jsx
-import { SC, MC, GC } from '../utils/constants';
-import { TIMEFRAMES } from '../utils/indicators';
-import ModalShell from './ModalShell';
-import MiniChart  from './MiniChart';
+// ShareModal.jsx
+// Renders card preview, handles PNG download via html2canvas, and shareable link generation
+import { useState, useRef } from 'react';
+import { SignalCard, SimulatorCard } from './ShareCard';
 
-// ── Modal 1: Ticker / Price / Decision ──────────────────────────────────────
-export function TickerModal({ scan, onClose }) {
-  const livePrice = scan.quote?.last || scan.ohlcv?.current;
-  const pct = scan.ohlcv?.current && scan.ohlcv?.prev && scan.ohlcv.prev !== 0
-    ? ((scan.ohlcv.current - scan.ohlcv.prev) / scan.ohlcv.prev * 100)
-    : null;
-  const sigColor = SC[scan.analysis.signal];
+const BASE = import.meta.env.VITE_API_BASE;
 
-  return (
-    <ModalShell onClose={onClose} title={scan.ticker} subtitle={TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}>
-      {/* Big price display */}
-      <div style={{
-        background: '#0f0f1a', border: `1px solid ${sigColor}33`,
-        borderRadius: 6, padding: '32px 24px', marginBottom: 16, textAlign: 'center',
-      }}>
-        <div style={{
-          fontFamily: "'Bebas Neue', sans-serif",
-          fontSize: 56, lineHeight: 1, color: '#fff', letterSpacing: '0.05em',
-        }}>
-          {scan.ticker}
-        </div>
-        <div style={{ fontSize: 11, color: '#6677aa', letterSpacing: '0.2em', marginTop: 4, marginBottom: 24 }}>
-          {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()} · {TIMEFRAMES[scan.timeframe]?.sublabel?.toUpperCase()}
-        </div>
+export default function ShareModal({ type, data, onClose }) {
+  const [copying,      setCopying]      = useState(false);
+  const [downloading,  setDownloading]  = useState(false);
+  const [shareUrl,     setShareUrl]     = useState('');
+  const [copied,       setCopied]       = useState(false);
+  const [linkError,    setLinkError]    = useState('');
+  const cardRef = useRef(null);
 
-        <div style={{ fontSize: 48, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-          ${livePrice?.toFixed(2)}
-        </div>
-        <div style={{
-          fontSize: 20, fontWeight: 700, marginTop: 8,
-          color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444',
-        }}>
-          {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
-        </div>
+  const getShareUrl = async () => {
+    if (shareUrl) return shareUrl;
+    setCopying(true); setLinkError('');
+    try {
+      const res  = await fetch(`${BASE}/share`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, data }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setShareUrl(json.url);
+      return json.url;
+    } catch (e) {
+      setLinkError(e.message);
+      return null;
+    } finally { setCopying(false); }
+  };
 
-        <div style={{ margin: '32px auto 0', maxWidth: 300 }}>
-          <MiniChart data={scan.ohlcv} />
-        </div>
-      </div>
+  const handleCopyLink = async () => {
+    const url = await getShareUrl();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { setLinkError('Could not copy to clipboard'); }
+  };
 
-      {/* Signal badge */}
-      <div style={{
-        background: sigColor + '11',
-        border: `1px solid ${sigColor}44`,
-        borderRadius: 6, padding: '28px 24px', textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 11, color: '#b0c0dd', letterSpacing: '0.2em', marginBottom: 8 }}>
-          AI SIGNAL
-        </div>
-        <div style={{
-          fontFamily: "'Bebas Neue', sans-serif",
-          fontSize: 64, lineHeight: 1, color: sigColor, letterSpacing: '0.05em',
-        }}>
-          {scan.analysis.signal}
-        </div>
-        <div style={{ fontSize: 14, color: '#b0c0dd', marginTop: 12, fontWeight: 600 }}>
-          CONFIDENCE
-        </div>
-        <div style={{ fontSize: 36, fontWeight: 700, color: sigColor, marginTop: 4 }}>
-          {scan.analysis.confidence}%
-        </div>
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      // Dynamically import html2canvas
+      const html2canvas = (await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.js')).default;
+      const el = document.getElementById('share-card');
+      if (!el) throw new Error('Card element not found');
+      const canvas = await html2canvas(el, {
+        backgroundColor: null,
+        scale: 2, // retina quality
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `quaint-signal-${type}-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      // Fallback: use browser print if html2canvas fails
+      window.print();
+    }
+    setDownloading(false);
+  };
 
-        {/* Confidence bar */}
-        <div style={{
-          background: '#1a1a2e', borderRadius: 2, height: 6,
-          marginTop: 12, overflow: 'hidden', maxWidth: 300, margin: '12px auto 0',
-        }}>
-          <div style={{
-            height: '100%', width: `${scan.analysis.confidence}%`,
-            background: sigColor, borderRadius: 2, transition: 'width 0.6s ease',
-          }} />
-        </div>
-
-        {/* Key levels */}
-        <div style={{
-          display: 'flex', justifyContent: 'center', gap: 32, marginTop: 24, flexWrap: 'wrap',
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: '#b0c0dd', letterSpacing: '0.15em', marginBottom: 4 }}>TARGET</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#00ff88' }}>
-              ${scan.analysis.priceTarget?.toFixed(2)}
-            </div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: '#b0c0dd', letterSpacing: '0.15em', marginBottom: 4 }}>ENTRY</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>
-              ${livePrice?.toFixed(2)}
-            </div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: '#b0c0dd', letterSpacing: '0.15em', marginBottom: 4 }}>STOP</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#ff4444' }}>
-              ${scan.analysis.stopLoss?.toFixed(2)}
-            </div>
-          </div>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-// ── Modal 2: Signal Overview + Bull/Bear Factors ─────────────────────────────
-export function SignalModal({ scan, onClose }) {
-  const sigColor = SC[scan.analysis.signal];
+  const handleShare = async (platform) => {
+    const url = await getShareUrl();
+    if (!url) return;
+    const text = type === 'signal'
+      ? `📊 ${data.ticker} ${data.signal} signal — ${data.confidence}% confidence via QuAInt Signal`
+      : `📈 My QuAInt Signal simulator: ${data.totalReturnPct >= 0 ? '+' : ''}${data.totalReturnPct?.toFixed(1)}% return, ${data.winRate}% win rate`;
+    const shareText = encodeURIComponent(`${text}\n${url}`);
+    const urls = {
+      twitter:  `https://twitter.com/intent/tweet?text=${shareText}`,
+      whatsapp: `https://wa.me/?text=${shareText}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`,
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+    };
+    window.open(urls[platform], '_blank', 'width=600,height=400');
+  };
 
   return (
-    <ModalShell onClose={onClose} title="SIGNAL OVERVIEW" subtitle={`${scan.ticker} · ${TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}`}>
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
+      zIndex: 9999, overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
+    }}>
+      {/* Fixed close button — respects iOS safe area */}
+      <button onClick={onClose} style={{
+        position: 'fixed',
+        top: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+        right: 'max(env(safe-area-inset-right, 0px) + 16px, 16px)',
+        zIndex: 10000,
+        background: '#1a1a2e', border: '1px solid #3a3a4e', cursor: 'pointer',
+        color: '#e8e8f0', fontSize: 20, width: 48, height: 48,
+        borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        touchAction: 'manipulation', boxShadow: '0 4px 24px rgba(0,0,0,0.9)',
+      }}>✕</button>
 
-      {/* Overview grid */}
-      <div className="card" style={{ marginBottom: 16, borderColor: sigColor + '33' }}>
-        <div style={{ fontSize: 11, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 12 }}>
-          MARKET CONTEXT
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, marginBottom: 16 }}>
-          {[
-            ['RISK LEVEL', scan.analysis.riskLevel, scan.analysis.riskLevel === 'LOW' ? '#00ff88' : scan.analysis.riskLevel === 'HIGH' ? '#ff4444' : '#ffaa00'],
-            ['MACRO',      scan.analysis.macroImpact,         MC[scan.analysis.macroImpact]],
-            ['GLOBAL',     scan.analysis.globalMarketTrend,   GC[scan.analysis.globalMarketTrend]],
-            ['GEO RISK',   scan.analysis.geopoliticalRisk,    scan.analysis.geopoliticalRisk === 'LOW' ? '#00ff88' : scan.analysis.geopoliticalRisk === 'HIGH' ? '#ff4444' : '#ffaa00'],
-          ].map(([l, v, c]) => (
-            <div key={l} style={{ background: '#070710', padding: '12px 10px', textAlign: 'center', borderRadius: 4 }}>
-              <div style={{ fontSize: 10, color: '#b0c0dd', marginBottom: 6, letterSpacing: '0.1em', fontWeight: 600 }}>{l}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: c }}>{v}</div>
-            </div>
-          ))}
+      <div style={{
+        width: '100%', maxWidth: 580, margin: '0 auto',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 80px)',
+        paddingLeft: 16, paddingRight: 16, paddingBottom: 60,
+        display: 'flex', flexDirection: 'column', gap: 16,
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#e8e8f0', letterSpacing: '0.08em' }}>
+          SHARE YOUR RESULTS
         </div>
 
-        {/* Thesis */}
-        {scan.analysis.thesis && (
+        {/* Card preview */}
+        <div ref={cardRef} style={{ display: 'flex', justifyContent: 'center' }}>
+          {type === 'signal'
+            ? <SignalCard data={data} compact />
+            : <SimulatorCard data={data} compact />
+          }
+        </div>
+
+        {/* Download PNG */}
+        <button onClick={handleDownload} disabled={downloading} style={{
+          width: '100%', padding: '14px', borderRadius: 8, cursor: 'pointer',
+          background: '#1a1a2e', border: '1px solid #4488ff44',
+          color: '#4488ff', fontFamily: 'inherit', fontSize: 13,
+          fontWeight: 700, letterSpacing: '0.1em',
+          opacity: downloading ? 0.6 : 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          {downloading ? '⏳ GENERATING...' : '⬇ DOWNLOAD AS IMAGE'}
+        </button>
+
+        {/* Copy link */}
+        <div style={{ display: 'flex', gap: 8 }}>
           <div style={{
-            fontSize: 13, color: '#d0d8f0', lineHeight: 1.8,
-            borderLeft: `3px solid ${sigColor}55`, paddingLeft: 14,
-            fontStyle: 'italic',
+            flex: 1, background: '#0a0a14', border: '1px solid #2a2a3e',
+            borderRadius: 6, padding: '10px 14px',
+            fontSize: 11, color: '#556677', fontFamily: 'monospace',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {scan.analysis.thesis}
+            {shareUrl || 'Generate link to copy...'}
           </div>
+          <button onClick={handleCopyLink} disabled={copying} style={{
+            padding: '10px 18px', borderRadius: 6, cursor: 'pointer',
+            background: copied ? '#00ff8811' : '#aa66ff11',
+            border: `1px solid ${copied ? '#00ff8844' : '#aa66ff44'}`,
+            color: copied ? '#00ff88' : '#aa66ff',
+            fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+            letterSpacing: '0.08em', whiteSpace: 'nowrap',
+            opacity: copying ? 0.6 : 1,
+          }}>
+            {copied ? '✓ COPIED' : copying ? '...' : '🔗 COPY LINK'}
+          </button>
+        </div>
+
+        {linkError && (
+          <div style={{ fontSize: 11, color: '#ff444488' }}>{linkError}</div>
         )}
-      </div>
 
-      {/* Bull / Bear side by side */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div className="card" style={{ borderColor: '#00ff8822' }}>
-          <div style={{ fontSize: 11, color: '#00ff88', fontWeight: 700, marginBottom: 12, letterSpacing: '0.1em' }}>
-            ▲ BULL FACTORS
+        {/* Social share buttons */}
+        <div>
+          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 10 }}>SHARE TO</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[
+              { key: 'twitter',  label: '𝕏 Twitter',  color: '#1da1f2' },
+              { key: 'whatsapp', label: '💬 WhatsApp', color: '#25d366' },
+              { key: 'telegram', label: '✈ Telegram', color: '#0088cc' },
+              { key: 'linkedin', label: 'in LinkedIn', color: '#0077b5' },
+            ].map(p => (
+              <button key={p.key} onClick={() => handleShare(p.key)} style={{
+                flex: 1, padding: '10px 6px', borderRadius: 6, cursor: 'pointer',
+                background: `${p.color}11`, border: `1px solid ${p.color}33`,
+                color: p.color, fontFamily: 'inherit', fontSize: 11,
+                fontWeight: 700, letterSpacing: '0.05em',
+              }}>{p.label}</button>
+            ))}
           </div>
-          {scan.analysis.bullFactors?.map((f, i) => (
-            <div key={i} style={{
-              fontSize: 12, color: '#d0d8f0', padding: '8px 0',
-              borderBottom: i < scan.analysis.bullFactors.length - 1 ? '1px solid #0f1a14' : 'none',
-              display: 'flex', gap: 8, lineHeight: 1.5,
-            }}>
-              <span style={{ color: '#00ff88', flexShrink: 0, marginTop: 2 }}>▲</span>{f}
-            </div>
-          ))}
         </div>
-        <div className="card" style={{ borderColor: '#ff444422' }}>
-          <div style={{ fontSize: 11, color: '#ff4444', fontWeight: 700, marginBottom: 12, letterSpacing: '0.1em' }}>
-            ▼ BEAR FACTORS
-          </div>
-          {scan.analysis.bearFactors?.map((f, i) => (
-            <div key={i} style={{
-              fontSize: 12, color: '#d0d8f0', padding: '8px 0',
-              borderBottom: i < scan.analysis.bearFactors.length - 1 ? '1px solid #1a0f0f' : 'none',
-              display: 'flex', gap: 8, lineHeight: 1.5,
-            }}>
-              <span style={{ color: '#ff4444', flexShrink: 0, marginTop: 2 }}>▼</span>{f}
-            </div>
-          ))}
+
+        <div style={{ fontSize: 10, color: '#2a2a3e', textAlign: 'center' }}>
+          Share links expire after 90 days · quaint-signal.tech
         </div>
       </div>
-    </ModalShell>
-  );
-}
-
-// ── Modal 3: News ─────────────────────────────────────────────────────────────
-export function NewsModal({ scan, onClose }) {
-  if (!scan.news?.length) return null;
-
-  return (
-    <ModalShell onClose={onClose} title="RECENT NEWS" subtitle={scan.ticker}>
-      <div className="card">
-        {scan.news.slice(0, 10).map((n, i) => (
-          <div key={i} style={{
-            padding: '14px 0',
-            borderBottom: i < Math.min(scan.news.length, 10) - 1 ? '1px solid #1a1a26' : 'none',
-          }}>
-            <a
-              href={n.url} target="_blank" rel="noopener noreferrer"
-              style={{ color: '#c8d8f0', fontSize: 14, lineHeight: 1.5, display: 'block', textDecoration: 'none', marginBottom: 6 }}
-              onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#c8d8f0'; }}
-            >
-              {n.title}
-            </a>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <span style={{ color: '#7788aa', fontSize: 11 }}>{n.publisher}</span>
-              <span style={{ color: '#3a3a5e', fontSize: 11 }}>·</span>
-              <span style={{ color: '#7788aa', fontSize: 11 }}>
-                {new Date(n.time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-              </span>
-              {n.url && (
-                <a href={n.url} target="_blank" rel="noopener noreferrer"
-                  style={{ marginLeft: 'auto', fontSize: 10, color: '#ffaa0077', textDecoration: 'none', letterSpacing: '0.1em' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#ffaa00'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = '#ffaa0077'; }}
-                >
-                  READ →
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </ModalShell>
+    </div>
   );
 }
