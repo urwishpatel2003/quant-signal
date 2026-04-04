@@ -114,8 +114,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           )}
           {onAddToSim && (() => {
             const conf       = scan.analysis?.confidence || 0;
-            const highConf   = conf >= 75;
-            const tooltip    = !highConf ? `Confidence too low (${conf}%) — need 75%+ to simulate` : '';
+            const highConf   = conf >= 65;
+            const tooltip    = !highConf ? `Confidence too low (${conf}%) — need 65%+ to simulate` : '';
             return (
               <div title={tooltip} style={{ position: 'relative' }}>
                 <button
@@ -136,7 +136,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
                     fontSize: 9, color: '#556677', marginTop: 3,
                     textAlign: 'center', letterSpacing: '0.05em',
                   }}>
-                    75%+ required
+                    65%+ required
                   </div>
                 )}
               </div>

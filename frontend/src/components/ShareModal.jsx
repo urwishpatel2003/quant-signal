@@ -84,22 +84,28 @@ export default function ShareModal({ type, data, onClose }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
-      zIndex: 9999, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto',
+      zIndex: 9999, overflowY: 'auto', padding: '16px 16px 40px',
+      WebkitOverflowScrolling: 'touch',
     }} onClick={onClose}>
       <div style={{
-        width: '100%', maxWidth: 580,
+        width: '100%', maxWidth: 580, margin: '0 auto',
         display: 'flex', flexDirection: 'column', gap: 16,
       }} onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Sticky close button — always reachable on mobile */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 10,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          background: '#07070e', paddingBottom: 12, marginBottom: 4,
+        }}>
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#e8e8f0', letterSpacing: '0.08em' }}>
             SHARE YOUR RESULTS
           </div>
           <button onClick={onClose} style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: '#7788aa', fontSize: 20, padding: '4px 8px', fontFamily: 'inherit',
+            background: '#1a1a2e', border: '1px solid #2a2a3e', cursor: 'pointer',
+            color: '#e8e8f0', fontSize: 18, width: 40, height: 40,
+            borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, touchAction: 'manipulation',
           }}>✕</button>
         </div>
 

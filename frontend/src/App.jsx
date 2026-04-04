@@ -227,6 +227,7 @@ export default function App() {
                 scan={scan} macro={macro}
                 onOpenOptions={openOptions}
                 onAddToWatchlist={ticker => setWatchlistTickers(prev => [...new Set([...prev, ticker])])}
+                onAddToSim={handleAddToSim}
                 market={market}
               />
             </div>
