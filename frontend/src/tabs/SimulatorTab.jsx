@@ -136,10 +136,16 @@ export default function SimulatorTab({ market = 'US' }) {
 
   // Unrealized P&L across open positions
   // For each open position, compute current market value
-  // Unrealized P&L — only from actual price movement, 0 if no price data
+  // Unrealized P&L — stocks and options
   const unrealizedPnl = openPositions.reduce((sum, p) => {
+    if (p.position_type === 'OPTION') {
+      const optPrice = prices[`OPT:${p.id}`];
+      const cur      = optPrice?.mid;
+      if (!cur || !p.premium) return sum;
+      return sum + (cur - p.premium) * p.contracts * 100;
+    }
     const cur = prices[p.ticker];
-    if (!cur || cur === p.entry_price) return sum; // no movement yet
+    if (!cur || cur === p.entry_price) return sum;
     const pnl = p.direction === 'LONG'
       ? (cur - p.entry_price) * p.quantity
       : (p.entry_price - cur) * p.quantity;
@@ -333,12 +339,21 @@ export default function SimulatorTab({ market = 'US' }) {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#e8e8f0' }}>{pos.ticker}</span>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
-                            background: pos.direction === 'LONG' ? '#00ff8811' : '#ff444411',
-                            border: `1px solid ${pos.direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
-                            color: pos.direction === 'LONG' ? '#00ff88' : '#ff4444',
-                          }}>{pos.direction}</span>
+                          {pos.position_type === 'OPTION' ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+                              background: pos.option_type === 'CALL' ? '#00ff8811' : '#ff444411',
+                              border: `1px solid ${pos.option_type === 'CALL' ? '#00ff8833' : '#ff444433'}`,
+                              color: pos.option_type === 'CALL' ? '#00ff88' : '#ff4444',
+                            }}>{pos.option_type} ${pos.strike} {pos.expiry}</span>
+                          ) : (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+                              background: pos.direction === 'LONG' ? '#00ff8811' : '#ff444411',
+                              border: `1px solid ${pos.direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
+                              color: pos.direction === 'LONG' ? '#00ff88' : '#ff4444',
+                            }}>{pos.direction}</span>
+                          )}
                           {pos.signal && (
                             <span style={{ fontSize: 10, color: '#7788aa' }}>
                               {pos.signal} · {pos.confidence}% conf
@@ -348,7 +363,9 @@ export default function SimulatorTab({ market = 'US' }) {
                           {hitStop   && <span style={{ fontSize: 10, color: '#ff4444', fontWeight: 700 }}>⚠ STOP HIT</span>}
                         </div>
                         <div style={{ fontSize: 10, color: '#556677', marginTop: 2 }}>
-                          {pos.quantity} shares · entered {sym}{pos.entry_price.toFixed(2)} · {new Date(pos.opened_at).toLocaleDateString()}
+                          {pos.position_type === 'OPTION'
+                          ? `${pos.contracts} contract${pos.contracts > 1 ? 's' : ''} · premium ${sym}${pos.premium?.toFixed(2)}/sh · expires ${pos.expiry}`
+                          : `${pos.quantity} shares · entered ${sym}${pos.entry_price.toFixed(2)} · ${new Date(pos.opened_at).toLocaleDateString()}`}
                         </div>
                       </div>
                       <PnlBadge value={pnl} pct={pct} size="lg" currency={currency} isInr={isInr} />
@@ -357,10 +374,19 @@ export default function SimulatorTab({ market = 'US' }) {
                     {/* Price bar */}
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
                       {[
-                        { label: 'CURRENT', value: cur ? `${sym}${cur.toFixed(2)}` : '—', color: isPos ? '#00ff88' : '#ff4444' },
-                        { label: 'ENTRY',   value: `${sym}${pos.entry_price.toFixed(2)}`, color: '#7788aa' },
-                        { label: 'TARGET',  value: pos.price_target ? `${sym}${parseFloat(pos.price_target).toFixed(2)}` : '—', color: '#00ff8877' },
-                        { label: 'STOP',    value: pos.stop_loss    ? `${sym}${parseFloat(pos.stop_loss).toFixed(2)}` : '—',    color: '#ff444477' },
+                        ...(pos.position_type === 'OPTION' ? [
+                          { label: 'PREMIUM NOW', value: cur ? `${sym}${cur.toFixed(2)}` : '—', color: isPos ? '#00ff88' : '#ff4444' },
+                          { label: 'ENTRY PREM',  value: `${sym}${pos.premium?.toFixed(2)}`, color: '#7788aa' },
+                          { label: 'BREAK EVEN',  value: pos.option_type === 'CALL'
+                              ? `${sym}${(pos.strike + pos.premium).toFixed(2)}`
+                              : `${sym}${(pos.strike - pos.premium).toFixed(2)}`, color: '#ffaa0077' },
+                          { label: 'MAX LOSS',    value: `${sym}${(pos.premium * pos.contracts * 100).toFixed(2)}`, color: '#ff444477' },
+                        ] : [
+                          { label: 'CURRENT', value: cur ? `${sym}${cur.toFixed(2)}` : '—', color: isPos ? '#00ff88' : '#ff4444' },
+                          { label: 'ENTRY',   value: `${sym}${pos.entry_price.toFixed(2)}`, color: '#7788aa' },
+                          { label: 'TARGET',  value: pos.price_target ? `${sym}${parseFloat(pos.price_target).toFixed(2)}` : '—', color: '#00ff8877' },
+                          { label: 'STOP',    value: pos.stop_loss    ? `${sym}${parseFloat(pos.stop_loss).toFixed(2)}` : '—',    color: '#ff444477' },
+                        ]),
                       ].map(({ label, value, color }) => (
                         <div key={label} style={{ background: '#0a0a14', borderRadius: 5, padding: '6px 10px', minWidth: 70 }}>
                           <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 3 }}>{label}</div>

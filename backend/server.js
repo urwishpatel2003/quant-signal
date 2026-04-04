@@ -2869,8 +2869,14 @@ app.post('/sim/:userId/open', async (req, res) => {
           quantity, signal, confidence, timeframe,
           priceTarget, stopLoss, thesis } = req.body;
 
-  if (!ticker || !entryPrice || !quantity)
-    return res.status(400).json({ error: 'ticker, entryPrice, quantity required' });
+  const positionType = req.body.positionType || 'STOCK';
+  const isOption = positionType === 'OPTION';
+
+  if (!ticker) return res.status(400).json({ error: 'ticker required' });
+  if (isOption && (!req.body.strike || !req.body.expiry || !req.body.optionType))
+    return res.status(400).json({ error: 'strike, expiry, optionType required for options' });
+  if (!isOption && (!entryPrice || !quantity))
+    return res.status(400).json({ error: 'entryPrice, quantity required' });
 
   if (confidence != null && confidence < 65)
     return res.status(400).json({ error: `Signal confidence too low (${confidence}%) — need 65%+ to simulate` });
@@ -2892,22 +2898,37 @@ app.post('/sim/:userId/open', async (req, res) => {
     const newBalance = account.balance - cashRequired;
 
     // Insert position first
-    const posResult = await supabase.from('sim_positions').insert({
-      user_id:      req.params.userId,
-      ticker:       ticker.toUpperCase(),
+    const insertData = {
+      user_id:       req.params.userId,
+      ticker:        ticker.toUpperCase(),
       market,
-      direction,
-      entry_price:  parseFloat(entryPrice),
-      quantity:     parseFloat(quantity),
+      direction:     isOption ? 'LONG' : direction, // options are always long
+      position_type: positionType,
+      entry_price:   parseFloat(entryPrice),
+      quantity:      isOption ? (req.body.contracts || 1) : parseFloat(quantity),
       notional,
       signal,
       confidence,
       timeframe,
-      price_target: priceTarget  || null,
-      stop_loss:    stopLoss     || null,
-      thesis:       thesis       || null,
-      status:       'OPEN',
-    }).select().single();
+      price_target:  priceTarget || null,
+      stop_loss:     stopLoss    || null,
+      thesis:        thesis      || null,
+      status:        'OPEN',
+    };
+
+    // Options-specific fields
+    if (isOption) {
+      insertData.option_type   = req.body.optionType;   // 'CALL' | 'PUT'
+      insertData.strike        = parseFloat(req.body.strike);
+      insertData.expiry        = req.body.expiry;
+      insertData.contracts     = parseInt(req.body.contracts) || 1;
+      insertData.premium       = parseFloat(entryPrice); // mid price = premium per share
+      insertData.entry_delta   = req.body.delta   || null;
+      insertData.entry_iv      = req.body.iv      || null;
+      insertData.option_symbol = req.body.optionSymbol || null;
+    }
+
+    const posResult = await supabase.from('sim_positions').insert(insertData).select().single();
 
     if (posResult.error) throw posResult.error;
 
@@ -3044,23 +3065,60 @@ app.get('/sim/:userId/prices', async (req, res) => {
   try {
     const market = req.query.market || 'US';
     const { data: positions } = await supabase
-      .from('sim_positions').select('id, ticker, market')
+      .from('sim_positions').select('id, ticker, market, position_type, option_symbol, strike, expiry, option_type')
       .eq('user_id', req.params.userId)
       .eq('market', market)
       .eq('status', 'OPEN');
 
     if (!positions?.length) return res.json({});
 
-    const usTickers    = positions.filter(p => p.market !== 'INDIA').map(p => p.ticker);
-    const indiaTickers = positions.filter(p => p.market === 'INDIA').map(p => p.ticker);
+    const stockPositions  = positions.filter(p => p.position_type !== 'OPTION' && p.market !== 'INDIA');
+    const optionPositions = positions.filter(p => p.position_type === 'OPTION');
+    const indiaTickers    = positions.filter(p => p.market === 'INDIA').map(p => p.ticker);
 
     const prices = {};
 
-    if (usTickers.length) {
-      const data = await tradierGet(`/v1/markets/quotes?symbols=${usTickers.join(',')}&greeks=false`);
+    // Stock prices
+    if (stockPositions.length) {
+      const tickers = [...new Set(stockPositions.map(p => p.ticker))];
+      const data = await tradierGet(`/v1/markets/quotes?symbols=${tickers.join(',')}&greeks=false`);
       const raw  = data?.quotes?.quote || [];
       const list = Array.isArray(raw) ? raw : [raw];
       list.forEach(q => { if (q.symbol && q.last) prices[q.symbol] = parseFloat(q.last); });
+    }
+
+    // Option prices — fetch by OCC symbol or reconstruct from strike/expiry
+    if (optionPositions.length) {
+      await Promise.allSettled(optionPositions.map(async pos => {
+        try {
+          // Build option symbol if not stored: TICKER + YYMMDD + C/P + 8-digit strike
+          let sym = pos.option_symbol;
+          if (!sym && pos.strike && pos.expiry) {
+            const d = pos.expiry.replace(/-/g, '').slice(2); // YYMMDD
+            const strikeStr = (parseFloat(pos.strike) * 1000).toFixed(0).padStart(8, '0');
+            sym = `${pos.ticker}${d}${pos.option_type === 'PUT' ? 'P' : 'C'}${strikeStr}`;
+          }
+          if (!sym) return;
+          const data = await tradierGet(`/v1/markets/quotes?symbols=${sym}&greeks=true`);
+          const q = data?.quotes?.quote;
+          if (q) {
+            const mid = q.bid && q.ask ? (q.bid + q.ask) / 2 : q.last;
+            if (mid) {
+              prices[`OPT:${pos.id}`] = {
+                mid:   parseFloat(mid.toFixed(4)),
+                bid:   q.bid,
+                ask:   q.ask,
+                last:  q.last,
+                delta: q.greeks?.delta,
+                theta: q.greeks?.theta,
+                gamma: q.greeks?.gamma,
+                vega:  q.greeks?.vega,
+                iv:    q.greeks?.mid_iv,
+              };
+            }
+          }
+        } catch (e) { console.warn('[sim option price]', pos.ticker, e.message); }
+      }));
     }
 
     if (indiaTickers.length) {
@@ -3238,6 +3296,68 @@ app.post('/sim/:userId/close/:positionId', async (req, res) => {
     res.json({ pnl, pct, newBalance });
   } catch (e) {
     console.error('[sim close]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /sim/:userId/check-expiry — auto-close expired options
+app.post('/sim/:userId/check-expiry', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: expired } = await supabase
+      .from('sim_positions')
+      .select('*')
+      .eq('user_id', req.params.userId)
+      .eq('status', 'OPEN')
+      .eq('position_type', 'OPTION')
+      .lte('expiry', today);
+
+    if (!expired?.length) return res.json({ expired: 0 });
+
+    // For each expired option, calculate intrinsic value
+    const closed = [];
+    for (const pos of expired) {
+      // Fetch underlying stock price
+      let stockPrice = 0;
+      try {
+        const q = await tradierGet(`/v1/markets/quotes?symbols=${pos.ticker}&greeks=false`);
+        stockPrice = parseFloat(q?.quotes?.quote?.last || 0);
+      } catch {}
+
+      // Intrinsic value at expiry
+      const intrinsic = pos.option_type === 'CALL'
+        ? Math.max(0, stockPrice - pos.strike)
+        : Math.max(0, pos.strike - stockPrice);
+
+      const exitPrice  = intrinsic; // per share intrinsic value
+      const pnl        = (exitPrice - pos.premium) * pos.contracts * 100;
+      const pct        = pos.premium > 0 ? ((exitPrice - pos.premium) / pos.premium * 100) : -100;
+      const account    = await getOrCreateSimAccount(pos.user_id, pos.market);
+      // Return premium paid + pnl
+      const cashReturn = pos.premium * pos.contracts * 100; // original cost
+      const newBalance = account.balance + cashReturn + pnl;
+
+      await Promise.all([
+        supabase.from('sim_positions').update({
+          status:       'CLOSED',
+          exit_price:   exitPrice,
+          exit_reason:  'EXPIRED',
+          closed_at:    new Date().toISOString(),
+          realized_pnl: parseFloat(pnl.toFixed(2)),
+          realized_pct: parseFloat(pct.toFixed(2)),
+        }).eq('id', pos.id),
+        supabase.from('sim_account').update({
+          balance:    parseFloat(newBalance.toFixed(2)),
+          updated_at: new Date().toISOString(),
+        }).eq('user_id', `${pos.user_id}_${pos.market}`),
+      ]);
+
+      closed.push({ ticker: pos.ticker, option_type: pos.option_type, strike: pos.strike, pnl });
+    }
+
+    res.json({ expired: closed.length, closed });
+  } catch (e) {
+    console.error('[sim check-expiry]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

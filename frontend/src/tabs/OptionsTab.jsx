@@ -163,6 +163,8 @@ export default function OptionsTab({ macro, initialTicker }) {
           macro={macro}
           selectedExpiry={selectedExpiry}
           onBack={() => setShowResults(false)}
+          onAddToSim={onAddToSim}
+          getSimBalance={getSimBalance}
         />
       )}
 

@@ -39,6 +39,7 @@ export default function App() {
   const [optionsTicker, setOptionsTicker] = useState('');
   const [modal,         setModal]         = useState(null);
   const [logoClicks,    setLogoClicks]    = useState(0);
+  const [simVersion,    setSimVersion]    = useState(0);
 
   const macro                    = useMacroData();
   const scan                     = useScan(macro);
@@ -60,6 +61,7 @@ export default function App() {
     });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Failed to open position');
+    setSimVersion(v => v + 1); // trigger SimulatorTab reload
   };
   const { market }               = useMarket();
   const { user }                 = useUser();
@@ -256,7 +258,7 @@ export default function App() {
             {/* Options tab — US only */}
             {market === 'US' && (
               <div style={{ display: activeTab === 'options' ? 'block' : 'none' }}>
-                <OptionsTab macro={macro} initialTicker={optionsTicker} />
+                <OptionsTab macro={macro} initialTicker={optionsTicker} onAddToSim={handleAddToSim} getSimBalance={getSimBalance} />
               </div>
             )}
 
@@ -273,7 +275,7 @@ export default function App() {
             </div>
 
             <div style={{ display: activeTab === 'simulator' ? 'block' : 'none' }}>
-              <SimulatorTab market={market} />
+              <SimulatorTab key={simVersion} market={market} />
             </div>
 
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
