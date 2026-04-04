@@ -41,21 +41,6 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
           {children}
         </div>
       )}
-      {/* ── Sim Modal ── */}
-      {showSimModal && (
-        <SimModal
-          scan={scan}
-          livePrice={livePrice}
-          currency={currency}
-          market={market}
-          onConfirm={async (pos) => {
-            await onAddToSim(pos);
-            setSimAdded(true);
-            setShowSimModal(false);
-          }}
-          onClose={() => setShowSimModal(false)}
-        />
-      )}
     </div>
   );
 }
@@ -187,6 +172,22 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             macroImpact: scan.analysis?.macroImpact,
           }}
           onClose={() => setShowShareModal(false)}
+        />
+      )}
+
+      {/* ── Sim Modal ── */}
+      {showSimModal && (
+        <SimModal
+          scan={scan}
+          livePrice={livePrice}
+          currency={currency}
+          market={market}
+          onConfirm={async (pos) => {
+            await onAddToSim(pos);
+            setSimAdded(true);
+            setShowSimModal(false);
+          }}
+          onClose={() => setShowSimModal(false)}
         />
       )}
 
@@ -532,21 +533,6 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           )}
         </div>
       </AccordionCard>
-      {/* ── Sim Modal ── */}
-      {showSimModal && (
-        <SimModal
-          scan={scan}
-          livePrice={livePrice}
-          currency={currency}
-          market={market}
-          onConfirm={async (pos) => {
-            await onAddToSim(pos);
-            setSimAdded(true);
-            setShowSimModal(false);
-          }}
-          onClose={() => setShowSimModal(false)}
-        />
-      )}
     </div>
   );
 }
