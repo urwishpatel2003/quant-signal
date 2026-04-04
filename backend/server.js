@@ -3580,6 +3580,130 @@ app.get('/backtest/results', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Signal History ──────────────────────────────────────────────────────────
+
+app.post('/signal-history', async (req, res) => {
+  const { userId, ticker, market, signal, confidence, priceAtSignal, priceTarget, stopLoss, timeframe, thesis } = req.body;
+  if (!userId || !ticker || !signal) return res.status(400).json({ error: 'userId, ticker, signal required' });
+  try {
+    const { data, error } = await supabase.from('signal_history').insert({
+      user_id:         userId,
+      ticker:          ticker.toUpperCase(),
+      market:          market || 'US',
+      signal,
+      confidence:      confidence || 0,
+      price_at_signal: priceAtSignal,
+      price_target:    priceTarget  || null,
+      stop_loss:       stopLoss     || null,
+      timeframe:       timeframe    || null,
+      thesis:          thesis       || null,
+      outcome_result:  'PENDING',
+    }).select('id').single();
+    if (error) throw error;
+    res.json({ id: data.id });
+  } catch (e) {
+    console.error('[signal-history POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/signal-history/:userId', async (req, res) => {
+  const market = req.query.market || 'US';
+  try {
+    const { data, error } = await supabase
+      .from('signal_history')
+      .select('*')
+      .eq('user_id', req.params.userId)
+      .eq('market', market)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw error;
+
+    const resolved   = (data || []).filter(s => s.outcome_result && s.outcome_result !== 'PENDING');
+    const wins       = resolved.filter(s => s.outcome_result === 'WIN').length;
+    const losses     = resolved.filter(s => s.outcome_result === 'LOSS').length;
+    const bySignal   = { BUY: { wins:0, total:0 }, SELL: { wins:0, total:0 }, HOLD: { wins:0, total:0 } };
+    resolved.forEach(s => {
+      if (bySignal[s.signal]) {
+        bySignal[s.signal].total++;
+        if (s.outcome_result === 'WIN') bySignal[s.signal].wins++;
+      }
+    });
+    const highConf     = resolved.filter(s => s.confidence >= 70);
+    const highConfWins = highConf.filter(s => s.outcome_result === 'WIN').length;
+
+    res.json({
+      signals: data || [],
+      stats: {
+        total:           resolved.length,
+        wins, losses,
+        winRate:         resolved.length ? Math.round(wins/resolved.length*100) : null,
+        avgOutcomePct:   resolved.length ? parseFloat((resolved.reduce((s,x)=>s+(x.outcome_pct||0),0)/resolved.length).toFixed(1)) : null,
+        bySignal,
+        highConfWinRate: highConf.length ? Math.round(highConfWins/highConf.length*100) : null,
+        highConfTotal:   highConf.length,
+        pending:         (data||[]).filter(s=>s.outcome_result==='PENDING').length,
+      }
+    });
+  } catch (e) {
+    console.error('[signal-history GET]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
+  try {
+    const { data: pending } = await supabase
+      .from('signal_history').select('*')
+      .eq('user_id', req.params.userId)
+      .eq('outcome_result', 'PENDING');
+    if (!pending?.length) return res.json({ checked: 0 });
+
+    const tfMs = {
+      'Short Term (1-5 days)': 5*864e5, 'Swing Trade (1-4 weeks)': 28*864e5,
+      'Position Trade (1-3 months)': 90*864e5, 'Long Term (6-12 months)': 365*864e5,
+    };
+    const now     = Date.now();
+    const toCheck = pending.filter(s => now - new Date(s.created_at).getTime() >= (tfMs[s.timeframe] || 7*864e5));
+    if (!toCheck.length) return res.json({ checked: 0, message: 'No signals ready for outcome check yet' });
+
+    const usTickers    = [...new Set(toCheck.filter(s=>s.market!=='INDIA').map(s=>s.ticker))];
+    const indiaTickers = [...new Set(toCheck.filter(s=>s.market==='INDIA').map(s=>s.ticker))];
+    const prices = {};
+
+    if (usTickers.length) {
+      const q = await tradierGet(`/v1/markets/quotes?symbols=${usTickers.join(',')}&greeks=false`);
+      const raw = q?.quotes?.quote || [];
+      (Array.isArray(raw)?raw:[raw]).forEach(q => { if (q.symbol) prices[q.symbol]=parseFloat(q.last); });
+    }
+    for (const ticker of indiaTickers) {
+      try { const q = await getNSEQuote(ticker); if (q?.price) prices[ticker]=q.price; } catch {}
+    }
+
+    let checked = 0;
+    for (const sig of toCheck) {
+      const cur = prices[sig.ticker];
+      if (!cur) continue;
+      const pct = (cur - sig.price_at_signal) / sig.price_at_signal * 100;
+      let result;
+      if (sig.signal==='BUY')  result = pct>2?'WIN':pct<-2?'LOSS':'SCRATCH';
+      if (sig.signal==='SELL') result = pct<-2?'WIN':pct>2?'LOSS':'SCRATCH';
+      if (sig.signal==='HOLD') result = Math.abs(pct)<5?'WIN':'LOSS';
+      await supabase.from('signal_history').update({
+        outcome_price:      cur,
+        outcome_checked_at: new Date().toISOString(),
+        outcome_pct:        parseFloat(pct.toFixed(2)),
+        outcome_result:     result,
+      }).eq('id', sig.id);
+      checked++;
+    }
+    res.json({ checked });
+  } catch (e) {
+    console.error('[signal-history check-outcomes]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Share Cards ─────────────────────────────────────────────────────────────
 // Store shareable card data in Supabase, return a short ID
 
