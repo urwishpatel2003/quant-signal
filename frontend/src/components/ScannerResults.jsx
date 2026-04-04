@@ -6,6 +6,8 @@ import MiniChart from './MiniChart';
 import FinancialsPanel from './FinancialsPanel';
 import ShareModal from './ShareModal';
 
+const BASE = import.meta.env.VITE_API_BASE;
+
 function AccordionCard({ id, activeId, setActiveId, label, preview, children }) {
   const isOpen = activeId === id;
   return (
