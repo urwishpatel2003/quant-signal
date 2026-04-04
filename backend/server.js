@@ -3600,6 +3600,7 @@ app.post('/signal-history', async (req, res) => {
       outcome_result:  'PENDING',
     }).select('id').single();
     if (error) throw error;
+    console.log('[signal-history] saved:', ticker, signal, confidence + '%');
     res.json({ id: data.id });
   } catch (e) {
     console.error('[signal-history POST]', e.message);

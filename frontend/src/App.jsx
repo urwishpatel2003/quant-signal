@@ -279,6 +279,10 @@ export default function App() {
               <SimulatorTab key={simVersion} market={market} />
             </div>
 
+            <div style={{ display: activeTab === 'accuracy' ? 'block' : 'none' }}>
+              <SignalHistoryTab market={market} />
+            </div>
+
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
               <WatchlistTab
                 onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
