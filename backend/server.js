@@ -953,124 +953,355 @@ Return JSON: {"price":{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTar
   }
 });
 
+
+// ─── Market Regime Detection Engine ─────────────────────────────────────────
+// Uses multiple independent signals across timeframes to classify market regime.
+// Requires agreement across timeframes to avoid noise.
+
+const regimeCache = { data: null, ts: 0 };
+const REGIME_TTL  = 60 * 60 * 1000; // 1 hour cache
+
+async function detectMarketRegime() {
+  // Return cached regime if fresh
+  if (regimeCache.data && Date.now() - regimeCache.ts < REGIME_TTL) {
+    return regimeCache.data;
+  }
+
+  try {
+    // Fetch SPY and VIX history — these are our regime anchors
+    const [spyHist, vixHist, qqq, iwm, xlk, xle, xlf, xlv] = await Promise.allSettled([
+      tradierGet('/v1/markets/history?symbol=SPY&interval=daily&start=2023-01-01'),
+      tradierGet('/v1/markets/history?symbol=VIX&interval=daily&start=2023-01-01'),
+      tradierGet('/v1/markets/history?symbol=QQQ&interval=daily&start=2024-01-01'),
+      tradierGet('/v1/markets/history?symbol=IWM&interval=daily&start=2024-01-01'),
+      tradierGet('/v1/markets/history?symbol=XLK&interval=daily&start=2024-01-01'),
+      tradierGet('/v1/markets/history?symbol=XLE&interval=daily&start=2024-01-01'),
+      tradierGet('/v1/markets/history?symbol=XLF&interval=daily&start=2024-01-01'),
+      tradierGet('/v1/markets/history?symbol=XLV&interval=daily&start=2024-01-01'),
+    ]);
+
+    const spyBars = spyHist.value?.history?.day || [];
+    const vixBars = vixHist.value?.history?.day || [];
+
+    if (spyBars.length < 50) {
+      return { regime: 'UNKNOWN', confidence: 0, signals: {} };
+    }
+
+    const spyCloses = spyBars.map(b => b.close);
+    const vixCloses = vixBars.map(b => b.close).filter(Boolean);
+    const spyCur    = spyCloses[spyCloses.length - 1];
+
+    // ── Signal 1: MACRO TREND (200-day SMA) ──────────────────────────────────
+    // Most reliable long-term regime indicator
+    const sma200 = spyCloses.length >= 200
+      ? spyCloses.slice(-200).reduce((s,v) => s+v, 0) / 200 : null;
+    const sma50  = spyCloses.length >= 50
+      ? spyCloses.slice(-50).reduce((s,v) => s+v, 0)  / 50  : null;
+    const sma20  = spyCloses.length >= 20
+      ? spyCloses.slice(-20).reduce((s,v) => s+v, 0)  / 20  : null;
+
+    // SMA200 slope (is the trend accelerating or decelerating?)
+    const sma200_30dAgo = spyCloses.length >= 230
+      ? spyCloses.slice(-230, -30).reduce((s,v) => s+v, 0) / 200 : null;
+    const sma200Slope = sma200 && sma200_30dAgo
+      ? ((sma200 - sma200_30dAgo) / sma200_30dAgo * 100) : 0;
+
+    let macroSignal = 0; // -2 to +2
+    if (sma200) {
+      macroSignal += spyCur > sma200 ? 1 : -1;           // above/below 200
+      macroSignal += sma200Slope > 0.5 ? 1 : sma200Slope < -0.5 ? -1 : 0; // slope
+    }
+    if (sma50 && sma200) {
+      macroSignal += sma50 > sma200 ? 0.5 : -0.5;        // golden/death cross
+    }
+
+    // ── Signal 2: VOLATILITY REGIME (VIX) ────────────────────────────────────
+    // VIX is the single best fear indicator
+    const vixCur = vixCloses.length ? vixCloses[vixCloses.length - 1] : null;
+    const vix20d = vixCloses.length >= 20
+      ? vixCloses.slice(-20).reduce((s,v) => s+v, 0) / 20 : null;
+    const vixTrend = vixCur && vix20d ? vixCur - vix20d : 0; // rising = fear increasing
+
+    let vixSignal = 0; // -2 to +2
+    if (vixCur) {
+      // VIX levels: <15=low fear(bull), 15-20=normal, 20-25=elevated, 25-30=high, >30=panic
+      vixSignal += vixCur < 15 ? 2 : vixCur < 20 ? 1 : vixCur < 25 ? 0 : vixCur < 30 ? -1 : -2;
+      // VIX trend matters too — rising VIX even at low levels = warning
+      vixSignal += vixTrend > 3 ? -0.5 : vixTrend < -3 ? 0.5 : 0;
+    }
+
+    // ── Signal 3: MOMENTUM REGIME (short-term breadth proxy) ─────────────────
+    // SPY 10-day vs 30-day momentum — are buyers accelerating?
+    const ret10d = spyCloses.length >= 10
+      ? (spyCur - spyCloses[spyCloses.length-11]) / spyCloses[spyCloses.length-11] * 100 : 0;
+    const ret30d = spyCloses.length >= 30
+      ? (spyCur - spyCloses[spyCloses.length-31]) / spyCloses[spyCloses.length-31] * 100 : 0;
+    const ret90d = spyCloses.length >= 90
+      ? (spyCur - spyCloses[spyCloses.length-91]) / spyCloses[spyCloses.length-91] * 100 : 0;
+
+    let momentumSignal = 0; // -2 to +2
+    momentumSignal += ret10d > 2 ? 1 : ret10d < -2 ? -1 : 0;
+    momentumSignal += ret30d > 5 ? 1 : ret30d < -5 ? -1 : 0;
+    momentumSignal += ret90d > 10 ? 0.5 : ret90d < -10 ? -0.5 : 0;
+
+    // ── Signal 4: BREADTH (Large vs Small cap) ────────────────────────────────
+    // QQQ vs IWM — when small caps lead, risk appetite is high (bull)
+    // When QQQ leads but IWM lags, it's a narrow rally (warning)
+    let breadthSignal = 0;
+    const qqqBars = qqq.value?.history?.day || [];
+    const iwmBars = iwm.value?.history?.day || [];
+    if (qqqBars.length >= 20 && iwmBars.length >= 20) {
+      const qqqRet20 = (qqqBars.slice(-1)[0]?.close - qqqBars.slice(-21)[0]?.close) / qqqBars.slice(-21)[0]?.close * 100;
+      const iwmRet20 = (iwmBars.slice(-1)[0]?.close - iwmBars.slice(-21)[0]?.close) / iwmBars.slice(-21)[0]?.close * 100;
+      // Both rallying = healthy bull
+      if (qqqRet20 > 2 && iwmRet20 > 2)  breadthSignal =  1.5;
+      // Only QQQ rallying = narrow, warning
+      else if (qqqRet20 > 2 && iwmRet20 < 0) breadthSignal = 0;
+      // Both falling = bear
+      else if (qqqRet20 < -2 && iwmRet20 < -2) breadthSignal = -1.5;
+      // Small caps leading = risk-on
+      else if (iwmRet20 > qqqRet20 + 2) breadthSignal = 1;
+    }
+
+    // ── Signal 5: SECTOR ROTATION ─────────────────────────────────────────────
+    // Defensive sectors leading (XLV health, XLU utilities) = risk-off
+    // Growth/cyclical leading (XLK tech, XLE energy, XLF financials) = risk-on
+    let sectorSignal = 0;
+    const getSectorRet = (bars) => {
+      const b = bars.value?.history?.day || [];
+      if (b.length < 20) return null;
+      return (b.slice(-1)[0]?.close - b.slice(-21)[0]?.close) / b.slice(-21)[0]?.close * 100;
+    };
+    const xlkRet = getSectorRet(xlk);
+    const xleRet = getSectorRet(xle);
+    const xlfRet = getSectorRet(xlf);
+    const xlvRet = getSectorRet(xlv);
+
+    // Growth sectors outperforming = risk-on
+    const growthAvg   = [xlkRet, xleRet, xlfRet].filter(r => r != null).reduce((s,v,_,a) => s+v/a.length, 0);
+    const defensiveAvg = [xlvRet].filter(r => r != null).reduce((s,v,_,a) => s+v/a.length, 0);
+    sectorSignal = growthAvg > defensiveAvg + 2 ? 1 : growthAvg < defensiveAvg - 2 ? -1 : 0;
+
+    // ── COMBINE ALL SIGNALS ───────────────────────────────────────────────────
+    const signals = {
+      macro:     { score: macroSignal,   weight: 0.35, label: macroSignal > 0.5 ? 'BULL' : macroSignal < -0.5 ? 'BEAR' : 'NEUTRAL' },
+      vix:       { score: vixSignal,     weight: 0.25, label: vixSignal > 0.5 ? 'LOW_FEAR' : vixSignal < -0.5 ? 'HIGH_FEAR' : 'ELEVATED' },
+      momentum:  { score: momentumSignal,weight: 0.20, label: momentumSignal > 0.5 ? 'STRONG' : momentumSignal < -0.5 ? 'WEAK' : 'NEUTRAL' },
+      breadth:   { score: breadthSignal, weight: 0.12, label: breadthSignal > 0.5 ? 'BROAD' : breadthSignal < -0.5 ? 'NARROW' : 'NEUTRAL' },
+      sector:    { score: sectorSignal,  weight: 0.08, label: sectorSignal > 0 ? 'RISK_ON' : sectorSignal < 0 ? 'RISK_OFF' : 'NEUTRAL' },
+    };
+
+    // Weighted composite score
+    const compositeScore = Object.values(signals).reduce((s, sig) => s + sig.score * sig.weight, 0);
+
+    // Count how many signals agree
+    const bullSignals  = Object.values(signals).filter(s => s.score > 0.3).length;
+    const bearSignals  = Object.values(signals).filter(s => s.score < -0.3).length;
+    const agreement    = Math.max(bullSignals, bearSignals);
+    const confidence   = Math.round((agreement / Object.keys(signals).length) * 100);
+
+    // Regime classification
+    let regime, description;
+    if (compositeScore > 0.8 && confidence >= 60) {
+      regime = 'STRONG_BULL'; description = 'Strong uptrend, low fear, broad participation';
+    } else if (compositeScore > 0.3) {
+      regime = 'BULL'; description = 'Uptrend with moderate confidence';
+    } else if (compositeScore > -0.3) {
+      regime = 'NEUTRAL'; description = 'Transitional/uncertain — mixed signals';
+    } else if (compositeScore > -0.8) {
+      regime = 'BEAR'; description = 'Downtrend with moderate confidence';
+    } else {
+      regime = 'STRONG_BEAR'; description = 'Strong downtrend, elevated fear';
+    }
+
+    const result = {
+      regime, description, compositeScore: parseFloat(compositeScore.toFixed(3)),
+      confidence, bullSignals, bearSignals,
+      signals: Object.fromEntries(Object.entries(signals).map(([k,v]) => [k, { score: parseFloat(v.score.toFixed(2)), label: v.label }])),
+      data: {
+        spy: spyCur, sma50, sma200, sma200Slope: parseFloat(sma200Slope.toFixed(2)),
+        vix: vixCur, vixTrend: parseFloat(vixTrend.toFixed(2)),
+        ret10d: parseFloat(ret10d.toFixed(2)), ret30d: parseFloat(ret30d.toFixed(2)), ret90d: parseFloat(ret90d.toFixed(2)),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    regimeCache.data = result;
+    regimeCache.ts   = Date.now();
+    console.log(`[regime] ${regime} (${confidence}% confidence, score=${compositeScore.toFixed(2)})`);
+    return result;
+  } catch (e) {
+    console.error('[regime]', e.message);
+    return { regime: 'UNKNOWN', confidence: 0, signals: {}, error: e.message };
+  }
+}
+
+// GET /regime — expose regime for frontend display
+app.get('/regime', async (req, res) => {
+  try {
+    const regime = await detectMarketRegime();
+    res.json(regime);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── QuAInt Signal Engine — Deterministic ───────────────────────────────────
-function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null }) {
+function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null, regime = null }) {
   const isIndia = market === 'INDIA';
   const scores  = {};
   const debug   = {};
 
-  // 1. PRICE MOMENTUM
   const closes = ohlcv?.close?.filter(c => c != null) || [];
   const cur    = closes[closes.length - 1];
-  const mo3m   = closes.length >= 60  ? closes[closes.length - 61]  : null;
-  const mo1m   = closes.length >= 20  ? closes[closes.length - 21]  : null;
-  let momentumScore = 0;
-  if (mo3m && cur) {
-    const r = (cur - mo3m) / mo3m;
-    momentumScore += r > 0.15 ? 1.0 : r > 0.05 ? 0.5 : r > -0.05 ? 0.0 : r > -0.15 ? -0.5 : -1.0;
-    debug.ret3m = (r*100).toFixed(1)+'%';
-  }
-  if (mo1m && cur) {
-    const r = (cur - mo1m) / mo1m;
-    momentumScore += r > 0.03 ? 0.3 : r < -0.03 ? -0.3 : 0;
-  }
-  scores.momentum = Math.max(-1, Math.min(1, momentumScore));
-
-  // 2. TREND
   const sma20  = ta?.sma20;
   const sma50  = ta?.sma50;
   const sma200 = ta?.sma200;
-  let trendScore = 0;
-  if (cur && sma20)  trendScore += cur > sma20  ? 0.4 : -0.4;
-  if (cur && sma50)  trendScore += cur > sma50  ? 0.3 : -0.3;
-  if (cur && sma200) trendScore += cur > sma200 ? 0.3 : -0.3;
-  if (sma20 && sma50 && sma20 > sma50) trendScore += 0.2;
-  scores.trend = Math.max(-1, Math.min(1, trendScore));
 
-  // 3. RSI — regime-aware, trend-following in downtrends
+  // Regime detection — drives all scoring logic
+  const aboveSma200    = cur && sma200 && cur > sma200;
+  const goldenCross    = sma50 && sma200 && sma50 > sma200;
+  const strongUptrend  = aboveSma200 && goldenCross && cur > sma50;
+  const bearRegime     = cur && sma200 && cur < sma200 * 0.97;
+
+  // ── 1. TREND MOMENTUM (pure trend-following — backtest confirmed works) ──────
+  // Core insight: in modern markets, what's going up keeps going up
+  let trendScore = 0;
+  // Price vs SMAs — being above = bullish, below = bearish
+  if (cur && sma20)  trendScore += cur > sma20  ? 0.3 : -0.3;
+  if (cur && sma50)  trendScore += cur > sma50  ? 0.3 : -0.3;
+  if (cur && sma200) trendScore += cur > sma200 ? 0.4 : -0.4;
+  // SMA alignment bonus
+  if (sma20 && sma50 && sma50 && sma200) {
+    if (sma20 > sma50 && sma50 > sma200) trendScore += 0.3;  // full alignment = strong bull
+    if (sma20 < sma50 && sma50 < sma200) trendScore -= 0.3;  // full alignment = strong bear
+  }
+  scores.trend = Math.max(-1, Math.min(1, trendScore));
+  debug.trend = strongUptrend ? 'STRONG_UP' : bearRegime ? 'BEAR' : 'MIXED';
+
+  // ── 2. PRICE MOMENTUM (3M and 6M — trend continuation) ──────────────────────
+  const mo6m = closes.length >= 120 ? closes[closes.length - 121] : null;
+  const mo3m = closes.length >= 60  ? closes[closes.length - 61]  : null;
+  const mo1m = closes.length >= 20  ? closes[closes.length - 21]  : null;
+  let momentumScore = 0;
+  // 6-month momentum — strongest predictor of continuation
+  if (mo6m && cur) {
+    const r = (cur - mo6m) / mo6m;
+    momentumScore += r > 0.20 ? 0.8 : r > 0.10 ? 0.5 : r > 0 ? 0.2 : r > -0.10 ? -0.2 : r > -0.20 ? -0.5 : -0.8;
+    debug.ret6m = (r*100).toFixed(1)+'%';
+  }
+  // 3-month momentum
+  if (mo3m && cur) {
+    const r = (cur - mo3m) / mo3m;
+    momentumScore += r > 0.10 ? 0.4 : r > 0.03 ? 0.2 : r > -0.03 ? 0 : r > -0.10 ? -0.2 : -0.4;
+    debug.ret3m = (r*100).toFixed(1)+'%';
+  }
+  // 1-month — short term, lower weight
+  if (mo1m && cur) {
+    const r = (cur - mo1m) / mo1m;
+    momentumScore += r > 0.05 ? 0.2 : r < -0.05 ? -0.2 : 0;
+  }
+  scores.momentum = Math.max(-1, Math.min(1, momentumScore));
+
+  // ── 3. RSI — trend-following interpretation (NOT mean-reversion) ─────────────
+  // Backtest confirmed: oversold = keeps falling, overbought = keeps rising
   const rsi = parseFloat(ta?.rsi14);
-  const inBearRegime = sma200 && cur && cur < sma200 * 0.97;
-  const inStrongUptrend = sma50 && sma200 && sma50 > sma200 && cur > sma50;
   let rsiScore = 0;
   if (!isNaN(rsi)) {
-    if (inBearRegime) {
-      // Downtrend: RSI is a trend-following signal, NOT mean-reversion
-      // Oversold in downtrend = more downside likely. High RSI = strength.
-      rsiScore = rsi < 30 ? -0.5 : rsi < 40 ? -0.2 : rsi < 50 ? 0.0 : rsi < 60 ? 0.2 : rsi < 70 ? 0.4 : 0.3;
-    } else if (inStrongUptrend) {
-      // Strong uptrend: RSI can stay elevated. Mild overbought is fine.
-      rsiScore = rsi < 35 ? 0.8 : rsi < 45 ? 0.5 : rsi < 60 ? 0.2 : rsi < 75 ? 0.0 : -0.3;
+    if (strongUptrend) {
+      // In uptrend: high RSI = momentum confirmation, not overbought warning
+      rsiScore = rsi > 60 ? 0.6 : rsi > 50 ? 0.3 : rsi > 40 ? 0.0 : rsi > 30 ? -0.3 : -0.6;
+    } else if (bearRegime) {
+      // In downtrend: low RSI = weakness continuation, high RSI = brief bounce only
+      rsiScore = rsi < 30 ? -0.6 : rsi < 40 ? -0.3 : rsi < 50 ? -0.1 : rsi < 60 ? 0.2 : 0.3;
     } else {
-      // Normal: mean reversion signal
-      rsiScore = rsi < 25 ? 1.0 : rsi < 35 ? 0.7 : rsi < 45 ? 0.3 : rsi < 55 ? 0.0 : rsi < 65 ? -0.1 : rsi < 75 ? -0.4 : -0.7;
+      // Neutral: mild trend-following
+      rsiScore = rsi > 55 ? 0.3 : rsi > 45 ? 0.0 : rsi < 35 ? -0.3 : 0;
     }
-    debug.rsi = rsi; debug.regime = inBearRegime ? 'BEAR' : inStrongUptrend ? 'BULL' : 'NEUTRAL';
+    debug.rsi = rsi;
   }
   scores.rsi = rsiScore;
 
-  // 4. MACD
-  const macdCross = ta?.macd?.cross;
+  // ── 4. MACD — use as trend filter only, not signal ───────────────────────────
+  // MACD cross is lagging — use trend direction only
   const macdTrend = ta?.macd?.trend;
-  scores.macd = macdCross === 'BULLISH_CROSS' ? 0.8 : macdCross === 'BEARISH_CROSS' ? -0.8 : macdTrend === 'BULLISH' ? 0.3 : macdTrend === 'BEARISH' ? -0.3 : 0;
+  const macdCross = ta?.macd?.cross;
+  scores.macd = macdTrend === 'BULLISH' ? 0.4 : macdTrend === 'BEARISH' ? -0.4 : 0;
+  // Cross adds weight but don't rely on it alone
+  if (macdCross === 'BULLISH_CROSS' && !bearRegime) scores.macd = Math.min(1, scores.macd + 0.3);
+  if (macdCross === 'BEARISH_CROSS') scores.macd = Math.max(-1, scores.macd - 0.3);
 
-  // 5. VOLUME
+  // ── 5. VOLUME — confirms trend direction ──────────────────────────────────────
   const volRatio = parseFloat(ta?.volumeRatio);
   let volumeScore = 0;
-  if (!isNaN(volRatio)) {
-    const priceUp = closes.length >= 2 ? closes[closes.length-1] > closes[closes.length-2] : null;
-    volumeScore = volRatio > 1.5 && priceUp === true ? 0.7 : volRatio > 1.5 && priceUp === false ? -0.7 : volRatio > 1.0 ? 0.2 : volRatio < 0.7 ? -0.2 : 0;
+  if (!isNaN(volRatio) && closes.length >= 2) {
+    const priceUp = closes[closes.length-1] > closes[closes.length-2];
+    // High volume on up day = institutional buying = bullish
+    // High volume on down day = distribution = bearish
+    volumeScore = volRatio > 2.0 && priceUp  ?  0.8
+                : volRatio > 1.5 && priceUp  ?  0.4
+                : volRatio > 2.0 && !priceUp ? -0.8
+                : volRatio > 1.5 && !priceUp ? -0.4
+                : volRatio < 0.5             ? -0.1  // drying up
+                : 0;
   }
   scores.volume = volumeScore;
 
-  // 6. REVENUE GROWTH
-  const revenueYoY  = financials?.yoy?.revenueYoY;
-  const revGrowthF  = fundamentals?.revenueGrowth;
-  const revGrowth   = revenueYoY ?? (revGrowthF != null ? revGrowthF * 100 : null);
-  scores.revenue = revGrowth == null ? 0 :
-    revGrowth > 30 ? 1.0 : revGrowth > 15 ? 0.7 : revGrowth > 5 ? 0.4 :
-    revGrowth > -5 ? 0.0 : revGrowth > -15 ? -0.5 : -1.0;
+  // ── 6. REVENUE GROWTH ─────────────────────────────────────────────────────────
+  const revenueYoY = financials?.yoy?.revenueYoY;
+  const revGrowthF = fundamentals?.revenueGrowth;
+  const revGrowth  = revenueYoY ?? (revGrowthF != null ? revGrowthF * 100 : null);
+  scores.revenue = revGrowth == null ? 0
+    : revGrowth > 30 ? 1.0 : revGrowth > 15 ? 0.7 : revGrowth > 5 ? 0.4
+    : revGrowth > -5 ? 0.0 : revGrowth > -15 ? -0.5 : -1.0;
   debug.revGrowth = revGrowth != null ? revGrowth.toFixed(1)+'%' : 'N/A';
 
-  // 7. EARNINGS QUALITY
+  // ── 7. EARNINGS QUALITY ───────────────────────────────────────────────────────
   const niYoY  = financials?.yoy?.netIncomeYoY;
   const epsYoY = financials?.yoy?.epsYoY;
   const roe    = fundamentals?.roe;
   let qScore = 0, qCount = 0;
-  if (niYoY  != null) { qScore += niYoY  > 20 ? 0.5 : niYoY  > 0 ? 0.2 : niYoY > -20 ? -0.2 : -0.5; qCount++; }
+  if (niYoY  != null) { qScore += niYoY  > 20 ? 0.5 : niYoY  > 0 ? 0.2 : niYoY  > -20 ? -0.2 : -0.5; qCount++; }
   if (epsYoY != null) { qScore += epsYoY > 20 ? 0.3 : epsYoY > 0 ? 0.1 : -0.2; qCount++; }
   if (roe    != null) { qScore += roe > 0.2 ? 0.3 : roe > 0.1 ? 0.1 : roe > 0 ? 0 : -0.3; qCount++; }
   const epsHistory = financials?.epsHistory || [];
-  const beats = epsHistory.slice(0,3).filter(e=>e.beat===true).length;
-  const misses= epsHistory.slice(0,3).filter(e=>e.beat===false).length;
-  if (epsHistory.length >= 2) { qScore += beats >= 2 ? 0.3 : misses >= 2 ? -0.3 : 0; qCount++; debug.epsBeat = beats+'B/'+misses+'M'; }
+  const beats  = epsHistory.slice(0,3).filter(e=>e.beat===true).length;
+  const misses = epsHistory.slice(0,3).filter(e=>e.beat===false).length;
+  if (epsHistory.length >= 2) { qScore += beats >= 2 ? 0.3 : misses >= 2 ? -0.3 : 0; qCount++; }
   scores.quality = qCount > 0 ? Math.max(-1, Math.min(1, qScore / Math.max(qCount*0.5,1))) : 0;
 
-  // 8. ANALYST CONSENSUS
+  // ── 8. ANALYST CONSENSUS ──────────────────────────────────────────────────────
   const rec = fundamentals?.recommendationKey?.toLowerCase();
   const targetPrice = fundamentals?.targetMeanPrice;
-  let aScore = rec === 'strong_buy' ? 1.0 : rec === 'buy' ? 0.6 : rec === 'hold' ? 0.0 : rec === 'underperform' ? -0.6 : rec === 'sell' ? -1.0 : 0;
-  if (targetPrice && cur) { const up = (targetPrice-cur)/cur; aScore += up>0.2?0.3:up>0?0.1:up>-0.2?-0.1:-0.3; }
+  let aScore = rec === 'strong_buy' ? 1.0 : rec === 'buy' ? 0.6 : rec === 'hold' ? 0.0
+             : rec === 'underperform' ? -0.6 : rec === 'sell' ? -1.0 : 0;
+  if (targetPrice && cur) {
+    const upside = (targetPrice - cur) / cur;
+    aScore += upside > 0.25 ? 0.4 : upside > 0.10 ? 0.2 : upside > 0 ? 0.0 : upside > -0.10 ? -0.1 : -0.3;
+  }
   scores.analyst = Math.max(-1, Math.min(1, aScore));
 
-  // 9. MACRO / ENHANCED
+  // ── 9. MACRO / ENHANCED ───────────────────────────────────────────────────────
   let macroScore = 0;
+  // 52-week position — near highs = strong momentum, near lows = weak
   const hi52 = fundamentals?.fiftyTwoWeekHigh, lo52 = fundamentals?.fiftyTwoWeekLow;
-  if (hi52 && lo52 && cur) {
-    const pos = (cur-lo52)/(hi52-lo52);
-    macroScore += pos > 0.85 ? 0.5 : pos > 0.6 ? 0.2 : pos < 0.2 ? -0.5 : pos < 0.4 ? -0.2 : 0;
+  if (hi52 && lo52 && cur && hi52 > lo52) {
+    const pos = (cur - lo52) / (hi52 - lo52);
+    macroScore += pos > 0.80 ? 0.6 : pos > 0.60 ? 0.3 : pos > 0.40 ? 0 : pos > 0.20 ? -0.3 : -0.6;
     debug['52wPos'] = (pos*100).toFixed(0)+'%';
   }
   if (isIndia) {
     if (enhanced?.fiiDii?.fiiNetBuy != null) macroScore += enhanced.fiiDii.fiiNetBuy > 0 ? 0.3 : -0.3;
     if (enhanced?.shareholding?.promoter) { const p = parseFloat(enhanced.shareholding.promoter); macroScore += p>60?0.2:p<25?-0.2:0; }
-    if (enhanced?.delivery?.deliveryPct) { const d = parseFloat(enhanced.delivery.deliveryPct); macroScore += d>60?0.2:d<25?-0.2:0; }
+    if (enhanced?.delivery?.deliveryPct)  { const d = parseFloat(enhanced.delivery.deliveryPct);  macroScore += d>60?0.2:d<25?-0.2:0; }
   } else {
     if (enhanced?.shortInterest?.shortPct > 20 && scores.momentum > 0) macroScore += 0.3;
-    if (enhanced?.insiderSummary) { const {buys,sells} = enhanced.insiderSummary; macroScore += buys>sells+2?0.3:sells>buys+2?-0.3:0; }
+    if (enhanced?.insiderSummary) {
+      const {buys=0, sells=0} = enhanced.insiderSummary;
+      macroScore += buys > sells+2 ? 0.3 : sells > buys+2 ? -0.3 : 0;
+    }
   }
   scores.macro = Math.max(-1, Math.min(1, macroScore));
 
-  // CATALYST BONUS
+  // ── CATALYST BONUS ────────────────────────────────────────────────────────────
   const catNews = (news||[]).map(n=>typeof n==='string'?n:'');
   let catalyst = 0;
   if (catNews.some(n=>n.startsWith('[UPGRADE]')))      catalyst += 0.5;
@@ -1079,53 +1310,50 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   if (catNews.some(n=>n.startsWith('[INSIDER/FUND]'))) catalyst += 0.3;
   scores.catalyst = Math.max(-0.5, Math.min(0.5, catalyst));
 
-  // WEIGHTS — use optimized from backtest or defaults
+  // ── WEIGHTS ───────────────────────────────────────────────────────────────────
+  // Trend-following weights — technicals dominate short term, fundamentals long term
   const defaultWeights = {
-    short:    { momentum:0.25, trend:0.20, rsi:0.15, macd:0.15, volume:0.10, revenue:0.05, quality:0.03, analyst:0.04, macro:0.03 },
-    swing:    { momentum:0.20, trend:0.15, rsi:0.10, macd:0.10, volume:0.05, revenue:0.15, quality:0.10, analyst:0.10, macro:0.05 },
-    position: { momentum:0.15, trend:0.10, rsi:0.05, macd:0.05, volume:0.03, revenue:0.22, quality:0.15, analyst:0.15, macro:0.10 },
-    longterm: { momentum:0.10, trend:0.05, rsi:0.03, macd:0.03, volume:0.02, revenue:0.27, quality:0.20, analyst:0.20, macro:0.10 },
+    short:    { trend:0.30, momentum:0.25, rsi:0.15, macd:0.10, volume:0.10, revenue:0.04, quality:0.02, analyst:0.02, macro:0.02 },
+    swing:    { trend:0.25, momentum:0.20, rsi:0.12, macd:0.10, volume:0.08, revenue:0.10, quality:0.06, analyst:0.06, macro:0.03 },
+    position: { trend:0.20, momentum:0.15, rsi:0.08, macd:0.07, volume:0.05, revenue:0.18, quality:0.12, analyst:0.10, macro:0.05 },
+    longterm: { trend:0.12, momentum:0.10, rsi:0.05, macd:0.05, volume:0.03, revenue:0.25, quality:0.18, analyst:0.16, macro:0.06 },
   };
   const weights = optimizedWeights || defaultWeights;
   const w = weights[timeframeKey] || weights.swing;
 
-  // TOTAL SCORE
+  // ── TOTAL SCORE ───────────────────────────────────────────────────────────────
   let total = 0;
-  total += (scores.momentum||0) * w.momentum;
-  total += (scores.trend||0)    * w.trend;
-  total += (scores.rsi||0)      * w.rsi;
-  total += (scores.macd||0)     * w.macd;
-  total += (scores.volume||0)   * w.volume;
-  total += (scores.revenue||0)  * w.revenue;
-  total += (scores.quality||0)  * w.quality;
-  total += (scores.analyst||0)  * w.analyst;
-  total += (scores.macro||0)    * w.macro;
-  total += (scores.catalyst||0);
+  total += (scores.trend    ||0) * w.trend;
+  total += (scores.momentum ||0) * w.momentum;
+  total += (scores.rsi      ||0) * w.rsi;
+  total += (scores.macd     ||0) * w.macd;
+  total += (scores.volume   ||0) * w.volume;
+  total += (scores.revenue  ||0) * w.revenue;
+  total += (scores.quality  ||0) * w.quality;
+  total += (scores.analyst  ||0) * w.analyst;
+  total += (scores.macro    ||0) * w.macro;
+  total += (scores.catalyst ||0);
   total  = Math.max(-1, Math.min(1, total));
 
-  // SIGNAL — with regime adjustment
+  // ── SIGNAL ────────────────────────────────────────────────────────────────────
   let signal, confidence;
-  const bearRegimeSignal = sma200 && cur && cur < sma200 * 0.97;
-
-  if (total > 0.15) {
+  if (total > 0.12) {
     signal     = 'BUY';
-    confidence = Math.round(52 + (total - 0.15) / 0.85 * 43);
-    // In bear regime, cap BUY confidence — trend is against us
-    if (bearRegimeSignal) confidence = Math.min(confidence, 62);
-  } else if (total < -0.15) {
+    confidence = Math.round(52 + (total - 0.12) / 0.88 * 43);
+    if (bearRegime) confidence = Math.min(confidence, 60);
+  } else if (total < -0.12) {
     signal     = 'SELL';
-    confidence = Math.round(52 + (Math.abs(total) - 0.15) / 0.85 * 43);
-    // In bear regime, boost SELL confidence slightly
-    if (bearRegimeSignal) confidence = Math.min(95, confidence + 5);
+    confidence = Math.round(52 + (Math.abs(total) - 0.12) / 0.88 * 43);
+    if (bearRegime) confidence = Math.min(95, confidence + 5);
   } else {
     signal     = 'HOLD';
-    confidence = Math.round(50 + (0.15 - Math.abs(total)) / 0.15 * 10);
+    confidence = Math.round(50 + (0.12 - Math.abs(total)) / 0.12 * 10);
   }
   confidence = Math.max(45, Math.min(95, confidence));
-  debug.bearRegime = bearRegimeSignal;
 
   debug.totalScore = total.toFixed(3);
   debug.scores     = scores;
+  debug.regime     = strongUptrend ? 'STRONG_UPTREND' : bearRegime ? 'BEAR' : 'NEUTRAL';
   return { signal, confidence, totalScore: total, scores, debug };
 }
 
@@ -1287,16 +1515,16 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
     // ── Step 1: Compute signal deterministically ────────────────────────────────
-    // Load optimized weights from backtest (with timeout to never block scan)
-    const optimizedWeights = await Promise.race([
-      getSignalWeights().catch(() => null),
-      new Promise(r => setTimeout(() => r(null), 500)),
+    // Load optimized weights + market regime in parallel (both non-blocking)
+    const [optimizedWeights, regime] = await Promise.all([
+      Promise.race([getSignalWeights().catch(() => null), new Promise(r => setTimeout(() => r(null), 500))]),
+      market === 'US' ? Promise.race([detectMarketRegime().catch(() => null), new Promise(r => setTimeout(() => r(null), 2000))]) : Promise.resolve(null),
     ]);
 
     const computed = computeSignal({
       ohlcv, ta, fundamentals, financials, enhanced,
       options, market, timeframeKey, news,
-      optimizedWeights,
+      optimizedWeights, regime,
     });
 
     const { signal, confidence, totalScore, scores, debug: sigDebug } = computed;
