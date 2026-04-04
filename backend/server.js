@@ -1029,61 +1029,50 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     };
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
-    const result = await callClaudeAPI({
-      model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
-      system: `You are a quantitative trading analyst. Analyze the data and return a JSON signal.
+    // ── Step 1: Compute signal deterministically ────────────────────────────────
+    const computed = computeSignal({
+      ohlcv, ta, fundamentals, financials, enhanced,
+      options, market, timeframeKey, news,
+    });
 
-MARKET: ${isIndia ? 'NSE India — consider RBI rates, FII/DII flows, INR/USD, GST, SEBI regulations' : 'US equities — consider Fed policy, USD, credit spreads, global macro'}
-TIMEFRAME: ${tf.label} | FOCUS: ${tf.focus}
-TARGET/STOP: ${tf.targetRule}
+    const { signal, confidence, totalScore, scores, debug: sigDebug } = computed;
+    console.log(`[signal] ${ticker} ${signal} ${confidence}% score=${totalScore.toFixed(3)}`, sigDebug);
 
-SCORING METHOD — compute each score FIRST, then derive signal:
-  technicalScore  (-3 to +3): RSI trend, MACD, SMA alignment, BB position, volume
-  fundamentalScore (-3 to +3): Revenue growth, margins, EPS trend, debt, ROE, analyst consensus
-  macroScore      (-2 to +2): Macro tailwinds/headwinds for this sector
-  catalystScore   (-2 to +2): News catalysts, insider activity, short interest, earnings surprises
-  totalScore = technicalScore + fundamentalScore + macroScore + catalystScore  (range -10 to +10)
-
-SIGNAL FROM SCORE:
-  totalScore >= +3  → BUY
-  totalScore <= -3  → SELL
-  -2 to +2          → HOLD (genuinely mixed)
-  +2 to +3          → BUY with lower confidence
-  -2 to -3          → SELL with lower confidence
-
-CONFIDENCE FROM SCORE MAGNITUDE:
-  |totalScore| >= 8  → 85-95%
-  |totalScore| 6-7   → 75-84%
-  |totalScore| 4-5   → 65-74%
-  |totalScore| 2-3   → 52-64%
-  |totalScore| 0-1   → 45-55% (HOLD territory)
-
-RULES:
-- Score each category honestly from the data. Don't round to comfortable numbers.
-- If data is N/A for a category, score it 0 (not bullish by default).
-- Revenue declining YoY = -1 fundamental. Revenue growing >20% YoY = +1 fundamental.
-- RSI 30-45 in uptrend = +1 technical. RSI >70 = -1 (overbought). RSI 45-60 neutral = 0.
-- Missing data = 0 score, not a reason to inflate confidence.
-- ${isIndia ? 'Promoter holding >50% = +0.5 fundamental. FII net buying = +0.5 macro.' : 'Short interest >20% float with uptrend = +1 catalyst (squeeze). Insider buying cluster = +1 catalyst.'}
-
-Return ONLY valid JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
-      messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | ${tf.label}
-${dayChangePct ? `TODAY: ${parseFloat(dayChangePct) >= 0 ? '+' : ''}${dayChangePct}% | prev close $${prevClose?.toFixed(2)}` : ''}
-PRICE (${closes?.length} closes): ${JSON.stringify(closes)}
+    // ── Step 2: Claude writes thesis/context ONLY ────────────────────────────────
+    const claudeResult = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514', max_tokens: 1000, temperature: 0.2,
+      system: `You are a trading analyst writing the reasoning for a ${tf.label} ${signal} signal on ${ticker}.
+The signal and confidence have already been computed by a quantitative model. Your job is ONLY to:
+1. Write a concise 2-3 sentence thesis explaining WHY this ${signal} signal makes sense given the data
+2. List 3 specific bull factors (even for SELL/HOLD, identify what bulls would argue)
+3. List 3 specific bear factors
+4. Assess risk level, macro impact, and other qualitative fields
+DO NOT change the signal or confidence — they are fixed by the model.
+MARKET: ${isIndia ? 'NSE India — RBI policy, FII flows, INR/USD, domestic consumption' : 'US equities — Fed policy, USD strength, sector dynamics'}
+THESIS RULE: (1) what the company does and its sector position, (2) the key driver for ${tf.label}, (3) the technical/fundamental setup that supports ${signal}.
+Return ONLY JSON with these fields (signal="${signal}", confidence=${confidence} are pre-set, do not change them):`,
+      messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | ${tf.label} | SIGNAL: ${signal} ${confidence}%
+QUANT SCORES: momentum=${scores.momentum?.toFixed(2)} trend=${scores.trend?.toFixed(2)} rsi=${scores.rsi?.toFixed(2)} macd=${scores.macd?.toFixed(2)} revenue=${scores.revenue?.toFixed(2)} quality=${scores.quality?.toFixed(2)} analyst=${scores.analyst?.toFixed(2)} macro=${scores.macro?.toFixed(2)}
+TOTAL SCORE: ${totalScore.toFixed(3)} (range -1 to +1)
 KEY INDICATORS: ${tf.indicators}
 ${taCtx}
-FUNDAMENTALS: P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'} | 52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'} | Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey ?? 'N/A'} | ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'} | Analysts=${fundamentals?.numberOfAnalystOpinions ?? 'N/A'}
-${financialsCtx ? financialsCtx : 'QUARTERLY FINANCIALS: Not available'}
+FUNDAMENTALS: P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'} | 52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'} | Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey ?? 'N/A'} | ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'}
+${financialsCtx ? financialsCtx : ''}
 ${enhancedCtx ? enhancedCtx : ''}
-${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS SENTIMENT: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%` : isIndia ? `INDIA MARKET: FII/DII flows and RBI policy context applied | NSE-listed stock` : ''}
+${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%` : ''}
 ${hasUpgrade?'🟢 ANALYST UPGRADE':''}${hasDowngrade?'🔴 ANALYST DOWNGRADE':''}${hasFund?'🏦 INSTITUTIONAL ACTIVITY':''}${hasShort?'⚠ SHORT ATTACK':''}${hasEarnings?'📊 EARNINGS NEWS':''}
-${fundamentals?.revenueGrowth != null ? `REVENUE GROWTH (YoY): ${(fundamentals.revenueGrowth*100).toFixed(1)}%` : ''}
-${fundamentals?.debtToEquity != null ? `DEBT/EQUITY: ${fundamentals.debtToEquity.toFixed(2)}` : ''}
-CONFIDENCE REQUIREMENT: Give directional signal (BUY/SELL) when there is ANY lean in the evidence. Reserve HOLD for genuinely split signals. Confidence reflects edge strength, not data completeness.
 NEWS: ${categorized.slice(0,6).join(' | ')}
 ${macroCtx}
-Return JSON only.` }]
+Return JSON: {"signal":"${signal}","confidence":${confidence},"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}` }]
     });
+
+    // Merge: computed signal/confidence override Claude's (in case Claude tries to change them)
+    const result = {
+      ...claudeResult,
+      signal,
+      confidence,
+      _quant: { totalScore, scores },  // for debugging
+    };
     res.json(result);
   } catch (e) {
     console.error('[analyze/price]', e.message);
