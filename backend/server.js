@@ -3610,14 +3610,16 @@ app.post('/signal-history', async (req, res) => {
 
 app.get('/signal-history/:userId', async (req, res) => {
   const market = req.query.market || 'US';
+  const all    = req.query.all === 'true';
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('signal_history')
       .select('*')
       .eq('user_id', req.params.userId)
-      .eq('market', market)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
+    if (!all) query = query.eq('market', market);
+    const { data, error } = await query;
     if (error) throw error;
 
     const resolved   = (data || []).filter(s => s.outcome_result && s.outcome_result !== 'PENDING');

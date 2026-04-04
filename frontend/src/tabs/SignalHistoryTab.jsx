@@ -38,14 +38,14 @@ export default function SignalHistoryTab({ market = 'US' }) {
   const [error,      setError]      = useState('');
 
   const load = async () => {
-    if (!user?.id) return;
+    if (!user?.id) { setLoading(false); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/signal-history/${user.id}?market=${market}`);
+      const res  = await fetch(`${BASE}/signal-history/${user.id}?all=true`);
       const json = await res.json();
       setData(json);
     } catch (e) { setError(e.message); }
-    setLoading(false);
+    finally { setLoading(false); }
   };
 
   const checkOutcomes = async () => {
@@ -59,9 +59,13 @@ export default function SignalHistoryTab({ market = 'US' }) {
     setChecking(false);
   };
 
+  // Reload when tab becomes visible (catches scans done while on other tabs)
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
     load();
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [isLoaded, user?.id, market]);
 
   if (!isLoaded || loading) return (
@@ -104,12 +108,12 @@ export default function SignalHistoryTab({ market = 'US' }) {
         </div>
       )}
 
-      {/* Stats grid */}
-      {stats.total > 0 ? (
+      {/* Stats grid — show even when pending */}
+      {(stats.total > 0 || stats.pending > 0) ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
-          <StatBox label="WIN RATE"        value={stats.winRate != null ? `${stats.winRate}%` : '—'} sub={`${stats.wins}W · ${stats.losses}L`} color={stats.winRate >= 50 ? '#00ff88' : '#ff4444'} border={stats.winRate >= 50 ? '#00ff8833' : '#ff444433'} />
-          <StatBox label="TOTAL SIGNALS"   value={stats.total + stats.pending} sub={`${stats.pending} pending`} color="#e8e8f0" />
-          <StatBox label="AVG RETURN"      value={fmtPct(stats.avgOutcomePct)} color={stats.avgOutcomePct >= 0 ? '#00ff88' : '#ff4444'} />
+          <StatBox label="TOTAL SCANS"     value={stats.total + (stats.pending||0)} sub={`${stats.pending||0} pending`} color="#e8e8f0" />
+          <StatBox label="WIN RATE"        value={stats.winRate != null ? `${stats.winRate}%` : '—'} sub={`${stats.wins||0}W · ${stats.losses||0}L`} color={stats.winRate >= 50 ? '#00ff88' : '#ff4444'} border={stats.winRate >= 50 ? '#00ff8833' : '#ff444433'} />
+          <StatBox label="AVG RETURN"      value={fmtPct(stats.avgOutcomePct)} color={(stats.avgOutcomePct||0) >= 0 ? '#00ff88' : '#ff4444'} />
           <StatBox label="70%+ CONF RATE"  value={stats.highConfWinRate != null ? `${stats.highConfWinRate}%` : '—'} sub={`${stats.highConfTotal} trades`} color={stats.highConfWinRate >= 60 ? '#00ff88' : '#ffaa00'} border="#ffaa0033" />
           {stats.bySignal?.BUY?.total > 0 && (
             <StatBox label="BUY ACCURACY"  value={`${Math.round(stats.bySignal.BUY.wins / stats.bySignal.BUY.total * 100)}%`} sub={`${stats.bySignal.BUY.total} signals`} color="#00ff88" border="#00ff8833" />
