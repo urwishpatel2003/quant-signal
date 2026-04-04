@@ -3060,11 +3060,18 @@ const TIINGO_TOKEN = process.env.TIINGO_TOKEN || '';
 async function tiingoGet(path) {
   if (!TIINGO_TOKEN) return null;
   try {
-    return await httpsGet('api.tiingo.com', path, {
+    // Add token as query param (Tiingo requires this in addition to header)
+    const sep      = path.includes('?') ? '&' : '?';
+    const fullPath = `${path}${sep}token=${TIINGO_TOKEN}`;
+    const data = await httpsGet('api.tiingo.com', fullPath, {
       'Content-Type':  'application/json',
       'Authorization': `Token ${TIINGO_TOKEN}`,
     });
-  } catch (e) { console.warn('[tiingo]', e.message); return null; }
+    return data;
+  } catch (e) {
+    console.warn('[tiingo]', path.split('?')[0], e.message);
+    return null;
+  }
 }
 
 app.get('/tiingo/:ticker/history', async (req, res) => {
@@ -3136,17 +3143,27 @@ app.post('/backtest/run', async (req, res) => {
 
 async function runBacktest(tickers, startDate, endDate, market) {
   const results = [];
-  // Fetch SPY as market regime indicator
+  // Fetch SPY as market regime indicator via Tradier
   let spyPrices = [];
   try {
-    const spyData = await tiingoGet(`/tiingo/daily/SPY/prices?startDate=${startDate}&endDate=${endDate}&resampleFreq=daily&sort=date`);
-    spyPrices = spyData || [];
-  } catch {}
+    const spyData = await tradierGet(`/v1/markets/history?symbol=SPY&interval=daily&start=${startDate}&end=${endDate}`);
+    spyPrices = (spyData?.history?.day || []).map(b => ({
+      date: b.date, adjClose: b.close, close: b.close, volume: b.volume,
+    }));
+    console.log(`[backtest] SPY: got ${spyPrices.length} days`);
+  } catch (e) { console.warn('[backtest] SPY fetch:', e.message); }
 
   for (const ticker of tickers) {
     try {
-      const prices = await tiingoGet(`/tiingo/daily/${ticker}/prices?startDate=${startDate}&endDate=${endDate}&resampleFreq=daily&sort=date`);
-      if (!prices?.length || prices.length < 60) continue;
+      const tradierHist = await tradierGet(`/v1/markets/history?symbol=${ticker}&interval=daily&start=${startDate}&end=${endDate}`);
+      const prices = (tradierHist?.history?.day || []).map(b => ({
+        date: b.date, adjClose: b.close, close: b.close, volume: b.volume,
+      }));
+      console.log(`[backtest] ${ticker}: got ${prices.length} days`);
+      if (prices.length < 60) {
+        console.warn(`[backtest] ${ticker}: insufficient data (${prices.length} days), skipping`);
+        continue;
+      }
       // Use Finnhub for fundamentals (already integrated, free, returns XBRL data)
       let quarters = [];
       try {
