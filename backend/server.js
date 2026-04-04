@@ -1030,8 +1030,11 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
     // ── Step 1: Compute signal deterministically ────────────────────────────────
-    // Load optimized weights from backtest (cached, non-blocking)
-    const optimizedWeights = await getSignalWeights().catch(() => null);
+    // Load optimized weights from backtest (with timeout to never block scan)
+    const optimizedWeights = await Promise.race([
+      getSignalWeights().catch(() => null),
+      new Promise(r => setTimeout(() => r(null), 500)),
+    ]);
 
     const computed = computeSignal({
       ohlcv, ta, fundamentals, financials, enhanced,
@@ -2928,7 +2931,13 @@ app.get('/tiingo/:ticker/fundamentals', async (req, res) => {
 
 async function getSignalWeights() {
   try {
-    const { data } = await supabase.from('signal_weights').select('*').order('created_at', { ascending: false }).limit(1).single();
+    const { data, error } = await supabase
+      .from('signal_weights')
+      .select('weights')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();  // maybeSingle returns null instead of error when no rows
+    if (error) return null;
     return data?.weights || null;
   } catch { return null; }
 }
