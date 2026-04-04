@@ -560,7 +560,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
 }
 
 // ── Sim Modal ──────────────────────────────────────────────────────────────────
-function SimModal({ scan, livePrice, currency, market, onConfirm, onClose, availableBalance }) {
+function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, onClose, availableBalance }) {
+  const currency  = currencyProp || (market === 'INDIA' ? '₹' : '$');
   const isIndia   = currency === '₹';
   // Direction locked to signal — BUY=LONG, SELL=SHORT, HOLD=LONG
   const direction = scan.analysis?.signal === 'SELL' ? 'SHORT' : 'LONG';
