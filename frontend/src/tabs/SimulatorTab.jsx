@@ -21,7 +21,7 @@ function fmtCurrency(n, sym = '$', isInr = false) {
   return `${n < 0 ? '-' : ''}${sym}${s}`;
 }
 
-function PnlBadge({ value, pct, size = 'sm' }) {
+function PnlBadge({ value, pct, size = 'sm', currency = '$', isInr = false }) {
   if (value == null) return <span style={{ color: '#445' }}>—</span>;
   const pos  = value >= 0;
   const col  = pos ? '#00ff88' : '#ff4444';
