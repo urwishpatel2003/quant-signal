@@ -1485,7 +1485,7 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     // Load optimized weights + market regime in parallel (both non-blocking)
     const [optimizedWeights, regime] = await Promise.all([
       Promise.race([
-        (async () => { try { return await getSignalWeights(); } catch { return null; } })(),
+        (async () => { return null; /* backtest weights disabled — using defaultWeights */ })(),
         new Promise(r => setTimeout(() => r(null), 500))
       ]),
       market === 'US' ? Promise.race([detectMarketRegime().catch(() => null), new Promise(r => setTimeout(() => r(null), 2000))]) : Promise.resolve(null),
@@ -4110,6 +4110,7 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
@@ -4119,12 +4120,10 @@ app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
   setTimeout(async () => {
     try {
       const existing = await getSignalWeights();
-      // Always re-run backtest on deploy to keep weights fresh
-      console.log('[backtest] Running backtest to optimize signal weights...');
-      const endDate = new Date().toISOString().split('T')[0];
-      runBacktest(DEFAULT_BACKTEST_TICKERS, '2020-01-01', endDate, 'US')
-        .then(r => console.log('[backtest] Complete:', r.summary))
-        .catch(e => console.error('[backtest] Error:', e.message));
+      // Backtest disabled — 2020-2025 dataset produces negative factor correlations
+      // due to anomalous macro conditions (COVID, ZIRP, rate hikes, AI mania)
+      // Will re-enable once we have 6+ months of real signal accuracy data
+      console.log('[backtest] Auto-backtest disabled — using theory-based default weights');
     } catch (e) {
       console.warn('[backtest] Auto-start check failed:', e.message);
     }
