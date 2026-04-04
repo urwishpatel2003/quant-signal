@@ -99,7 +99,7 @@ async function saveSignalHistory(userId, ticker, market, analysis, livePrice, tf
 
 export function useScan(macro, userId = null) {
   const [ticker,       setTicker]       = useState('');
-  const [timeframe,    setTimeframe]    = useState('swing');
+  const [timeframe,    setTimeframe]    = useState('longterm');
   const [loading,      setLoading]      = useState(false);
   const [stage,        setStage]        = useState('');
   const [error,        setError]        = useState('');

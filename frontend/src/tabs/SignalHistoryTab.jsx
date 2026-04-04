@@ -59,13 +59,17 @@ export default function SignalHistoryTab({ market = 'US' }) {
     setChecking(false);
   };
 
-  // Reload when tab becomes visible (catches scans done while on other tabs)
+  // Reload when tab becomes visible + auto-refresh every 30s
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
     load();
     const onFocus = () => load();
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    const interval = setInterval(load, 30000); // refresh every 30s
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
   }, [isLoaded, user?.id, market]);
 
   if (!isLoaded || loading) return (

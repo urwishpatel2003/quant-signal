@@ -57,9 +57,10 @@ function fmtPrice(p, currency = '$') {
 }
 
 export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlist, onAddToSim, getSimBalance, market = 'US' }) {
-  const { user } = useUser();
+  // Derive currency FIRST — used throughout JSX
   const isIndia  = market === 'INDIA';
   const currency = isIndia ? '₹' : '$';
+  const { user } = useUser();
 
   const [inputVal,     setInputVal]     = useState('');
   const [suggestions,  setSuggestions]  = useState([]);
@@ -487,7 +488,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     const isActive  = scan.ticker === m.ticker;
                     const isUnusual = m.volVsAvg && m.volVsAvg >= 2;
                     return (
-                      <div key={m.ticker} onClick={() => handleScan(m.ticker, 'swing')}
+                      <div key={m.ticker} onClick={() => handleScan(m.ticker, 'longterm')}
                         style={{
                           display: 'flex', alignItems: 'center', padding: '9px 10px',
                           cursor: 'pointer', borderRadius: 2, gap: 8,
@@ -527,7 +528,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     const color    = isGainer ? '#00ff88' : '#ff4444';
                     const isActive = scan.ticker === m.ticker;
                     return (
-                      <div key={m.ticker} onClick={() => handleScan(m.ticker, 'swing')}
+                      <div key={m.ticker} onClick={() => handleScan(m.ticker, 'longterm')}
                         style={{
                           display: 'flex', alignItems: 'center', padding: '9px 10px',
                           cursor: 'pointer', borderRadius: 2, gap: 8,
