@@ -899,10 +899,41 @@ Return JSON: {"price":{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTar
 
 app.post('/api/analyze/price', async (req, res) => {
   try {
-    const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US' } = req.body;
+    const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials } = req.body;
     const isIndia = market === 'INDIA';
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const taCtx       = buildTAContext(ta, ticker, calendar);
+
+    // ── Quarterly financials context ──────────────────────────────────────────
+    let financialsCtx = '';
+    if (financials?.quarters?.length) {
+      const q = financials.quarters;
+      const fmt = (n, isMoney = true) => {
+        if (n == null) return 'N/A';
+        if (isIndia) {
+          if (Math.abs(n) >= 1e7) return `₹${(n/1e7).toFixed(1)}Cr`;
+          if (Math.abs(n) >= 1e5) return `₹${(n/1e5).toFixed(1)}L`;
+          return `₹${n.toFixed(0)}`;
+        }
+        if (Math.abs(n) >= 1e9) return `$${(n/1e9).toFixed(2)}B`;
+        if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`;
+        return isMoney ? `$${n.toFixed(0)}` : n.toFixed(2);
+      };
+      const latest = q[0];
+      const prev   = q[1];
+      const yoy    = financials.yoy || {};
+      const revenueGrowthQoQ = prev?.revenue && latest?.revenue
+        ? (((latest.revenue - prev.revenue) / Math.abs(prev.revenue)) * 100).toFixed(1)
+        : null;
+
+      financialsCtx = `QUARTERLY FINANCIALS (latest ${latest?.period || ''}):
+Revenue: ${fmt(latest?.revenue)} ${revenueGrowthQoQ != null ? `(${revenueGrowthQoQ > 0 ? '+' : ''}${revenueGrowthQoQ}% QoQ)` : ''} | YoY: ${yoy.revenueYoY != null ? `${yoy.revenueYoY > 0 ? '+' : ''}${yoy.revenueYoY.toFixed(1)}%` : 'N/A'}
+Net Income: ${fmt(latest?.netIncome)} | YoY: ${yoy.netIncomeYoY != null ? `${yoy.netIncomeYoY > 0 ? '+' : ''}${yoy.netIncomeYoY.toFixed(1)}%` : 'N/A'}
+Net Margin: ${latest?.netMargin != null ? `${latest.netMargin.toFixed(1)}%` : 'N/A'} (prev: ${prev?.netMargin != null ? `${prev.netMargin.toFixed(1)}%` : 'N/A'})
+EPS: ${latest?.epsDiluted != null ? fmt(latest.epsDiluted, false) : 'N/A'} | YoY: ${yoy.epsYoY != null ? `${yoy.epsYoY > 0 ? '+' : ''}${yoy.epsYoY.toFixed(1)}%` : 'N/A'}
+${financials.epsHistory?.length ? `EPS BEAT/MISS: ${financials.epsHistory.slice(0,3).map(e => e.beat != null ? (e.beat ? '✓BEAT' : '✗MISS') + (e.surprisePct != null ? `(${e.surprisePct > 0 ? '+' : ''}${e.surprisePct}%)` : '') : '?').join(' | ')}` : ''}
+Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
+    }
     const categorized = categorizeNews(news).slice(0, 8);
     const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
     const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
@@ -987,14 +1018,18 @@ SIGNAL DISCIPLINE:
 - Never assign 75% confidence without explicitly identifying what justifies that level.
 
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
-      messages: [{ role: 'user', content: `${ticker} @ $${price?.toFixed(2)} | ${tf.label}
+      messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | ${tf.label}
 ${dayChangePct ? `TODAY: ${parseFloat(dayChangePct) >= 0 ? '+' : ''}${dayChangePct}% | prev close $${prevClose?.toFixed(2)}` : ''}
 PRICE (${closes?.length} closes): ${JSON.stringify(closes)}
 KEY INDICATORS: ${tf.indicators}
 ${taCtx}
-FUNDAMENTALS: P/E=${fundamentals?.pe} | EPS=$${fundamentals?.eps?.toFixed(2)} | Beta=${fundamentals?.beta} | 52W High=$${fundamentals?.fiftyTwoWeekHigh} | 52W Low=$${fundamentals?.fiftyTwoWeekLow} | Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey} | ROE=${fundamentals?.roe ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'}
-${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS SENTIMENT: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%` : ''}
+FUNDAMENTALS: P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'} | 52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'} | Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey ?? 'N/A'} | ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'} | Analysts=${fundamentals?.numberOfAnalystOpinions ?? 'N/A'}
+${financialsCtx ? financialsCtx : 'QUARTERLY FINANCIALS: Not available'}
+${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS SENTIMENT: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%` : isIndia ? `INDIA MARKET: FII/DII flows and RBI policy context applied | NSE-listed stock` : ''}
 ${hasUpgrade?'🟢 ANALYST UPGRADE':''}${hasDowngrade?'🔴 ANALYST DOWNGRADE':''}${hasFund?'🏦 INSTITUTIONAL ACTIVITY':''}${hasShort?'⚠ SHORT ATTACK':''}${hasEarnings?'📊 EARNINGS NEWS':''}
+${fundamentals?.revenueGrowth != null ? `REVENUE GROWTH (YoY): ${(fundamentals.revenueGrowth*100).toFixed(1)}%` : ''}
+${fundamentals?.debtToEquity != null ? `DEBT/EQUITY: ${fundamentals.debtToEquity.toFixed(2)}` : ''}
+CONFIDENCE REQUIREMENT: Only give BUY >70% if revenue growing + margins stable/improving + technical trend aligned. Otherwise HOLD.
 NEWS: ${categorized.slice(0,6).join(' | ')}
 ${macroCtx}
 Return JSON only.` }]
