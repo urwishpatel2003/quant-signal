@@ -46,6 +46,37 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
 }
 
 // ── Sim Modal ──────────────────────────────────────────────────────────────────
+// Unified action button — consistent height, padding, font across all buttons
+function ActionBtn({ onClick, disabled, color = '#b0c0dd', children, title }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        height:        34,
+        padding:       '0 12px',
+        borderRadius:  5,
+        border:        `1px solid ${color}44`,
+        background:    `${color}11`,
+        color:         color,
+        fontFamily:    'inherit',
+        fontSize:      11,
+        fontWeight:    700,
+        letterSpacing: '0.08em',
+        cursor:        disabled ? 'not-allowed' : 'pointer',
+        opacity:       disabled ? 0.5 : 1,
+        whiteSpace:    'nowrap',
+        display:       'flex',
+        alignItems:    'center',
+        transition:    'all 0.15s',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function ScannerResults({ scan, macro, onBack, onOpenOptions, currency = '$', market = 'US', companyName = '', onAddToWatchlist, onAddToSim }) {
   const [activeId, setActiveId] = useState('ticker');
 
@@ -91,64 +122,43 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a40'; e.currentTarget.style.color = '#b0c0dd'; }}
         >← BACK TO SCANNER</button>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {!isIndia && (
-            <button className="btn-sm" style={{ color: '#ffaa00', borderColor: '#ffaa0044' }}
-              onClick={() => onOpenOptions(scan.ticker)}>
+            <ActionBtn
+              onClick={() => onOpenOptions(scan.ticker)}
+              color="#ffaa00">
               ⚡ OPTIONS
-            </button>
+            </ActionBtn>
           )}
           {onAddToWatchlist && (
-            <button
-              className="btn-sm"
+            <ActionBtn
               onClick={handleAddToWatchlist}
               disabled={watchlistAdded || watchlistLoading}
-              style={{
-                color:       watchlistAdded ? '#00ff88' : '#b0c0dd',
-                borderColor: watchlistAdded ? '#00ff8844' : '#3a3a5e',
-                background:  watchlistAdded ? '#00ff8811' : '#1a1a2e',
-                opacity:     watchlistLoading ? 0.6 : 1,
-              }}>
+              color={watchlistAdded ? '#00ff88' : '#b0c0dd'}
+              activeColor="#00ff88">
               {watchlistAdded ? '✓ WATCHLIST' : watchlistLoading ? '...' : '+ WATCHLIST'}
-            </button>
+            </ActionBtn>
           )}
           {onAddToSim && (() => {
-            const conf       = scan.analysis?.confidence || 0;
-            const highConf   = conf >= 65;
-            const tooltip    = !highConf ? `Confidence too low (${conf}%) — need 65%+ to simulate` : '';
+            const conf     = scan.analysis?.confidence || 0;
+            const canSim   = conf >= 65;
+            const label    = simAdded ? '✓ SIMULATING' : canSim ? '📊 SIMULATE' : `📊 ${conf}%`;
+            const tip      = !canSim ? `Need 65%+ confidence (current: ${conf}%)` : '';
             return (
-              <div title={tooltip} style={{ position: 'relative' }}>
-                <button
-                  className="btn-sm"
-                  onClick={() => highConf && !simAdded && setShowSimModal(true)}
-                  disabled={simAdded || !highConf}
-                  style={{
-                    color:       simAdded ? '#00ff88' : highConf ? '#aa66ff' : '#445566',
-                    borderColor: simAdded ? '#00ff8844' : highConf ? '#aa66ff44' : '#2a2a3e',
-                    background:  simAdded ? '#00ff8811' : highConf ? '#aa66ff11' : '#0a0a14',
-                    opacity:     !highConf ? 0.5 : 1,
-                    cursor:      !highConf ? 'not-allowed' : 'pointer',
-                  }}>
-                  {simAdded ? '✓ IN SIMULATOR' : highConf ? '📊 SIMULATE' : `📊 ${conf}% CONF`}
-                </button>
-                {!highConf && !simAdded && (
-                  <div style={{
-                    fontSize: 9, color: '#556677', marginTop: 3,
-                    textAlign: 'center', letterSpacing: '0.05em',
-                  }}>
-                    65%+ required
-                  </div>
-                )}
-              </div>
+              <ActionBtn
+                onClick={() => canSim && !simAdded && setShowSimModal(true)}
+                disabled={simAdded || !canSim}
+                color={simAdded ? '#00ff88' : canSim ? '#aa66ff' : '#445566'}
+                title={tip}>
+                {label}
+              </ActionBtn>
             );
           })()}
-          {/* Share button */}
-          <button
-            className="btn-sm"
+          <ActionBtn
             onClick={() => setShowShareModal(true)}
-            style={{ color: '#ffaa00', borderColor: '#ffaa0044', background: '#ffaa0011' }}>
+            color="#ffaa00">
             📤 SHARE
-          </button>
+          </ActionBtn>
         </div>
       </div>
 
