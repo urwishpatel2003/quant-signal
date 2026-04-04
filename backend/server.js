@@ -1145,242 +1145,187 @@ app.get('/regime', async (req, res) => {
 });
 
 // ─── QuAInt Signal Engine — Deterministic ───────────────────────────────────
-function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null, regime = null }) {
+function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null, regime = null, bonds = null }) {
   const isIndia = market === 'INDIA';
   const scores  = {};
   const debug   = {};
 
+  const tfConfig = {
+    short:    { regimeWeight: 0.3,  newsDecay: 1.0, fundamentalRelevance: 0.3 },
+    swing:    { regimeWeight: 0.5,  newsDecay: 0.7, fundamentalRelevance: 0.6 },
+    position: { regimeWeight: 0.7,  newsDecay: 0.4, fundamentalRelevance: 0.9 },
+    longterm: { regimeWeight: 0.9,  newsDecay: 0.1, fundamentalRelevance: 1.0 },
+  };
+  const tf = tfConfig[timeframeKey] || tfConfig.swing;
+
+  // 1. MOMENTUM — timeframe-scaled lookbacks
   const closes = ohlcv?.close?.filter(c => c != null) || [];
   const cur    = closes[closes.length - 1];
-  const sma20  = ta?.sma20;
-  const sma50  = ta?.sma50;
-  const sma200 = ta?.sma200;
+  const lbMap  = { short:[5,10], swing:[10,20], position:[20,60], longterm:[60,120] };
+  const [lb1, lb2] = lbMap[timeframeKey] || [20,60];
+  const p1 = closes.length > lb1 ? closes[closes.length-lb1-1] : null;
+  const p2 = closes.length > lb2 ? closes[closes.length-lb2-1] : null;
+  let mScore = 0;
+  if (p1 && cur) { const r=(cur-p1)/p1*100; mScore+=r>5?1:r>2?.6:r>0?.2:r>-2?-.2:r>-5?-.6:-1; debug.ret_short=r.toFixed(1)+'%'; }
+  if (p2 && cur) { const r=(cur-p2)/p2*100; mScore+=r>10?.5:r>3?.3:r>-3?0:r>-10?-.3:-.5; debug.ret_long=r.toFixed(1)+'%'; }
+  scores.momentum = Math.max(-1, Math.min(1, mScore));
 
-  // Regime detection — drives all scoring logic
-  const aboveSma200    = cur && sma200 && cur > sma200;
-  const goldenCross    = sma50 && sma200 && sma50 > sma200;
-  const strongUptrend  = aboveSma200 && goldenCross && cur > sma50;
-  const bearRegime     = cur && sma200 && cur < sma200 * 0.97;
+  // 2. TREND
+  const sma20=ta?.sma20, sma50=ta?.sma50, sma200=ta?.sma200;
+  let tScore=0;
+  if (cur&&sma20)  tScore+=cur>sma20  ?.4:-.4;
+  if (cur&&sma50)  tScore+=cur>sma50  ?.3:-.3;
+  if (cur&&sma200) tScore+=cur>sma200 ?.3:-.3;
+  if (sma20&&sma50&&sma20>sma50) tScore+=.2;
+  scores.trend=Math.max(-1,Math.min(1,tScore));
 
-  // ── 1. TREND MOMENTUM (pure trend-following — backtest confirmed works) ──────
-  // Core insight: in modern markets, what's going up keeps going up
-  let trendScore = 0;
-  // Price vs SMAs — being above = bullish, below = bearish
-  if (cur && sma20)  trendScore += cur > sma20  ? 0.3 : -0.3;
-  if (cur && sma50)  trendScore += cur > sma50  ? 0.3 : -0.3;
-  if (cur && sma200) trendScore += cur > sma200 ? 0.4 : -0.4;
-  // SMA alignment bonus
-  if (sma20 && sma50 && sma50 && sma200) {
-    if (sma20 > sma50 && sma50 > sma200) trendScore += 0.3;  // full alignment = strong bull
-    if (sma20 < sma50 && sma50 < sma200) trendScore -= 0.3;  // full alignment = strong bear
-  }
-  scores.trend = Math.max(-1, Math.min(1, trendScore));
-  debug.trend = strongUptrend ? 'STRONG_UP' : bearRegime ? 'BEAR' : 'MIXED';
-
-  // ── 2. PRICE MOMENTUM (3M and 6M — trend continuation) ──────────────────────
-  const mo6m = closes.length >= 120 ? closes[closes.length - 121] : null;
-  const mo3m = closes.length >= 60  ? closes[closes.length - 61]  : null;
-  const mo1m = closes.length >= 20  ? closes[closes.length - 21]  : null;
-  let momentumScore = 0;
-  // 6-month momentum — strongest predictor of continuation
-  if (mo6m && cur) {
-    const r = (cur - mo6m) / mo6m;
-    momentumScore += r > 0.20 ? 0.8 : r > 0.10 ? 0.5 : r > 0 ? 0.2 : r > -0.10 ? -0.2 : r > -0.20 ? -0.5 : -0.8;
-    debug.ret6m = (r*100).toFixed(1)+'%';
-  }
-  // 3-month momentum
-  if (mo3m && cur) {
-    const r = (cur - mo3m) / mo3m;
-    momentumScore += r > 0.10 ? 0.4 : r > 0.03 ? 0.2 : r > -0.03 ? 0 : r > -0.10 ? -0.2 : -0.4;
-    debug.ret3m = (r*100).toFixed(1)+'%';
-  }
-  // 1-month — short term, lower weight
-  if (mo1m && cur) {
-    const r = (cur - mo1m) / mo1m;
-    momentumScore += r > 0.05 ? 0.2 : r < -0.05 ? -0.2 : 0;
-  }
-  scores.momentum = Math.max(-1, Math.min(1, momentumScore));
-
-  // ── 3. RSI — trend-following interpretation (NOT mean-reversion) ─────────────
-  // Backtest confirmed: oversold = keeps falling, overbought = keeps rising
-  const rsi = parseFloat(ta?.rsi14);
-  let rsiScore = 0;
+  // 3. RSI — regime-aware
+  const rsi=parseFloat(ta?.rsi14);
+  const inBearRegime=(regime?.regime==='BEAR'||regime?.regime==='STRONG_BEAR')||(sma200&&cur&&cur<sma200*.97);
+  const inStrongBull=(regime?.regime==='STRONG_BULL')||(sma50&&sma200&&sma50>sma200&&cur>sma50);
+  let rsiScore=0;
   if (!isNaN(rsi)) {
-    if (strongUptrend) {
-      // In uptrend: high RSI = momentum confirmation, not overbought warning
-      rsiScore = rsi > 60 ? 0.6 : rsi > 50 ? 0.3 : rsi > 40 ? 0.0 : rsi > 30 ? -0.3 : -0.6;
-    } else if (bearRegime) {
-      // In downtrend: low RSI = weakness continuation, high RSI = brief bounce only
-      rsiScore = rsi < 30 ? -0.6 : rsi < 40 ? -0.3 : rsi < 50 ? -0.1 : rsi < 60 ? 0.2 : 0.3;
-    } else {
-      // Neutral: mild trend-following
-      rsiScore = rsi > 55 ? 0.3 : rsi > 45 ? 0.0 : rsi < 35 ? -0.3 : 0;
-    }
-    debug.rsi = rsi;
+    if (inBearRegime)  rsiScore=rsi<30?-.3:rsi<40?-.1:rsi<55?.1:rsi<70?.4:.2;
+    else if (inStrongBull) rsiScore=rsi<35?.8:rsi<50?.4:rsi<70?.1:rsi<80?-.1:-.4;
+    else rsiScore=rsi<25?1:rsi<35?.7:rsi<45?.3:rsi<55?0:rsi<65?-.1:rsi<75?-.4:-.7;
+    debug.rsi=rsi;
   }
-  scores.rsi = rsiScore;
+  scores.rsi=rsiScore;
 
-  // ── 4. MACD — use as trend filter only, not signal ───────────────────────────
-  // MACD cross is lagging — use trend direction only
-  const macdTrend = ta?.macd?.trend;
-  const macdCross = ta?.macd?.cross;
-  scores.macd = macdTrend === 'BULLISH' ? 0.4 : macdTrend === 'BEARISH' ? -0.4 : 0;
-  // Cross adds weight but don't rely on it alone
-  if (macdCross === 'BULLISH_CROSS' && !bearRegime) scores.macd = Math.min(1, scores.macd + 0.3);
-  if (macdCross === 'BEARISH_CROSS') scores.macd = Math.max(-1, scores.macd - 0.3);
+  // 4. MACD
+  const mc=ta?.macd?.cross, mt=ta?.macd?.trend;
+  scores.macd=mc==='BULLISH_CROSS'?.8:mc==='BEARISH_CROSS'?-.8:mt==='BULLISH'?.3:mt==='BEARISH'?-.3:0;
 
-  // ── 5. VOLUME — confirms trend direction ──────────────────────────────────────
-  const volRatio = parseFloat(ta?.volumeRatio);
-  let volumeScore = 0;
-  if (!isNaN(volRatio) && closes.length >= 2) {
-    const priceUp = closes[closes.length-1] > closes[closes.length-2];
-    // High volume on up day = institutional buying = bullish
-    // High volume on down day = distribution = bearish
-    volumeScore = volRatio > 2.0 && priceUp  ?  0.8
-                : volRatio > 1.5 && priceUp  ?  0.4
-                : volRatio > 2.0 && !priceUp ? -0.8
-                : volRatio > 1.5 && !priceUp ? -0.4
-                : volRatio < 0.5             ? -0.1  // drying up
-                : 0;
-  }
-  scores.volume = volumeScore;
+  // 5. VOLUME
+  const vr=parseFloat(ta?.volumeRatio);
+  const priceUp=closes.length>=2?closes[closes.length-1]>closes[closes.length-2]:null;
+  scores.volume=isNaN(vr)?0:vr>1.5&&priceUp===true?.7:vr>1.5&&priceUp===false?-.7:vr>1?.2:vr<.7?-.2:0;
 
-  // ── 6. REVENUE GROWTH ─────────────────────────────────────────────────────────
-  const revenueYoY = financials?.yoy?.revenueYoY;
-  const revGrowthF = fundamentals?.revenueGrowth;
-  const revGrowth  = revenueYoY ?? (revGrowthF != null ? revGrowthF * 100 : null);
-  scores.revenue = revGrowth == null ? 0
-    : revGrowth > 30 ? 1.0 : revGrowth > 15 ? 0.7 : revGrowth > 5 ? 0.4
-    : revGrowth > -5 ? 0.0 : revGrowth > -15 ? -0.5 : -1.0;
-  debug.revGrowth = revGrowth != null ? revGrowth.toFixed(1)+'%' : 'N/A';
+  // 6. REVENUE — timeframe-scaled
+  const revYoY=financials?.yoy?.revenueYoY??(fundamentals?.revenueGrowth!=null?fundamentals.revenueGrowth*100:null);
+  const q=financials?.quarters;
+  const revQoQ=(q?.length>=2&&q[0]?.revenue&&q[1]?.revenue)?((q[0].revenue-q[1].revenue)/Math.abs(q[1].revenue)*100):null;
+  const revInput=(timeframeKey==='short'||timeframeKey==='swing')?(revQoQ??revYoY):revYoY;
+  const thresholds=(timeframeKey==='short'||timeframeKey==='swing')?[15,5,-5,-15]:[25,10,-10,-25];
+  scores.revenue=revInput==null?0:revInput>thresholds[0]?(timeframeKey==='longterm'?1:.8):revInput>thresholds[1]?(timeframeKey==='longterm'?.6:.4):revInput>thresholds[2]?0:revInput>thresholds[3]?-.4:-.8;
+  debug.revYoY=revYoY?.toFixed(1)+'%'; debug.revQoQ=revQoQ?.toFixed(1)+'%';
 
-  // ── 7. EARNINGS QUALITY ───────────────────────────────────────────────────────
-  const niYoY  = financials?.yoy?.netIncomeYoY;
-  const epsYoY = financials?.yoy?.epsYoY;
-  const roe    = fundamentals?.roe;
-  let qScore = 0, qCount = 0;
-  if (niYoY  != null) { qScore += niYoY  > 20 ? 0.5 : niYoY  > 0 ? 0.2 : niYoY  > -20 ? -0.2 : -0.5; qCount++; }
-  if (epsYoY != null) { qScore += epsYoY > 20 ? 0.3 : epsYoY > 0 ? 0.1 : -0.2; qCount++; }
-  if (roe    != null) { qScore += roe > 0.2 ? 0.3 : roe > 0.1 ? 0.1 : roe > 0 ? 0 : -0.3; qCount++; }
-  const epsHistory = financials?.epsHistory || [];
-  const beats  = epsHistory.slice(0,3).filter(e=>e.beat===true).length;
-  const misses = epsHistory.slice(0,3).filter(e=>e.beat===false).length;
-  if (epsHistory.length >= 2) { qScore += beats >= 2 ? 0.3 : misses >= 2 ? -0.3 : 0; qCount++; }
-  scores.quality = qCount > 0 ? Math.max(-1, Math.min(1, qScore / Math.max(qCount*0.5,1))) : 0;
+  // 7. EARNINGS QUALITY
+  const niYoY=financials?.yoy?.netIncomeYoY, epsYoY=financials?.yoy?.epsYoY, roe=fundamentals?.roe;
+  let qScore=0, qCount=0;
+  if (niYoY!=null){qScore+=niYoY>20?.5:niYoY>0?.2:niYoY>-20?-.2:-.5;qCount++;}
+  if (epsYoY!=null){qScore+=epsYoY>20?.3:epsYoY>0?.1:-.2;qCount++;}
+  if (roe!=null){qScore+=roe>.2?.3:roe>.1?.1:roe>0?0:-.3;qCount++;}
+  const epsHist=financials?.epsHistory||[];
+  const beats=epsHist.slice(0,3).filter(e=>e.beat===true).length;
+  const misses=epsHist.slice(0,3).filter(e=>e.beat===false).length;
+  if (epsHist.length>=2){qScore+=beats>=2?.3:misses>=2?-.3:0;qCount++;debug.epsBeat=beats+'B/'+misses+'M';}
+  scores.quality=qCount>0?Math.max(-1,Math.min(1,qScore/Math.max(qCount*.5,1))):0;
 
-  // ── 8. ANALYST CONSENSUS ──────────────────────────────────────────────────────
-  const rec = fundamentals?.recommendationKey?.toLowerCase();
-  const targetPrice = fundamentals?.targetMeanPrice;
-  let aScore = rec === 'strong_buy' ? 1.0 : rec === 'buy' ? 0.6 : rec === 'hold' ? 0.0
-             : rec === 'underperform' ? -0.6 : rec === 'sell' ? -1.0 : 0;
-  if (targetPrice && cur) {
-    const upside = (targetPrice - cur) / cur;
-    aScore += upside > 0.25 ? 0.4 : upside > 0.10 ? 0.2 : upside > 0 ? 0.0 : upside > -0.10 ? -0.1 : -0.3;
-  }
-  scores.analyst = Math.max(-1, Math.min(1, aScore));
+  // 8. ANALYST
+  const rec=fundamentals?.recommendationKey?.toLowerCase(), tp=fundamentals?.targetMeanPrice;
+  let aScore=rec==='strong_buy'?1:rec==='buy'?.6:rec==='hold'?0:rec==='underperform'?-.6:rec==='sell'?-1:0;
+  if (tp&&cur){const up=(tp-cur)/cur;aScore+=up>.25?.4:up>.1?.2:up>-.1?0:up>-.25?-.2:-.4;debug.upside=(up*100).toFixed(1)+'%';}
+  scores.analyst=Math.max(-1,Math.min(1,aScore));
 
-  // ── 9. MACRO / ENHANCED ───────────────────────────────────────────────────────
-  let macroScore = 0;
-  // 52-week position — near highs = strong momentum, near lows = weak
-  const hi52 = fundamentals?.fiftyTwoWeekHigh, lo52 = fundamentals?.fiftyTwoWeekLow;
-  if (hi52 && lo52 && cur && hi52 > lo52) {
-    const pos = (cur - lo52) / (hi52 - lo52);
-    macroScore += pos > 0.80 ? 0.6 : pos > 0.60 ? 0.3 : pos > 0.40 ? 0 : pos > 0.20 ? -0.3 : -0.6;
-    debug['52wPos'] = (pos*100).toFixed(0)+'%';
-  }
+  // 9. MACRO — properly integrated
+  let macroScore=0;
+  const hi52=fundamentals?.fiftyTwoWeekHigh, lo52=fundamentals?.fiftyTwoWeekLow;
+  if (hi52&&lo52&&cur){const pos=(cur-lo52)/(hi52-lo52);macroScore+=pos>.8?.3:pos>.5?.1:pos<.2?-.3:-.1;}
+  if (bonds?.tenYear!=null){const y=parseFloat(bonds.tenYear);if(!isNaN(y)){macroScore+=y>5?-.4:y>4.5?-.2:y<3?.3:0;debug.yield10y=y;}}
+  if (regime){macroScore+=regime.compositeScore*.4*tf.regimeWeight;debug.regime=regime.regime;debug.regimeScore=regime.compositeScore;}
   if (isIndia) {
-    if (enhanced?.fiiDii?.fiiNetBuy != null) macroScore += enhanced.fiiDii.fiiNetBuy > 0 ? 0.3 : -0.3;
-    if (enhanced?.shareholding?.promoter) { const p = parseFloat(enhanced.shareholding.promoter); macroScore += p>60?0.2:p<25?-0.2:0; }
-    if (enhanced?.delivery?.deliveryPct)  { const d = parseFloat(enhanced.delivery.deliveryPct);  macroScore += d>60?0.2:d<25?-0.2:0; }
+    if (enhanced?.fiiDii?.fiiNetBuy!=null) macroScore+=enhanced.fiiDii.fiiNetBuy>500?.3:enhanced.fiiDii.fiiNetBuy>0?.1:enhanced.fiiDii.fiiNetBuy<-500?-.3:-.1;
+    if (enhanced?.shareholding?.promoter){const p=parseFloat(enhanced.shareholding.promoter);macroScore+=p>60?.2:p<25?-.2:0;if(enhanced.shareholding.promoterChange>1)macroScore+=.2;else if(enhanced.shareholding.promoterChange<-1)macroScore-=.2;}
+    if (enhanced?.delivery?.deliveryPct){const d=parseFloat(enhanced.delivery.deliveryPct);macroScore+=d>60?.2:d<25?-.2:0;}
   } else {
-    if (enhanced?.shortInterest?.shortPct > 20 && scores.momentum > 0) macroScore += 0.3;
-    if (enhanced?.insiderSummary) {
-      const {buys=0, sells=0} = enhanced.insiderSummary;
-      macroScore += buys > sells+2 ? 0.3 : sells > buys+2 ? -0.3 : 0;
-    }
+    if (enhanced?.shortInterest?.shortPct>20&&scores.momentum>0) macroScore+=.2;
+    if (enhanced?.insiderSummary){const{buys,sells}=enhanced.insiderSummary;macroScore+=buys>sells+2?.3:sells>buys+2?-.3:0;}
+    if (enhanced?.institutionalOwnership?.topHolders){const nb=enhanced.institutionalOwnership.topHolders.filter(h=>h.change>0).length;const ns=enhanced.institutionalOwnership.topHolders.filter(h=>h.change<0).length;macroScore+=nb>ns+1?.2:ns>nb+1?-.2:0;}
   }
-  scores.macro = Math.max(-1, Math.min(1, macroScore));
+  scores.macro=Math.max(-1,Math.min(1,macroScore));
 
-  // ── CATALYST BONUS ────────────────────────────────────────────────────────────
-  const catNews = (news||[]).map(n=>typeof n==='string'?n:'');
-  let catalyst = 0;
-  if (catNews.some(n=>n.startsWith('[UPGRADE]')))      catalyst += 0.5;
-  if (catNews.some(n=>n.startsWith('[DOWNGRADE]')))    catalyst -= 0.5;
-  if (catNews.some(n=>n.startsWith('[SHORT ATTACK]'))) catalyst -= 0.4;
-  if (catNews.some(n=>n.startsWith('[INSIDER/FUND]'))) catalyst += 0.3;
-  scores.catalyst = Math.max(-0.5, Math.min(0.5, catalyst));
+  // 10. NEWS/CATALYST — severity + recency weighted
+  const catNews=(news||[]).map(n=>typeof n==='string'?n:'');
+  let catalyst=0;
+  if (catNews.some(n=>n.startsWith('[UPGRADE]')))      catalyst+=0.6*tf.newsDecay;
+  if (catNews.some(n=>n.startsWith('[DOWNGRADE]')))    catalyst-=0.6*tf.newsDecay;
+  if (catNews.some(n=>n.startsWith('[SHORT ATTACK]'))) catalyst-=0.8*tf.newsDecay;
+  if (catNews.some(n=>n.startsWith('[INSIDER/FUND]'))) catalyst+=0.4*tf.newsDecay;
+  if (catNews.some(n=>n.startsWith('[EARNINGS]'))&&epsHist.length>0) {
+    const last=epsHist[0];
+    if (last?.beat===true){const mag=last.surprisePct?Math.min(1,last.surprisePct/20):.3;catalyst+=(.5+mag*.5)*tf.newsDecay;}
+    else if (last?.beat===false){const mag=last.surprisePct?Math.min(1,Math.abs(last.surprisePct)/20):.3;catalyst-=(.5+mag*.5)*tf.newsDecay;}
+  }
+  if (revYoY!=null&&revYoY<-10) catalyst-=.4;
+  scores.catalyst=Math.max(-1,Math.min(1,catalyst));
 
-  // ── WEIGHTS ───────────────────────────────────────────────────────────────────
-  // Trend-following weights — technicals dominate short term, fundamentals long term
+  // REGIME SCORE ADJUSTMENTS
+  if (regime&&regime.regime!=='UNKNOWN') {
+    const r=regime.regime, rw=tf.regimeWeight;
+    const isBull=r==='BULL'||r==='STRONG_BULL', isBear=r==='BEAR'||r==='STRONG_BEAR';
+    if (isBull) scores.momentum=Math.min(1,scores.momentum+.15*rw);
+    if (isBear) scores.momentum=Math.max(-1,scores.momentum-.15*rw);
+    if ((r==='STRONG_BULL')&&scores.rsi<0) scores.rsi=scores.rsi*(1-.5*rw);
+    if ((r==='STRONG_BEAR'||r==='BEAR')&&scores.rsi>0) scores.rsi=scores.rsi*(1-.6*rw);
+    if (isBull&&scores.trend>0) scores.trend=Math.min(1,scores.trend*(1+.2*rw));
+    if (isBear&&scores.trend<0) scores.trend=Math.max(-1,scores.trend*(1+.2*rw));
+  }
+
+  // WEIGHTS
   const defaultWeights = {
-    short:    { trend:0.30, momentum:0.25, rsi:0.15, macd:0.10, volume:0.10, revenue:0.04, quality:0.02, analyst:0.02, macro:0.02 },
-    swing:    { trend:0.25, momentum:0.20, rsi:0.12, macd:0.10, volume:0.08, revenue:0.10, quality:0.06, analyst:0.06, macro:0.03 },
-    position: { trend:0.20, momentum:0.15, rsi:0.08, macd:0.07, volume:0.05, revenue:0.18, quality:0.12, analyst:0.10, macro:0.05 },
-    longterm: { trend:0.12, momentum:0.10, rsi:0.05, macd:0.05, volume:0.03, revenue:0.25, quality:0.18, analyst:0.16, macro:0.06 },
+    short:    {momentum:.25,trend:.18,rsi:.10,macd:.12,volume:.08,revenue:.05,quality:.03,analyst:.04,macro:.08,catalyst:.07},
+    swing:    {momentum:.18,trend:.13,rsi:.08,macd:.09,volume:.05,revenue:.12,quality:.08,analyst:.09,macro:.10,catalyst:.08},
+    position: {momentum:.12,trend:.08,rsi:.05,macd:.05,volume:.03,revenue:.20,quality:.13,analyst:.13,macro:.12,catalyst:.09},
+    longterm: {momentum:.07,trend:.04,rsi:.03,macd:.03,volume:.02,revenue:.25,quality:.18,analyst:.18,macro:.12,catalyst:.08},
   };
-  const weights = optimizedWeights || defaultWeights;
-  const w = weights[timeframeKey] || weights.swing;
+  const weights=optimizedWeights||defaultWeights;
+  const w=weights[timeframeKey]||weights.swing;
 
-  // ── TOTAL SCORE ───────────────────────────────────────────────────────────────
-  let total = 0;
-  total += (scores.trend    ||0) * w.trend;
-  total += (scores.momentum ||0) * w.momentum;
-  total += (scores.rsi      ||0) * w.rsi;
-  total += (scores.macd     ||0) * w.macd;
-  total += (scores.volume   ||0) * w.volume;
-  total += (scores.revenue  ||0) * w.revenue;
-  total += (scores.quality  ||0) * w.quality;
-  total += (scores.analyst  ||0) * w.analyst;
-  total += (scores.macro    ||0) * w.macro;
-  total += (scores.catalyst ||0);
-  total  = Math.max(-1, Math.min(1, total));
+  // TOTAL SCORE
+  let total=0;
+  total+=(scores.momentum||0)*w.momentum;
+  total+=(scores.trend   ||0)*w.trend;
+  total+=(scores.rsi     ||0)*w.rsi;
+  total+=(scores.macd    ||0)*w.macd;
+  total+=(scores.volume  ||0)*w.volume;
+  total+=(scores.revenue ||0)*w.revenue;
+  total+=(scores.quality ||0)*w.quality;
+  total+=(scores.analyst ||0)*w.analyst;
+  total+=(scores.macro   ||0)*w.macro;
+  total+=(scores.catalyst||0)*(w.catalyst||.08);
+  total=Math.max(-1,Math.min(1,total));
 
-  // ── SIGNAL ────────────────────────────────────────────────────────────────────
+  // NEWS OVERRIDE — catastrophic news floors the signal
+  if (scores.catalyst<-.7){total=Math.min(total,-.1);debug.newsOverride='CATASTROPHIC_NEWS';}
+  if (scores.catalyst>.7) {total=Math.max(total, .1);debug.newsOverride='MAJOR_CATALYST';}
+
+  // SIGNAL
+  const bearReg=(regime?.regime==='BEAR'||regime?.regime==='STRONG_BEAR')||(sma200&&cur&&cur<sma200*.97);
   let signal, confidence;
-  if (total > 0.12) {
-    signal     = 'BUY';
-    confidence = Math.round(52 + (total - 0.12) / 0.88 * 43);
-    if (bearRegime) confidence = Math.min(confidence, 60);
-  } else if (total < -0.12) {
-    signal     = 'SELL';
-    confidence = Math.round(52 + (Math.abs(total) - 0.12) / 0.88 * 43);
-    if (bearRegime) confidence = Math.min(95, confidence + 5);
+  if (total>.15){
+    signal='BUY'; confidence=Math.round(52+(total-.15)/.85*43);
+    if (bearReg) confidence=Math.min(confidence,62);
+  } else if (total<-.15){
+    signal='SELL'; confidence=Math.round(52+(Math.abs(total)-.15)/.85*43);
+    if (bearReg) confidence=Math.min(95,confidence+5);
   } else {
-    signal     = 'HOLD';
-    confidence = Math.round(50 + (0.12 - Math.abs(total)) / 0.12 * 10);
+    signal='HOLD'; confidence=Math.round(50+(0.15-Math.abs(total))/.15*10);
   }
-  confidence = Math.max(45, Math.min(95, confidence));
+  confidence=Math.max(45,Math.min(95,confidence));
 
-  debug.totalScore = total.toFixed(3);
-  debug.scores     = scores;
-  debug.regime     = strongUptrend ? 'STRONG_UPTREND' : bearRegime ? 'BEAR' : 'NEUTRAL';
-  return { signal, confidence, totalScore: total, scores, debug };
+  if (regime){
+    const r=regime.regime;
+    if (r==='NEUTRAL') confidence=Math.min(confidence,65);
+    if (r==='STRONG_BEAR'&&signal==='BUY') confidence=Math.min(confidence,58);
+    if (r==='STRONG_BULL'&&signal==='SELL') confidence=Math.min(confidence,58);
+    if ((r==='STRONG_BULL'&&signal==='BUY')||(r==='STRONG_BEAR'&&signal==='SELL')) confidence=Math.min(95,confidence+5);
+  }
+
+  debug.totalScore=total.toFixed(3); debug.scores=scores; debug.timeframe=timeframeKey;
+  return {signal,confidence,totalScore:total,scores,debug};
 }
 
-
-async function getSignalWeights() {
-  try {
-    const { data, error } = await supabase
-      .from('signal_weights')
-      .select('weights')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();  // maybeSingle returns null instead of error when no rows
-    if (error) return null;
-    return data?.weights || null;
-  } catch { return null; }
-}
-
-async function saveSignalWeights(weights, metadata) {
-  try {
-    await supabase.from('signal_weights').insert({
-      weights,
-      metadata,
-      created_at: new Date().toISOString(),
-    });
-    console.log('[saveWeights] saved successfully');
-  } catch (e) { console.error('[saveWeights]', e.message); }
-}
 
 app.post('/api/analyze/price', async (req, res) => {
   try {
@@ -1524,7 +1469,7 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     const computed = computeSignal({
       ohlcv, ta, fundamentals, financials, enhanced,
       options, market, timeframeKey, news,
-      optimizedWeights, regime,
+      optimizedWeights, regime, bonds,
     });
 
     const { signal, confidence, totalScore, scores, debug: sigDebug } = computed;
