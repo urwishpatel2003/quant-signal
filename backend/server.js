@@ -3894,5 +3894,24 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(process.env.PORT || 3001, '0.0.0.0', () =>
-  console.log(`✅ QuAInt Signal backend on port ${process.env.PORT || 3001}`));
+app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
+  console.log(`✅ QuAInt Signal backend on port ${process.env.PORT || 3001}`);
+
+  // Auto-run backtest 60s after startup if no weights exist yet
+  setTimeout(async () => {
+    try {
+      const existing = await getSignalWeights();
+      if (!existing) {
+        console.log('[backtest] No weights found — running initial backtest...');
+        const endDate = new Date().toISOString().split('T')[0];
+        runBacktest(DEFAULT_BACKTEST_TICKERS, '2020-01-01', endDate, 'US')
+          .then(r => console.log('[backtest] Initial backtest complete:', r.summary))
+          .catch(e => console.error('[backtest] Initial backtest error:', e.message));
+      } else {
+        console.log('[backtest] Weights already exist, skipping auto-backtest');
+      }
+    } catch (e) {
+      console.warn('[backtest] Auto-start check failed:', e.message);
+    }
+  }, 60000); // 60 second delay to let server stabilize
+});
