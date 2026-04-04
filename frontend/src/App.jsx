@@ -42,6 +42,7 @@ export default function App() {
   const [logoClicks,    setLogoClicks]    = useState(0);
   const [simVersion,    setSimVersion]    = useState(0);
 
+  const { user }                 = useUser();
   const macro                    = useMacroData();
   const scan                     = useScan(macro, user?.id);
 
@@ -65,7 +66,6 @@ export default function App() {
     setSimVersion(v => v + 1); // trigger SimulatorTab reload
   };
   const { market }               = useMarket();
-  const { user }                 = useUser();
   const { isLoaded, isSignedIn } = useAuth();
 
   // Fetch watchlist tickers for background scanning
