@@ -3290,42 +3290,51 @@ async function runBacktest(tickers, startDate, endDate, market) {
           bearMarket = spyCur < spy200;
         }
 
+        // Use 60-day returns — reduces noise, better matches position trade horizon
+        const correct60d = returns.ret60d != null
+          ? (signal==='BUY'&&returns.ret60d>3) || (signal==='SELL'&&returns.ret60d<-3) || (signal==='HOLD'&&Math.abs(returns.ret60d)<8)
+          : null;
+        // Also track 20d for comparison
         const correct20d = returns.ret20d != null
           ? (signal==='BUY'&&returns.ret20d>2) || (signal==='SELL'&&returns.ret20d<-2) || (signal==='HOLD'&&Math.abs(returns.ret20d)<5)
           : null;
-        results.push({ ticker, date, signal, confidence, totalScore, scores, ...returns, correct20d, bearMarket });
+        results.push({ ticker, date, signal, confidence, totalScore, scores, ...returns, correct20d, correct60d, bearMarket });
       }
       await new Promise(r => setTimeout(r, 300)); // Tradier rate limit: 200 req/min
     } catch (e) { console.warn(`[backtest] ${ticker}:`, e.message); }
   }
 
-  const resolved = results.filter(r => r.correct20d != null);
-  const accuracy = resolved.length ? resolved.filter(r=>r.correct20d).length / resolved.length : 0;
+  const resolved = results.filter(r => r.correct60d != null);
+  const accuracy = resolved.length ? resolved.filter(r=>r.correct60d).length / resolved.length : 0;
+  const resolved20 = results.filter(r => r.correct20d != null);
+  const accuracy20 = resolved20.length ? resolved20.filter(r=>r.correct20d).length / resolved20.length : 0;
 
   // Factor correlations with 20d return
   const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
   const factorCorrelations = {};
   for (const factor of factorNames) {
-    const pairs = resolved.filter(r => r.scores?.[factor] != null && r.ret20d != null);
+    const pairs = resolved.filter(r => r.scores?.[factor] != null && r.ret60d != null);
     if (pairs.length < 10) continue;
-    const n=pairs.length, mx=pairs.reduce((s,r)=>s+r.scores[factor],0)/n, my=pairs.reduce((s,r)=>s+r.ret20d,0)/n;
-    const cov=pairs.reduce((s,r)=>s+(r.scores[factor]-mx)*(r.ret20d-my),0)/n;
+    const n=pairs.length, mx=pairs.reduce((s,r)=>s+r.scores[factor],0)/n, my=pairs.reduce((s,r)=>s+r.ret60d,0)/n;
+    const cov=pairs.reduce((s,r)=>s+(r.scores[factor]-mx)*(r.ret60d-my),0)/n;
     const sdx=Math.sqrt(pairs.reduce((s,r)=>s+(r.scores[factor]-mx)**2,0)/n);
-    const sdy=Math.sqrt(pairs.reduce((s,r)=>s+(r.ret20d-my)**2,0)/n);
+    const sdy=Math.sqrt(pairs.reduce((s,r)=>s+(r.ret60d-my)**2,0)/n);
     factorCorrelations[factor] = sdx&&sdy ? parseFloat((cov/(sdx*sdy)).toFixed(4)) : 0;
   }
 
   const bullSignals = resolved.filter(r => !r.bearMarket);
   const bearSignals = resolved.filter(r => r.bearMarket);
-  const bullAccuracy = bullSignals.length ? bullSignals.filter(r=>r.correct20d).length/bullSignals.length : 0;
-  const bearAccuracy = bearSignals.length ? bearSignals.filter(r=>r.correct20d).length/bearSignals.length : 0;
+  const bullAccuracy = bullSignals.length ? bullSignals.filter(r=>r.correct60d).length/bullSignals.length : 0;
+  const bearAccuracy = bearSignals.length ? bearSignals.filter(r=>r.correct60d).length/bearSignals.length : 0;
 
   const summary = {
-    tickers: tickers.length, signals: results.length, resolved: resolved.length,
-    accuracy: (accuracy*100).toFixed(1)+'%',
+    tickers: tickers.length, signals: results.length,
+    resolved60d: resolved.length,   accuracy60d: (accuracy*100).toFixed(1)+'%',
+    resolved20d: resolved20.length, accuracy20d: (accuracy20*100).toFixed(1)+'%',
     bullMarketAccuracy: (bullAccuracy*100).toFixed(1)+'%',
     bearMarketAccuracy: (bearAccuracy*100).toFixed(1)+'%',
     factorCorrelations,
+    note: 'Correlations measured against 60-day forward returns',
   };
 
   if (resolved.length >= 50) {
@@ -3912,15 +3921,12 @@ app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
   setTimeout(async () => {
     try {
       const existing = await getSignalWeights();
-      if (!existing) {
-        console.log('[backtest] No weights found — running initial backtest...');
-        const endDate = new Date().toISOString().split('T')[0];
-        runBacktest(DEFAULT_BACKTEST_TICKERS, '2020-01-01', endDate, 'US')
-          .then(r => console.log('[backtest] Initial backtest complete:', r.summary))
-          .catch(e => console.error('[backtest] Initial backtest error:', e.message));
-      } else {
-        console.log('[backtest] Weights already exist, skipping auto-backtest');
-      }
+      // Always re-run backtest on deploy to keep weights fresh
+      console.log('[backtest] Running backtest to optimize signal weights...');
+      const endDate = new Date().toISOString().split('T')[0];
+      runBacktest(DEFAULT_BACKTEST_TICKERS, '2020-01-01', endDate, 'US')
+        .then(r => console.log('[backtest] Complete:', r.summary))
+        .catch(e => console.error('[backtest] Error:', e.message));
     } catch (e) {
       console.warn('[backtest] Auto-start check failed:', e.message);
     }
