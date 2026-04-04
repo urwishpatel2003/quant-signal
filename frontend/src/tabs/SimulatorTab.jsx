@@ -34,7 +34,7 @@ function PnlBadge({ value, pct, size = 'sm' }) {
       padding: size === 'lg' ? '4px 10px' : '2px 7px',
       fontSize: size === 'lg' ? 14 : 12, fontWeight: 700, color: col,
     }}>
-      {pos ? '▲' : '▼'} {fmtCurrency(Math.abs(value), currency, false)}
+      {pos ? '▲' : '▼'} {fmtCurrency(Math.abs(value), currency, isInr)}
       {pct != null && <span style={{ fontSize: size === 'lg' ? 12 : 10, opacity: 0.8 }}>({pct > 0 ? '+' : ''}{pct.toFixed(2)}%)</span>}
     </span>
   );
@@ -158,7 +158,7 @@ export default function SimulatorTab({ market = 'US' }) {
             {market === 'INDIA' ? '🇮🇳' : '🇺🇸'} SIGNAL SIMULATOR
           </div>
           <div style={{ fontSize: 11, color: '#556677', marginTop: 2 }}>
-            `${market === 'INDIA' ? 'NSE India' : 'US Market'} · Virtual paper trading · $10,000 starting balance`
+            {`${market === 'INDIA' ? '🇮🇳 NSE India' : '🇺🇸 US Market'} · Virtual paper trading · ${startingLabel} starting balance`}
           </div>
         </div>
         {(() => {
@@ -458,7 +458,7 @@ export default function SimulatorTab({ market = 'US' }) {
       )}
 
       <div style={{ fontSize: 10, color: '#2a2a3e', textAlign: 'center', marginTop: 8 }}>
-        `${isInr ? '₹10,00,000' : '$10,000'} virtual balance · ${isInr ? 'NSE India' : 'US Market'} · No real money`
+        {`${startingLabel} virtual balance · ${isInr ? 'NSE India' : 'US Market'} · No real money`}
       </div>
     </div>
   );
