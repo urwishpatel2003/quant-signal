@@ -1031,32 +1031,42 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
 
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
-      system: `You are a strict quantitative trading analyst specializing in ${tf.label} trades.
-MARKET: ${isIndia ? 'NSE India (INR-denominated, Indian macroeconomic context, RBI policy, FII flows, domestic consumption)' : 'US equities (USD, Fed policy, global macro)'}
-FOCUS: ${tf.focus}
-TARGET/STOP RULE: ${tf.targetRule}
-NEWS SIGNALS: [UPGRADE]/[INSIDER/FUND]=bullish. [DOWNGRADE]/[SHORT ATTACK]=bearish. [EARNINGS]=high impact.
-BULL FACTORS should focus on: ${tf.bullFactorFocus}
-BEAR FACTORS should focus on: ${tf.bearFactorFocus}
-THESIS RULE: 2-3 sentences — (1) what the ${isIndia ? 'NSE-listed Indian company' : 'company'} does and its sector, (2) key fundamental driver for ${tf.label}, (3) technical setup. Never purely technical.
-${isIndia ? 'India context: consider RBI rates, INR/USD, FII/DII flows, GST, Budget, SEBI regulations as relevant macro factors.' : 'SMA200 dist >15% = extended, factor mean reversion.'}
+      system: `You are a quantitative trading analyst. Analyze the data and return a JSON signal.
 
-CONFIDENCE CALIBRATION (strict):
-- 85-100: Multiple strong confirming signals across technicals, fundamentals AND macro. Clear catalyst. Rare.
-- 70-84: Strong signal in 2 of 3 areas (technical/fundamental/macro). Clear trend with limited risk.
-- 55-69: Mixed signals — one area bullish, others neutral or unclear. Notable uncertainty.
-- 40-54: Conflicting signals across areas. No clear edge. HOLD is usually appropriate here.
-- Below 40: Bearish signals dominant. SELL if sustained breakdown.
+MARKET: ${isIndia ? 'NSE India — consider RBI rates, FII/DII flows, INR/USD, GST, SEBI regulations' : 'US equities — consider Fed policy, USD, credit spreads, global macro'}
+TIMEFRAME: ${tf.label} | FOCUS: ${tf.focus}
+TARGET/STOP: ${tf.targetRule}
 
-SIGNAL DISCIPLINE:
-- Default to HOLD when data is sparse, mixed, or contradictory. Do NOT default to BUY.
-- BUY requires: at least 2 bullish technical signals + fundamental support OR strong catalyst.
-- SELL requires: clear technical breakdown OR deteriorating fundamentals OR negative catalyst.
-- 75% confidence should NOT be a default — it must be earned by specific evidence.
-- If RSI is neutral (40-60), trend is mixed, and no strong catalyst exists → HOLD 50-60%.
-- Never assign 75% confidence without explicitly identifying what justifies that level.
+SCORING METHOD — compute each score FIRST, then derive signal:
+  technicalScore  (-3 to +3): RSI trend, MACD, SMA alignment, BB position, volume
+  fundamentalScore (-3 to +3): Revenue growth, margins, EPS trend, debt, ROE, analyst consensus
+  macroScore      (-2 to +2): Macro tailwinds/headwinds for this sector
+  catalystScore   (-2 to +2): News catalysts, insider activity, short interest, earnings surprises
+  totalScore = technicalScore + fundamentalScore + macroScore + catalystScore  (range -10 to +10)
 
-Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
+SIGNAL FROM SCORE:
+  totalScore >= +3  → BUY
+  totalScore <= -3  → SELL
+  -2 to +2          → HOLD (genuinely mixed)
+  +2 to +3          → BUY with lower confidence
+  -2 to -3          → SELL with lower confidence
+
+CONFIDENCE FROM SCORE MAGNITUDE:
+  |totalScore| >= 8  → 85-95%
+  |totalScore| 6-7   → 75-84%
+  |totalScore| 4-5   → 65-74%
+  |totalScore| 2-3   → 52-64%
+  |totalScore| 0-1   → 45-55% (HOLD territory)
+
+RULES:
+- Score each category honestly from the data. Don't round to comfortable numbers.
+- If data is N/A for a category, score it 0 (not bullish by default).
+- Revenue declining YoY = -1 fundamental. Revenue growing >20% YoY = +1 fundamental.
+- RSI 30-45 in uptrend = +1 technical. RSI >70 = -1 (overbought). RSI 45-60 neutral = 0.
+- Missing data = 0 score, not a reason to inflate confidence.
+- ${isIndia ? 'Promoter holding >50% = +0.5 fundamental. FII net buying = +0.5 macro.' : 'Short interest >20% float with uptrend = +1 catalyst (squeeze). Insider buying cluster = +1 catalyst.'}
+
+Return ONLY valid JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
       messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | ${tf.label}
 ${dayChangePct ? `TODAY: ${parseFloat(dayChangePct) >= 0 ? '+' : ''}${dayChangePct}% | prev close $${prevClose?.toFixed(2)}` : ''}
 PRICE (${closes?.length} closes): ${JSON.stringify(closes)}
@@ -1069,7 +1079,7 @@ ${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS SENTIMENT: P/C=${options?
 ${hasUpgrade?'🟢 ANALYST UPGRADE':''}${hasDowngrade?'🔴 ANALYST DOWNGRADE':''}${hasFund?'🏦 INSTITUTIONAL ACTIVITY':''}${hasShort?'⚠ SHORT ATTACK':''}${hasEarnings?'📊 EARNINGS NEWS':''}
 ${fundamentals?.revenueGrowth != null ? `REVENUE GROWTH (YoY): ${(fundamentals.revenueGrowth*100).toFixed(1)}%` : ''}
 ${fundamentals?.debtToEquity != null ? `DEBT/EQUITY: ${fundamentals.debtToEquity.toFixed(2)}` : ''}
-CONFIDENCE REQUIREMENT: Only give BUY >70% if revenue growing + margins stable/improving + technical trend aligned. Otherwise HOLD.
+CONFIDENCE REQUIREMENT: Give directional signal (BUY/SELL) when there is ANY lean in the evidence. Reserve HOLD for genuinely split signals. Confidence reflects edge strength, not data completeness.
 NEWS: ${categorized.slice(0,6).join(' | ')}
 ${macroCtx}
 Return JSON only.` }]
