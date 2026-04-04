@@ -931,12 +931,19 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   if (sma20 && sma50 && sma20 > sma50) trendScore += 0.2;
   scores.trend = Math.max(-1, Math.min(1, trendScore));
 
-  // 3. RSI
+  // 3. RSI — adjusted for market regime
   const rsi = parseFloat(ta?.rsi14);
+  // Regime: is price below SMA200? Bear market = RSI mean reversion less reliable
+  const inBearRegime = sma200 && cur && cur < sma200 * 0.97;
   let rsiScore = 0;
   if (!isNaN(rsi)) {
-    rsiScore = rsi < 25 ? 1.0 : rsi < 35 ? 0.7 : rsi < 45 ? 0.3 : rsi < 55 ? 0.0 : rsi < 65 ? -0.1 : rsi < 75 ? -0.4 : -0.7;
-    debug.rsi = rsi;
+    if (inBearRegime) {
+      // In downtrend: oversold is a WARNING not a BUY. Reduce mean-reversion weight.
+      rsiScore = rsi < 25 ? 0.2 : rsi < 35 ? 0.0 : rsi < 55 ? -0.1 : rsi < 70 ? -0.3 : -0.6;
+    } else {
+      rsiScore = rsi < 25 ? 1.0 : rsi < 35 ? 0.7 : rsi < 45 ? 0.3 : rsi < 55 ? 0.0 : rsi < 65 ? -0.1 : rsi < 75 ? -0.4 : -0.7;
+    }
+    debug.rsi = rsi; debug.bearRegime = inBearRegime;
   }
   scores.rsi = rsiScore;
 
@@ -3062,7 +3069,7 @@ app.get('/tiingo/:ticker/fundamentals', async (req, res) => {
   if (!TIINGO_TOKEN) return res.status(503).json({ error: 'Tiingo not configured' });
   const ticker = req.params.ticker.toUpperCase();
   try {
-    const data = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements?token=${TIINGO_TOKEN}`);
+    const data = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements?startDate=2020-01-01&token=${TIINGO_TOKEN}`);
     const statements = data?.statementData || [];
     const quarterly = statements
       .filter(s => s.period === 'quarter')
@@ -3117,11 +3124,18 @@ app.post('/backtest/run', async (req, res) => {
 
 async function runBacktest(tickers, startDate, endDate, market) {
   const results = [];
+  // Fetch SPY as market regime indicator
+  let spyPrices = [];
+  try {
+    const spyData = await tiingoGet(`/tiingo/daily/SPY/prices?startDate=${startDate}&endDate=${endDate}&resampleFreq=daily&sort=date`);
+    spyPrices = spyData || [];
+  } catch {}
+
   for (const ticker of tickers) {
     try {
       const prices = await tiingoGet(`/tiingo/daily/${ticker}/prices?startDate=${startDate}&endDate=${endDate}&resampleFreq=daily&sort=date`);
       if (!prices?.length || prices.length < 60) continue;
-      const fundData = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements`);
+      const fundData = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements?startDate=2021-01-01&token=${TIINGO_TOKEN}`);
       const quarters = (fundData?.statementData || []).filter(s => s.period === 'quarter').sort((a,b) => new Date(b.date)-new Date(a.date));
 
       for (let i = 60; i < prices.length - 60; i++) {
@@ -3164,10 +3178,19 @@ async function runBacktest(tickers, startDate, endDate, market) {
         for (const period of [5,20,60]) {
           if (i+period < prices.length) returns[`ret${period}d`] = ((prices[i+period].adjClose||prices[i+period].close) - cur) / cur * 100;
         }
+        // Market regime: is SPY above its 200-day SMA at this date?
+        const spyIdx = spyPrices.findIndex(p => p.date >= date);
+        let bearMarket = false;
+        if (spyIdx >= 200) {
+          const spyCur  = spyPrices[spyIdx]?.adjClose || spyPrices[spyIdx]?.close;
+          const spy200  = spyPrices.slice(spyIdx-200, spyIdx).reduce((s,p)=>s+(p.adjClose||p.close),0)/200;
+          bearMarket = spyCur < spy200;
+        }
+
         const correct20d = returns.ret20d != null
           ? (signal==='BUY'&&returns.ret20d>2) || (signal==='SELL'&&returns.ret20d<-2) || (signal==='HOLD'&&Math.abs(returns.ret20d)<5)
           : null;
-        results.push({ ticker, date, signal, confidence, totalScore, scores, ...returns, correct20d });
+        results.push({ ticker, date, signal, confidence, totalScore, scores, ...returns, correct20d, bearMarket });
       }
       await new Promise(r => setTimeout(r, 150));
     } catch (e) { console.warn(`[backtest] ${ticker}:`, e.message); }
@@ -3189,7 +3212,18 @@ async function runBacktest(tickers, startDate, endDate, market) {
     factorCorrelations[factor] = sdx&&sdy ? parseFloat((cov/(sdx*sdy)).toFixed(4)) : 0;
   }
 
-  const summary = { tickers:tickers.length, signals:results.length, resolved:resolved.length, accuracy:(accuracy*100).toFixed(1)+'%', factorCorrelations };
+  const bullSignals = resolved.filter(r => !r.bearMarket);
+  const bearSignals = resolved.filter(r => r.bearMarket);
+  const bullAccuracy = bullSignals.length ? bullSignals.filter(r=>r.correct20d).length/bullSignals.length : 0;
+  const bearAccuracy = bearSignals.length ? bearSignals.filter(r=>r.correct20d).length/bearSignals.length : 0;
+
+  const summary = {
+    tickers: tickers.length, signals: results.length, resolved: resolved.length,
+    accuracy: (accuracy*100).toFixed(1)+'%',
+    bullMarketAccuracy: (bullAccuracy*100).toFixed(1)+'%',
+    bearMarketAccuracy: (bearAccuracy*100).toFixed(1)+'%',
+    factorCorrelations,
+  };
 
   if (resolved.length >= 50) {
     try {
