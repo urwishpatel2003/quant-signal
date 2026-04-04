@@ -2879,13 +2879,17 @@ app.post('/sim/:userId/open', async (req, res) => {
     const account  = await getOrCreateSimAccount(req.params.userId, market);
     const notional = parseFloat(entryPrice) * parseFloat(quantity);
 
-    if (direction === 'LONG' && notional > account.balance)
-      return res.status(400).json({ error: `Insufficient balance. Available: ${market === 'INDIA' ? '₹' : '$'}${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}` });
+    // LONG: deduct full notional from cash
+    // SHORT: require 50% margin (industry standard for paper trading)
+    const SHORT_MARGIN = 0.5;
+    const cashRequired = direction === 'LONG' ? notional : notional * SHORT_MARGIN;
 
-    // Deduct from balance for LONG (SHORT uses margin but we'll keep it simple)
-    const newBalance = direction === 'LONG'
-      ? account.balance - notional
-      : account.balance; // SHORT doesn't tie up cash in our simplified model
+    if (cashRequired > account.balance)
+      return res.status(400).json({
+        error: `Insufficient balance. Need ${market === 'INDIA' ? '₹' : '$'}${cashRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${direction === 'SHORT' ? '50% margin' : 'full notional'}). Available: ${market === 'INDIA' ? '₹' : '$'}${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+      });
+
+    const newBalance = account.balance - cashRequired;
 
     // Insert position first
     const posResult = await supabase.from('sim_positions').insert({
@@ -2956,9 +2960,10 @@ app.post('/sim/:userId/close/:positionId', async (req, res) => {
       : ((pos.entry_price - exit) / pos.entry_price) * 100;
 
     const account    = await getOrCreateSimAccount(req.params.userId, pos.market);
+    const SHORT_MARGIN = 0.5;
     const newBalance = pos.direction === 'LONG'
-      ? account.balance + (exit * pos.quantity)  // return notional + pnl
-      : account.balance + pnl;                   // SHORT: just add/subtract pnl
+      ? account.balance + (exit * pos.quantity)            // return full notional at exit price
+      : account.balance + (pos.notional * SHORT_MARGIN) + pnl; // return margin + realized pnl
 
     await Promise.all([
       supabase.from('sim_positions').update({

@@ -208,6 +208,11 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             await onAddToSim(pos);
             setSimAdded(true);
             setShowSimModal(false);
+            // Refresh balance so next scan shows updated balance
+            if (getSimBalance) {
+              const bal = await getSimBalance(market);
+              setSimBalance(bal);
+            }
           }}
           onClose={() => setShowSimModal(false)}
         />
@@ -573,9 +578,13 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
   const sigColor = scan.analysis?.signal === 'BUY' ? '#00ff88' : scan.analysis?.signal === 'SELL' ? '#ff4444' : '#ffaa00';
   const startBal = isIndia ? 1000000 : 10000;
   const balance  = availableBalance ?? startBal;
-  const exceedsBalance = direction === 'LONG' && notional > balance;
+  const SHORT_MARGIN   = 0.5;
+  const cashRequired   = direction === 'LONG' ? notional : notional * SHORT_MARGIN;
+  const exceedsBalance = cashRequired > balance;
   // Max quantity user can afford
-  const maxQty   = price > 0 ? Math.floor(balance / price) : 0;
+  const maxQty = price > 0
+    ? Math.floor(balance / (direction === 'LONG' ? price : price * SHORT_MARGIN))
+    : 0;
 
   const confirm = async () => {
     const qty = parseFloat(quantity);
@@ -672,9 +681,11 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>Total cost</span>
+            <span style={{ fontSize: 11, color: '#556677' }}>
+              {direction === 'SHORT' ? 'Margin required (50%)' : 'Total cost'}
+            </span>
             <span style={{ fontSize: 13, fontWeight: 700, color: exceedsBalance ? '#ff4444' : '#c8d8f0' }}>
-              {currency}{notional.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {currency}{cashRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
@@ -687,7 +698,7 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
             <div style={{ fontSize: 11, color: '#ff4444', marginTop: 6,
               background: '#ff444411', border: '1px solid #ff444433',
               borderRadius: 5, padding: '6px 10px' }}>
-              ⚠ Exceeds available balance — max {maxQty} shares at this price
+              {direction === 'SHORT' ? `⚠ Exceeds margin available — max ${maxQty} shares (50% margin)` : `⚠ Exceeds available balance — max ${maxQty} shares`}
               <button onClick={() => setQuantity(String(maxQty))} style={{
                 marginLeft: 8, fontSize: 10, cursor: 'pointer', background: 'none',
                 border: '1px solid #ff444466', color: '#ff4444', borderRadius: 3,
