@@ -961,7 +961,7 @@ app.post('/api/analyze/price', async (req, res) => {
 
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
-      system: `You are a quantitative trading analyst specializing in ${tf.label} trades.
+      system: `You are a strict quantitative trading analyst specializing in ${tf.label} trades.
 MARKET: ${isIndia ? 'NSE India (INR-denominated, Indian macroeconomic context, RBI policy, FII flows, domestic consumption)' : 'US equities (USD, Fed policy, global macro)'}
 FOCUS: ${tf.focus}
 TARGET/STOP RULE: ${tf.targetRule}
@@ -970,6 +970,22 @@ BULL FACTORS should focus on: ${tf.bullFactorFocus}
 BEAR FACTORS should focus on: ${tf.bearFactorFocus}
 THESIS RULE: 2-3 sentences — (1) what the ${isIndia ? 'NSE-listed Indian company' : 'company'} does and its sector, (2) key fundamental driver for ${tf.label}, (3) technical setup. Never purely technical.
 ${isIndia ? 'India context: consider RBI rates, INR/USD, FII/DII flows, GST, Budget, SEBI regulations as relevant macro factors.' : 'SMA200 dist >15% = extended, factor mean reversion.'}
+
+CONFIDENCE CALIBRATION (strict):
+- 85-100: Multiple strong confirming signals across technicals, fundamentals AND macro. Clear catalyst. Rare.
+- 70-84: Strong signal in 2 of 3 areas (technical/fundamental/macro). Clear trend with limited risk.
+- 55-69: Mixed signals — one area bullish, others neutral or unclear. Notable uncertainty.
+- 40-54: Conflicting signals across areas. No clear edge. HOLD is usually appropriate here.
+- Below 40: Bearish signals dominant. SELL if sustained breakdown.
+
+SIGNAL DISCIPLINE:
+- Default to HOLD when data is sparse, mixed, or contradictory. Do NOT default to BUY.
+- BUY requires: at least 2 bullish technical signals + fundamental support OR strong catalyst.
+- SELL requires: clear technical breakdown OR deteriorating fundamentals OR negative catalyst.
+- 75% confidence should NOT be a default — it must be earned by specific evidence.
+- If RSI is neutral (40-60), trend is mixed, and no strong catalyst exists → HOLD 50-60%.
+- Never assign 75% confidence without explicitly identifying what justifies that level.
+
 Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}`,
       messages: [{ role: 'user', content: `${ticker} @ $${price?.toFixed(2)} | ${tf.label}
 ${dayChangePct ? `TODAY: ${parseFloat(dayChangePct) >= 0 ? '+' : ''}${dayChangePct}% | prev close $${prevClose?.toFixed(2)}` : ''}
