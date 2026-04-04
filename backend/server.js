@@ -1327,6 +1327,28 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
 }
 
 
+async function getSignalWeights() {
+  try {
+    const { data, error } = await supabase
+      .from('signal_weights')
+      .select('weights')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) return null;
+    return data?.weights || null;
+  } catch { return null; }
+}
+
+async function saveSignalWeights(weights, metadata) {
+  try {
+    await supabase.from('signal_weights').insert({
+      weights, metadata, created_at: new Date().toISOString(),
+    });
+    console.log('[saveWeights] saved successfully');
+  } catch (e) { console.error('[saveWeights]', e.message); }
+}
+
 app.post('/api/analyze/price', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials, enhanced } = req.body;
@@ -1462,7 +1484,10 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     // ── Step 1: Compute signal deterministically ────────────────────────────────
     // Load optimized weights + market regime in parallel (both non-blocking)
     const [optimizedWeights, regime] = await Promise.all([
-      Promise.race([getSignalWeights().catch(() => null), new Promise(r => setTimeout(() => r(null), 500))]),
+      Promise.race([
+        (async () => { try { return await getSignalWeights(); } catch { return null; } })(),
+        new Promise(r => setTimeout(() => r(null), 500))
+      ]),
       market === 'US' ? Promise.race([detectMarketRegime().catch(() => null), new Promise(r => setTimeout(() => r(null), 2000))]) : Promise.resolve(null),
     ]);
 
@@ -1473,7 +1498,8 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     });
 
     const { signal, confidence, totalScore, scores, debug: sigDebug } = computed;
-    console.log(`[signal] ${ticker} ${signal} ${confidence}% score=${totalScore.toFixed(3)}`, sigDebug);
+    const safeScore = isFinite(totalScore) ? totalScore : 0;
+    console.log(`[signal] ${ticker} ${signal} ${confidence}% score=${safeScore.toFixed(3)}`);
 
     // ── Step 2: Claude writes thesis/context ONLY ────────────────────────────────
     const claudeResult = await callClaudeAPI({
@@ -1490,7 +1516,7 @@ THESIS RULE: (1) what the company does and its sector position, (2) the key driv
 Return ONLY JSON with these fields (signal="${signal}", confidence=${confidence} are pre-set, do not change them):`,
       messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | ${tf.label} | SIGNAL: ${signal} ${confidence}%
 QUANT SCORES: momentum=${scores.momentum?.toFixed(2)} trend=${scores.trend?.toFixed(2)} rsi=${scores.rsi?.toFixed(2)} macd=${scores.macd?.toFixed(2)} revenue=${scores.revenue?.toFixed(2)} quality=${scores.quality?.toFixed(2)} analyst=${scores.analyst?.toFixed(2)} macro=${scores.macro?.toFixed(2)}
-TOTAL SCORE: ${totalScore.toFixed(3)} (range -1 to +1)
+TOTAL SCORE: ${safeScore.toFixed(3)} (range -1 to +1)
 KEY INDICATORS: ${tf.indicators}
 ${taCtx}
 FUNDAMENTALS: P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'} | 52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'} | Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey ?? 'N/A'} | ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'}
@@ -1508,7 +1534,7 @@ Return JSON: {"signal":"${signal}","confidence":${confidence},"priceTarget":numb
       ...claudeResult,
       signal,
       confidence,
-      _quant: { totalScore, scores },  // for debugging
+      _quant: { totalScore: safeScore, scores },
     };
     res.json(result);
   } catch (e) {
@@ -4084,7 +4110,6 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
