@@ -33,13 +33,16 @@ export default function SharePage({ id }) {
     <div style={{
       minHeight: '100vh', background: '#07070e',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', padding: 20, gap: 24,
+      justifyContent: 'center', padding: '24px 16px', gap: 24,
+      boxSizing: 'border-box', overflowX: 'hidden',
     }}>
-      {/* Render the card */}
-      {card.type === 'signal'
-        ? <SignalCard data={card.data} />
-        : <SimulatorCard data={card.data} />
-      }
+      {/* Card wrapper — constrain width on mobile */}
+      <div style={{ width: '100%', maxWidth: 520, minWidth: 0 }}>
+        {card.type === 'signal'
+          ? <SignalCard data={card.data} />
+          : <SimulatorCard data={card.data} />
+        }
+      </div>
 
       {/* CTA */}
       <div style={{ textAlign: 'center' }}>
