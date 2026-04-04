@@ -14,7 +14,8 @@ import ScannerTab     from './tabs/ScannerTab';
 import OptionsTab     from './tabs/OptionsTab';
 import MarketsTab      from './tabs/MarketsTab';
 import IndiaMarketsTab  from './tabs/IndiaMarketsTab';
-import SimulatorTab    from './tabs/SimulatorTab';
+import SimulatorTab       from './tabs/SimulatorTab';
+import SignalHistoryTab  from './tabs/SignalHistoryTab';
 import SharePage      from './pages/SharePage';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
@@ -42,7 +43,7 @@ export default function App() {
   const [simVersion,    setSimVersion]    = useState(0);
 
   const macro                    = useMacroData();
-  const scan                     = useScan(macro);
+  const scan                     = useScan(macro, user?.id);
 
   const getSimBalance = async (market) => {
     if (!user?.id) return null;

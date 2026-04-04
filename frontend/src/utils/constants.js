@@ -4,6 +4,7 @@ export const TABS = [
   { id: 'markets',   label: 'MARKETS'   },
   { id: 'watchlist',  label: 'WATCHLIST'  },
   { id: 'simulator',  label: 'SIMULATE'   },
+  { id: 'accuracy',   label: 'ACCURACY'   },
   { id: 'help',      label: 'HELP'      },
 ];
 

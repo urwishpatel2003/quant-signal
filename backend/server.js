@@ -899,10 +899,49 @@ Return JSON: {"price":{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTar
 
 app.post('/api/analyze/price', async (req, res) => {
   try {
-    const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials } = req.body;
+    const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials, enhanced } = req.body;
     const isIndia = market === 'INDIA';
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const taCtx       = buildTAContext(ta, ticker, calendar);
+
+    // ── Enhanced signal data context ─────────────────────────────────────────
+    let enhancedCtx = '';
+    if (enhanced && !isIndia) {
+      const { shortInterest, insiderSummary, institutionalOwnership, earningsQuality, metrics } = enhanced;
+
+      if (shortInterest?.shortPct != null)
+        enhancedCtx += `SHORT INTEREST: ${shortInterest.shortPct}% float | Days to cover: ${shortInterest.daysToCover ?? 'N/A'} | ${shortInterest.shortPct > 20 ? '⚠ HIGH SHORT — squeeze risk' : shortInterest.shortPct < 5 ? 'Low short' : 'Moderate short'}\n`;
+
+      if (insiderSummary)
+        enhancedCtx += `INSIDER ACTIVITY (90d): ${insiderSummary.buys} buys, ${insiderSummary.sells} sells | Net shares: ${insiderSummary.netShares > 0 ? '+' : ''}${insiderSummary.netShares?.toLocaleString()} | ${insiderSummary.buys > insiderSummary.sells ? '🟢 Net buying' : insiderSummary.sells > insiderSummary.buys ? '🔴 Net selling' : 'Neutral'}\n`;
+
+      if (institutionalOwnership?.totalPct)
+        enhancedCtx += `INSTITUTIONAL OWNERSHIP: ${institutionalOwnership.totalPct}% | Top: ${institutionalOwnership.topHolders?.slice(0,3).map(h => `${h.name} ${h.pct}% ${h.change > 0 ? '↑' : h.change < 0 ? '↓' : '→'}`).join(', ')}\n`;
+
+      if (metrics?.fcfYield != null)
+        enhancedCtx += `FCF YIELD: ${metrics.fcfYield?.toFixed(1)}% | ROIC: ${metrics.roic?.toFixed(1) ?? 'N/A'}% | Rev Growth 5Y: ${metrics.revenueGrowth5Y?.toFixed(1) ?? 'N/A'}% | EPS Growth 5Y: ${metrics.epsGrowth5Y?.toFixed(1) ?? 'N/A'}%\n`;
+
+      if (earningsQuality?.length) {
+        const q = earningsQuality[0];
+        const fcfVsEarnings = q.fcf != null && q.netIncome != null
+          ? q.fcf >= q.netIncome * 0.8 ? '✓ FCF confirms earnings' : '⚠ FCF below earnings — quality concern'
+          : '';
+        enhancedCtx += `EARNINGS QUALITY: FCF Margin=${q.fcfMargin ?? 'N/A'}% | Accruals=${q.accrualsRatio ?? 'N/A'}% | ${fcfVsEarnings}\n`;
+      }
+    }
+
+    if (enhanced && isIndia) {
+      const { shareholding, delivery, fiiDii } = enhanced;
+
+      if (shareholding)
+        enhancedCtx += `SHAREHOLDING: Promoter=${shareholding.promoter ?? 'N/A'}% ${shareholding.promoterChange != null ? `(${shareholding.promoterChange > 0 ? '+' : ''}${shareholding.promoterChange}% QoQ)` : ''} | FII=${shareholding.fii ?? 'N/A'}% | DII=${shareholding.dii ?? 'N/A'}% | ${shareholding.promoter > 50 ? '✓ High promoter confidence' : shareholding.promoter < 25 ? '⚠ Low promoter holding' : ''}\n`;
+
+      if (delivery?.deliveryPct)
+        enhancedCtx += `DELIVERY %: ${delivery.deliveryPct}% ${parseFloat(delivery.deliveryPct) > 60 ? '✓ High conviction buying' : parseFloat(delivery.deliveryPct) < 25 ? '⚠ Mostly speculative trading' : 'Moderate'}\n`;
+
+      if (fiiDii?.fiiNetBuy != null)
+        enhancedCtx += `FII/DII TODAY: FII Net ${fiiDii.fiiNetBuy > 0 ? '🟢 +' : '🔴 '}₹${Math.abs(fiiDii.fiiNetBuy).toLocaleString()}Cr | DII Net ${fiiDii.diiNetBuy > 0 ? '🟢 +' : '🔴 '}₹${Math.abs(fiiDii.diiNetBuy ?? 0).toLocaleString()}Cr\n`;
+    }
 
     // ── Quarterly financials context ──────────────────────────────────────────
     let financialsCtx = '';
@@ -1025,6 +1064,7 @@ KEY INDICATORS: ${tf.indicators}
 ${taCtx}
 FUNDAMENTALS: P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'} | 52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'} | Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey ?? 'N/A'} | ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'} | Analysts=${fundamentals?.numberOfAnalystOpinions ?? 'N/A'}
 ${financialsCtx ? financialsCtx : 'QUARTERLY FINANCIALS: Not available'}
+${enhancedCtx ? enhancedCtx : ''}
 ${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS SENTIMENT: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%` : isIndia ? `INDIA MARKET: FII/DII flows and RBI policy context applied | NSE-listed stock` : ''}
 ${hasUpgrade?'🟢 ANALYST UPGRADE':''}${hasDowngrade?'🔴 ANALYST DOWNGRADE':''}${hasFund?'🏦 INSTITUTIONAL ACTIVITY':''}${hasShort?'⚠ SHORT ATTACK':''}${hasEarnings?'📊 EARNINGS NEWS':''}
 ${fundamentals?.revenueGrowth != null ? `REVENUE GROWTH (YoY): ${(fundamentals.revenueGrowth*100).toFixed(1)}%` : ''}

@@ -19,11 +19,11 @@ export async function runCombinedAnalysis(ticker, price, ohlcv, fundamentals, ch
   });
 }
 
-export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials = null) {
+export async function runPriceAnalysis(ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials = null, enhanced = null) {
   return callAnalyze('/api/analyze/price', {
     ticker, price, ohlcv, fundamentals, options, news,
     bonds, macroNews, intlMarkets, calendar, ta, timeframeKey, market,
-    financials,
+    financials, enhanced,
   });
 }
 
