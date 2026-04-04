@@ -1143,6 +1143,17 @@ async function getSignalWeights() {
   } catch { return null; }
 }
 
+async function saveSignalWeights(weights, metadata) {
+  try {
+    await supabase.from('signal_weights').insert({
+      weights,
+      metadata,
+      created_at: new Date().toISOString(),
+    });
+    console.log('[saveWeights] saved successfully');
+  } catch (e) { console.error('[saveWeights]', e.message); }
+}
+
 app.post('/api/analyze/price', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials, enhanced } = req.body;
