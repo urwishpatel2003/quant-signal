@@ -3151,6 +3151,16 @@ const DEFAULT_BACKTEST_TICKERS = [
   'PLTR','SNOW','COIN','RIVN','LCID',
 ];
 
+// GET trigger for browser — no CORS issues
+app.get('/backtest/trigger', async (req, res) => {
+  const startDate = req.query.startDate || '2020-01-01';
+  const market    = req.query.market    || 'US';
+  res.json({ message: 'Backtest started', tickers: DEFAULT_BACKTEST_TICKERS.length, startDate });
+  runBacktest(DEFAULT_BACKTEST_TICKERS, startDate, new Date().toISOString().split('T')[0], market)
+    .then(r => console.log('[backtest] complete:', r.summary))
+    .catch(e => console.error('[backtest] error:', e.message));
+});
+
 app.post('/backtest/run', async (req, res) => {
   const { tickers, startDate = '2020-01-01', endDate, market = 'US' } = req.body;
   // Use comprehensive default list if none provided
