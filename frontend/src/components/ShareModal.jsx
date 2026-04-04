@@ -86,25 +86,25 @@ export default function ShareModal({ type, data, onClose }) {
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
       zIndex: 9999, overflowY: 'auto',
       WebkitOverflowScrolling: 'touch',
+      paddingTop: 'env(safe-area-inset-top, 50px)',
     }}>
-      {/* Fixed close button — always visible, outside scroll area */}
-      <button onClick={onClose} style={{
-        position: 'fixed', top: 16, right: 16, zIndex: 10000,
-        background: '#1a1a2e', border: '1px solid #3a3a4e', cursor: 'pointer',
-        color: '#e8e8f0', fontSize: 20, width: 44, height: 44,
-        borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        touchAction: 'manipulation', boxShadow: '0 4px 20px rgba(0,0,0,0.8)',
-      }}>✕</button>
-
       <div style={{
         width: '100%', maxWidth: 580, margin: '0 auto',
-        padding: '70px 16px 60px',
+        padding: '12px 16px 60px',
         display: 'flex', flexDirection: 'column', gap: 16,
       }} onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#e8e8f0', letterSpacing: '0.08em' }}>
-          SHARE YOUR RESULTS
+        {/* Header row — X in normal flow, always below status bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#e8e8f0', letterSpacing: '0.08em' }}>
+            SHARE YOUR RESULTS
+          </div>
+          <button onClick={onClose} style={{
+            background: '#1a1a2e', border: '1px solid #3a3a4e', cursor: 'pointer',
+            color: '#e8e8f0', fontSize: 20, width: 44, height: 44, flexShrink: 0,
+            borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            touchAction: 'manipulation',
+          }}>✕</button>
         </div>
 
         {/* Card preview */}
