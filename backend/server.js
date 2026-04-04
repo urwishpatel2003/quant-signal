@@ -2887,30 +2887,45 @@ app.post('/sim/:userId/open', async (req, res) => {
       ? account.balance - notional
       : account.balance; // SHORT doesn't tie up cash in our simplified model
 
-    const [posResult, _] = await Promise.all([
-      supabase.from('sim_positions').insert({
-        user_id:      req.params.userId,
-        ticker:       ticker.toUpperCase(),
-        market,
-        direction,
-        entry_price:  parseFloat(entryPrice),
-        quantity:     parseFloat(quantity),
-        notional,
-        signal,
-        confidence,
-        timeframe,
-        price_target: priceTarget  || null,
-        stop_loss:    stopLoss     || null,
-        thesis:       thesis       || null,
-        status:       'OPEN',
-      }).select().single(),
-      supabase.from('sim_account').update({
-        balance:    newBalance,
-        updated_at: new Date().toISOString(),
-      }).eq('user_id', `${req.params.userId}_${market}`),
-    ]);
+    // Insert position first
+    const posResult = await supabase.from('sim_positions').insert({
+      user_id:      req.params.userId,
+      ticker:       ticker.toUpperCase(),
+      market,
+      direction,
+      entry_price:  parseFloat(entryPrice),
+      quantity:     parseFloat(quantity),
+      notional,
+      signal,
+      confidence,
+      timeframe,
+      price_target: priceTarget  || null,
+      stop_loss:    stopLoss     || null,
+      thesis:       thesis       || null,
+      status:       'OPEN',
+    }).select().single();
 
     if (posResult.error) throw posResult.error;
+
+    // Deduct balance — use upsert so it works even if account row is missing
+    const simId = `${req.params.userId}_${market}`;
+    const balResult = await supabase.from('sim_account').update({
+      balance:    parseFloat(newBalance.toFixed(2)),
+      updated_at: new Date().toISOString(),
+    }).eq('user_id', simId);
+
+    if (balResult.error) {
+      console.error('[sim open] balance update failed:', balResult.error.message, 'simId:', simId);
+      // Don't throw — position was created, balance update failed
+      // Try upsert as fallback
+      await supabase.from('sim_account').upsert({
+        user_id:          simId,
+        balance:          parseFloat(newBalance.toFixed(2)),
+        starting_balance: simStartingBalance(market),
+        updated_at:       new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+
     res.json({ position: posResult.data, newBalance });
   } catch (e) {
     console.error('[sim open]', e.message);
