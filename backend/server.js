@@ -897,6 +897,163 @@ Return JSON: {"price":{"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTar
   }
 });
 
+// ─── QuAInt Signal Engine — Deterministic ───────────────────────────────────
+function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null }) {
+  const isIndia = market === 'INDIA';
+  const scores  = {};
+  const debug   = {};
+
+  // 1. PRICE MOMENTUM
+  const closes = ohlcv?.close?.filter(c => c != null) || [];
+  const cur    = closes[closes.length - 1];
+  const mo3m   = closes.length >= 60  ? closes[closes.length - 61]  : null;
+  const mo1m   = closes.length >= 20  ? closes[closes.length - 21]  : null;
+  let momentumScore = 0;
+  if (mo3m && cur) {
+    const r = (cur - mo3m) / mo3m;
+    momentumScore += r > 0.15 ? 1.0 : r > 0.05 ? 0.5 : r > -0.05 ? 0.0 : r > -0.15 ? -0.5 : -1.0;
+    debug.ret3m = (r*100).toFixed(1)+'%';
+  }
+  if (mo1m && cur) {
+    const r = (cur - mo1m) / mo1m;
+    momentumScore += r > 0.03 ? 0.3 : r < -0.03 ? -0.3 : 0;
+  }
+  scores.momentum = Math.max(-1, Math.min(1, momentumScore));
+
+  // 2. TREND
+  const sma20  = ta?.sma20;
+  const sma50  = ta?.sma50;
+  const sma200 = ta?.sma200;
+  let trendScore = 0;
+  if (cur && sma20)  trendScore += cur > sma20  ? 0.4 : -0.4;
+  if (cur && sma50)  trendScore += cur > sma50  ? 0.3 : -0.3;
+  if (cur && sma200) trendScore += cur > sma200 ? 0.3 : -0.3;
+  if (sma20 && sma50 && sma20 > sma50) trendScore += 0.2;
+  scores.trend = Math.max(-1, Math.min(1, trendScore));
+
+  // 3. RSI
+  const rsi = parseFloat(ta?.rsi14);
+  let rsiScore = 0;
+  if (!isNaN(rsi)) {
+    rsiScore = rsi < 25 ? 1.0 : rsi < 35 ? 0.7 : rsi < 45 ? 0.3 : rsi < 55 ? 0.0 : rsi < 65 ? -0.1 : rsi < 75 ? -0.4 : -0.7;
+    debug.rsi = rsi;
+  }
+  scores.rsi = rsiScore;
+
+  // 4. MACD
+  const macdCross = ta?.macd?.cross;
+  const macdTrend = ta?.macd?.trend;
+  scores.macd = macdCross === 'BULLISH_CROSS' ? 0.8 : macdCross === 'BEARISH_CROSS' ? -0.8 : macdTrend === 'BULLISH' ? 0.3 : macdTrend === 'BEARISH' ? -0.3 : 0;
+
+  // 5. VOLUME
+  const volRatio = parseFloat(ta?.volumeRatio);
+  let volumeScore = 0;
+  if (!isNaN(volRatio)) {
+    const priceUp = closes.length >= 2 ? closes[closes.length-1] > closes[closes.length-2] : null;
+    volumeScore = volRatio > 1.5 && priceUp === true ? 0.7 : volRatio > 1.5 && priceUp === false ? -0.7 : volRatio > 1.0 ? 0.2 : volRatio < 0.7 ? -0.2 : 0;
+  }
+  scores.volume = volumeScore;
+
+  // 6. REVENUE GROWTH
+  const revenueYoY  = financials?.yoy?.revenueYoY;
+  const revGrowthF  = fundamentals?.revenueGrowth;
+  const revGrowth   = revenueYoY ?? (revGrowthF != null ? revGrowthF * 100 : null);
+  scores.revenue = revGrowth == null ? 0 :
+    revGrowth > 30 ? 1.0 : revGrowth > 15 ? 0.7 : revGrowth > 5 ? 0.4 :
+    revGrowth > -5 ? 0.0 : revGrowth > -15 ? -0.5 : -1.0;
+  debug.revGrowth = revGrowth != null ? revGrowth.toFixed(1)+'%' : 'N/A';
+
+  // 7. EARNINGS QUALITY
+  const niYoY  = financials?.yoy?.netIncomeYoY;
+  const epsYoY = financials?.yoy?.epsYoY;
+  const roe    = fundamentals?.roe;
+  let qScore = 0, qCount = 0;
+  if (niYoY  != null) { qScore += niYoY  > 20 ? 0.5 : niYoY  > 0 ? 0.2 : niYoY > -20 ? -0.2 : -0.5; qCount++; }
+  if (epsYoY != null) { qScore += epsYoY > 20 ? 0.3 : epsYoY > 0 ? 0.1 : -0.2; qCount++; }
+  if (roe    != null) { qScore += roe > 0.2 ? 0.3 : roe > 0.1 ? 0.1 : roe > 0 ? 0 : -0.3; qCount++; }
+  const epsHistory = financials?.epsHistory || [];
+  const beats = epsHistory.slice(0,3).filter(e=>e.beat===true).length;
+  const misses= epsHistory.slice(0,3).filter(e=>e.beat===false).length;
+  if (epsHistory.length >= 2) { qScore += beats >= 2 ? 0.3 : misses >= 2 ? -0.3 : 0; qCount++; debug.epsBeat = beats+'B/'+misses+'M'; }
+  scores.quality = qCount > 0 ? Math.max(-1, Math.min(1, qScore / Math.max(qCount*0.5,1))) : 0;
+
+  // 8. ANALYST CONSENSUS
+  const rec = fundamentals?.recommendationKey?.toLowerCase();
+  const targetPrice = fundamentals?.targetMeanPrice;
+  let aScore = rec === 'strong_buy' ? 1.0 : rec === 'buy' ? 0.6 : rec === 'hold' ? 0.0 : rec === 'underperform' ? -0.6 : rec === 'sell' ? -1.0 : 0;
+  if (targetPrice && cur) { const up = (targetPrice-cur)/cur; aScore += up>0.2?0.3:up>0?0.1:up>-0.2?-0.1:-0.3; }
+  scores.analyst = Math.max(-1, Math.min(1, aScore));
+
+  // 9. MACRO / ENHANCED
+  let macroScore = 0;
+  const hi52 = fundamentals?.fiftyTwoWeekHigh, lo52 = fundamentals?.fiftyTwoWeekLow;
+  if (hi52 && lo52 && cur) {
+    const pos = (cur-lo52)/(hi52-lo52);
+    macroScore += pos > 0.85 ? 0.5 : pos > 0.6 ? 0.2 : pos < 0.2 ? -0.5 : pos < 0.4 ? -0.2 : 0;
+    debug['52wPos'] = (pos*100).toFixed(0)+'%';
+  }
+  if (isIndia) {
+    if (enhanced?.fiiDii?.fiiNetBuy != null) macroScore += enhanced.fiiDii.fiiNetBuy > 0 ? 0.3 : -0.3;
+    if (enhanced?.shareholding?.promoter) { const p = parseFloat(enhanced.shareholding.promoter); macroScore += p>60?0.2:p<25?-0.2:0; }
+    if (enhanced?.delivery?.deliveryPct) { const d = parseFloat(enhanced.delivery.deliveryPct); macroScore += d>60?0.2:d<25?-0.2:0; }
+  } else {
+    if (enhanced?.shortInterest?.shortPct > 20 && scores.momentum > 0) macroScore += 0.3;
+    if (enhanced?.insiderSummary) { const {buys,sells} = enhanced.insiderSummary; macroScore += buys>sells+2?0.3:sells>buys+2?-0.3:0; }
+  }
+  scores.macro = Math.max(-1, Math.min(1, macroScore));
+
+  // CATALYST BONUS
+  const catNews = (news||[]).map(n=>typeof n==='string'?n:'');
+  let catalyst = 0;
+  if (catNews.some(n=>n.startsWith('[UPGRADE]')))      catalyst += 0.5;
+  if (catNews.some(n=>n.startsWith('[DOWNGRADE]')))    catalyst -= 0.5;
+  if (catNews.some(n=>n.startsWith('[SHORT ATTACK]'))) catalyst -= 0.4;
+  if (catNews.some(n=>n.startsWith('[INSIDER/FUND]'))) catalyst += 0.3;
+  scores.catalyst = Math.max(-0.5, Math.min(0.5, catalyst));
+
+  // WEIGHTS — use optimized from backtest or defaults
+  const defaultWeights = {
+    short:    { momentum:0.25, trend:0.20, rsi:0.15, macd:0.15, volume:0.10, revenue:0.05, quality:0.03, analyst:0.04, macro:0.03 },
+    swing:    { momentum:0.20, trend:0.15, rsi:0.10, macd:0.10, volume:0.05, revenue:0.15, quality:0.10, analyst:0.10, macro:0.05 },
+    position: { momentum:0.15, trend:0.10, rsi:0.05, macd:0.05, volume:0.03, revenue:0.22, quality:0.15, analyst:0.15, macro:0.10 },
+    longterm: { momentum:0.10, trend:0.05, rsi:0.03, macd:0.03, volume:0.02, revenue:0.27, quality:0.20, analyst:0.20, macro:0.10 },
+  };
+  const weights = optimizedWeights || defaultWeights;
+  const w = weights[timeframeKey] || weights.swing;
+
+  // TOTAL SCORE
+  let total = 0;
+  total += (scores.momentum||0) * w.momentum;
+  total += (scores.trend||0)    * w.trend;
+  total += (scores.rsi||0)      * w.rsi;
+  total += (scores.macd||0)     * w.macd;
+  total += (scores.volume||0)   * w.volume;
+  total += (scores.revenue||0)  * w.revenue;
+  total += (scores.quality||0)  * w.quality;
+  total += (scores.analyst||0)  * w.analyst;
+  total += (scores.macro||0)    * w.macro;
+  total += (scores.catalyst||0);
+  total  = Math.max(-1, Math.min(1, total));
+
+  // SIGNAL
+  let signal, confidence;
+  if (total > 0.15) {
+    signal     = 'BUY';
+    confidence = Math.round(52 + (total - 0.15) / 0.85 * 43);
+  } else if (total < -0.15) {
+    signal     = 'SELL';
+    confidence = Math.round(52 + (Math.abs(total) - 0.15) / 0.85 * 43);
+  } else {
+    signal     = 'HOLD';
+    confidence = Math.round(50 + (0.15 - Math.abs(total)) / 0.15 * 10);
+  }
+  confidence = Math.max(45, Math.min(95, confidence));
+
+  debug.totalScore = total.toFixed(3);
+  debug.scores     = scores;
+  return { signal, confidence, totalScore: total, scores, debug };
+}
+
 app.post('/api/analyze/price', async (req, res) => {
   try {
     const { ticker, price, ohlcv, fundamentals, options, news, bonds, macroNews, intlMarkets, calendar, ta, timeframeKey = 'swing', market = 'US', financials, enhanced } = req.body;
