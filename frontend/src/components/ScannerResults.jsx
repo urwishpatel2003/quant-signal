@@ -123,14 +123,30 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
       {/* ── Success toast ── */}
       {simToast && (
         <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#00ff8822', border: '1px solid #00ff88',
-          color: '#00ff88', borderRadius: 8, padding: '12px 24px',
-          fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
-          zIndex: 10000, whiteSpace: 'nowrap',
-          boxShadow: '0 4px 24px rgba(0,255,136,0.2)',
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.75)',
+          zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {simToast}
+          <div style={{
+            background: '#0a0a14',
+            border: '1px solid #00ff88',
+            borderRadius: 12,
+            padding: '28px 36px',
+            textAlign: 'center',
+            boxShadow: '0 0 60px rgba(0,255,136,0.2)',
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
+            <div style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 22, color: '#00ff88', letterSpacing: '0.1em', marginBottom: 6,
+            }}>
+              ADDED TO SIMULATOR
+            </div>
+            <div style={{ fontSize: 13, color: '#7788aa' }}>
+              {simToast}
+            </div>
+          </div>
         </div>
       )}
 
