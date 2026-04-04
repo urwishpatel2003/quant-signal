@@ -1030,9 +1030,13 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
     // ── Step 1: Compute signal deterministically ────────────────────────────────
+    // Load optimized weights from backtest (cached, non-blocking)
+    const optimizedWeights = await getSignalWeights().catch(() => null);
+
     const computed = computeSignal({
       ohlcv, ta, fundamentals, financials, enhanced,
       options, market, timeframeKey, news,
+      optimizedWeights,
     });
 
     const { signal, confidence, totalScore, scores, debug: sigDebug } = computed;
@@ -2869,6 +2873,197 @@ app.delete('/sips/:userId/:sipId', async (req, res) => {
     console.error('[sips DELETE]', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ─── Tiingo Historical Data ──────────────────────────────────────────────────
+const TIINGO_TOKEN = process.env.TIINGO_TOKEN || '';
+
+async function tiingoGet(path) {
+  if (!TIINGO_TOKEN) return null;
+  try {
+    return await httpsGet('api.tiingo.com', path, {
+      'Content-Type':  'application/json',
+      'Authorization': `Token ${TIINGO_TOKEN}`,
+    });
+  } catch (e) { console.warn('[tiingo]', e.message); return null; }
+}
+
+app.get('/tiingo/:ticker/history', async (req, res) => {
+  if (!TIINGO_TOKEN) return res.status(503).json({ error: 'Tiingo not configured. Add TIINGO_TOKEN to Railway env vars.' });
+  const { startDate, endDate } = req.query;
+  const ticker = req.params.ticker.toUpperCase();
+  try {
+    const data = await tiingoGet(`/tiingo/daily/${ticker}/prices?startDate=${startDate || '2022-01-01'}&endDate=${endDate || new Date().toISOString().split('T')[0]}&resampleFreq=daily&sort=date`);
+    res.json(data || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/tiingo/:ticker/fundamentals', async (req, res) => {
+  if (!TIINGO_TOKEN) return res.status(503).json({ error: 'Tiingo not configured' });
+  const ticker = req.params.ticker.toUpperCase();
+  try {
+    const data = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements?token=${TIINGO_TOKEN}`);
+    const statements = data?.statementData || [];
+    const quarterly = statements
+      .filter(s => s.period === 'quarter')
+      .slice(0, 12)
+      .map(s => ({
+        date:        s.date,
+        period:      s.year + ' Q' + s.quarter,
+        revenue:     s.overview?.revenue,
+        netIncome:   s.overview?.netIncome,
+        grossProfit: s.overview?.grossProfit,
+        eps:         s.overview?.eps,
+        operatingCF: s.cashFlow?.operatingCashFlow,
+        capex:       s.cashFlow?.capitalExpenditures,
+        totalAssets: s.balanceSheet?.totalAssets,
+        totalDebt:   s.balanceSheet?.totalDebt,
+        equity:      s.balanceSheet?.shareholderEquity,
+      }));
+    res.json(quarterly);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Backtest Engine ──────────────────────────────────────────────────────────
+
+async function getSignalWeights() {
+  try {
+    const { data } = await supabase.from('signal_weights').select('*').order('created_at', { ascending: false }).limit(1).single();
+    return data?.weights || null;
+  } catch { return null; }
+}
+
+async function saveSignalWeights(weights, metadata) {
+  try {
+    await supabase.from('signal_weights').insert({ weights, metadata, created_at: new Date().toISOString() });
+  } catch (e) { console.error('[saveWeights]', e.message); }
+}
+
+app.post('/backtest/run', async (req, res) => {
+  if (!TIINGO_TOKEN) return res.status(503).json({ error: 'Tiingo token required. Set TIINGO_TOKEN in Railway env vars.' });
+  const { tickers = [], startDate = '2022-01-01', endDate, market = 'US' } = req.body;
+  if (!tickers.length) return res.status(400).json({ error: 'tickers array required' });
+  res.json({ message: 'Backtest started in background', tickers: tickers.length, startDate, endDate });
+  runBacktest(tickers, startDate, endDate || new Date().toISOString().split('T')[0], market)
+    .then(r => console.log('[backtest] complete:', r.summary))
+    .catch(e => console.error('[backtest] error:', e.message));
+});
+
+async function runBacktest(tickers, startDate, endDate, market) {
+  const results = [];
+  for (const ticker of tickers) {
+    try {
+      const prices = await tiingoGet(`/tiingo/daily/${ticker}/prices?startDate=${startDate}&endDate=${endDate}&resampleFreq=daily&sort=date`);
+      if (!prices?.length || prices.length < 60) continue;
+      const fundData = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements`);
+      const quarters = (fundData?.statementData || []).filter(s => s.period === 'quarter').sort((a,b) => new Date(b.date)-new Date(a.date));
+
+      for (let i = 60; i < prices.length - 60; i++) {
+        const date     = prices[i].date;
+        const closeArr = prices.slice(0, i+1).map(p => p.adjClose || p.close);
+        const cur      = closeArr[closeArr.length - 1];
+        const sma20    = closeArr.slice(-20).reduce((s,v)=>s+v,0) / 20;
+        const sma50    = closeArr.length >= 50  ? closeArr.slice(-50).reduce((s,v)=>s+v,0)/50   : null;
+        const sma200   = closeArr.length >= 200 ? closeArr.slice(-200).reduce((s,v)=>s+v,0)/200 : null;
+
+        // RSI14
+        const gains = [], losses = [];
+        for (let k = closeArr.length-14; k < closeArr.length; k++) {
+          const d = closeArr[k] - closeArr[k-1];
+          d > 0 ? gains.push(d) : losses.push(Math.abs(d));
+        }
+        const avgG = gains.reduce((s,v)=>s+v,0)/14, avgL = losses.reduce((s,v)=>s+v,0)/14;
+        const rsi14 = avgL === 0 ? 100 : 100 - 100/(1+avgG/avgL);
+
+        const volRatio = (() => {
+          const rv = prices[i]?.volume || 0;
+          const av = prices.slice(Math.max(0,i-20),i).reduce((s,p)=>s+(p.volume||0),0)/20;
+          return av > 0 ? rv/av : 1;
+        })();
+
+        const availQ = quarters.filter(q => new Date(q.date) <= new Date(date));
+        const latestQ = availQ[0];
+        const yearAgoQ = availQ[4]; // same quarter prior year
+        const revNow  = latestQ?.overview?.revenue;
+        const revPrev = yearAgoQ?.overview?.revenue;
+        const revGrowth = revNow && revPrev ? ((revNow-revPrev)/Math.abs(revPrev)*100) : null;
+
+        const ta = { sma20, sma50, sma200, rsi14: rsi14.toFixed(1), volumeRatio: volRatio, trendSignal: cur > (sma200||0) ? 'UPTREND' : 'DOWNTREND', macd: { cross: null, trend: cur > sma20 ? 'BULLISH' : 'BEARISH' } };
+        const fundamentals = { roe: latestQ ? (latestQ.overview?.netIncome/(latestQ.balanceSheet?.shareholderEquity||1)) : null };
+        const financials = { yoy: { revenueYoY: revGrowth, netIncomeYoY: null, epsYoY: null } };
+
+        const { signal, confidence, totalScore, scores } = computeSignal({ ohlcv: { close: closeArr }, ta, fundamentals, financials, enhanced: null, options: null, market, timeframeKey: 'swing', news: [] });
+
+        const returns = {};
+        for (const period of [5,20,60]) {
+          if (i+period < prices.length) returns[`ret${period}d`] = ((prices[i+period].adjClose||prices[i+period].close) - cur) / cur * 100;
+        }
+        const correct20d = returns.ret20d != null
+          ? (signal==='BUY'&&returns.ret20d>2) || (signal==='SELL'&&returns.ret20d<-2) || (signal==='HOLD'&&Math.abs(returns.ret20d)<5)
+          : null;
+        results.push({ ticker, date, signal, confidence, totalScore, scores, ...returns, correct20d });
+      }
+      await new Promise(r => setTimeout(r, 150));
+    } catch (e) { console.warn(`[backtest] ${ticker}:`, e.message); }
+  }
+
+  const resolved = results.filter(r => r.correct20d != null);
+  const accuracy = resolved.length ? resolved.filter(r=>r.correct20d).length / resolved.length : 0;
+
+  // Factor correlations with 20d return
+  const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
+  const factorCorrelations = {};
+  for (const factor of factorNames) {
+    const pairs = resolved.filter(r => r.scores?.[factor] != null && r.ret20d != null);
+    if (pairs.length < 10) continue;
+    const n=pairs.length, mx=pairs.reduce((s,r)=>s+r.scores[factor],0)/n, my=pairs.reduce((s,r)=>s+r.ret20d,0)/n;
+    const cov=pairs.reduce((s,r)=>s+(r.scores[factor]-mx)*(r.ret20d-my),0)/n;
+    const sdx=Math.sqrt(pairs.reduce((s,r)=>s+(r.scores[factor]-mx)**2,0)/n);
+    const sdy=Math.sqrt(pairs.reduce((s,r)=>s+(r.ret20d-my)**2,0)/n);
+    factorCorrelations[factor] = sdx&&sdy ? parseFloat((cov/(sdx*sdy)).toFixed(4)) : 0;
+  }
+
+  const summary = { tickers:tickers.length, signals:results.length, resolved:resolved.length, accuracy:(accuracy*100).toFixed(1)+'%', factorCorrelations };
+
+  if (resolved.length >= 50) {
+    await supabase.from('backtest_results').insert({ run_at: new Date().toISOString(), market, start_date: startDate, end_date: endDate, summary, factor_correlations: factorCorrelations }).catch(()=>{});
+    await optimizeWeights(factorCorrelations, summary);
+  }
+  return { summary, factorCorrelations };
+}
+
+async function optimizeWeights(correlations, summary) {
+  const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
+  const absCorr = {}, totalCorr = factorNames.reduce((s,f)=>{ absCorr[f]=Math.abs(correlations[f]||0.01); return s+absCorr[f]; }, 0);
+  const currentWeights = await getSignalWeights() || { swing: { momentum:0.20,trend:0.15,rsi:0.10,macd:0.10,volume:0.05,revenue:0.15,quality:0.10,analyst:0.10,macro:0.05 } };
+  const newSwing = {};
+  for (const f of factorNames) {
+    const dw = absCorr[f]/totalCorr, pw = currentWeights.swing?.[f] || (1/factorNames.length);
+    newSwing[f] = parseFloat(((dw*0.5+pw*0.5)).toFixed(4));
+  }
+  const tot = Object.values(newSwing).reduce((s,v)=>s+v,0);
+  for (const f of factorNames) newSwing[f] = parseFloat((newSwing[f]/tot).toFixed(4));
+  const newWeights = {
+    swing:    newSwing,
+    short:    { ...newSwing, momentum: Math.min(0.35, newSwing.momentum+0.05), revenue: Math.max(0.02, newSwing.revenue-0.05) },
+    position: { ...newSwing, revenue: Math.min(0.30, newSwing.revenue+0.05), momentum: Math.max(0.05, newSwing.momentum-0.05) },
+    longterm: { ...newSwing, revenue: Math.min(0.35, newSwing.revenue+0.10), momentum: Math.max(0.02, newSwing.momentum-0.10) },
+  };
+  await saveSignalWeights(newWeights, { summary, correlations, optimizedAt: new Date().toISOString() });
+  console.log('[optimizer] weights updated:', newSwing);
+  return newWeights;
+}
+
+app.get('/backtest/weights', async (req, res) => {
+  try { const w = await getSignalWeights(); res.json({ weights: w, hasOptimized: !!w }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/backtest/results', async (req, res) => {
+  try {
+    const { data } = await supabase.from('backtest_results').select('*').order('run_at', { ascending: false }).limit(5);
+    res.json(data || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── Share Cards ─────────────────────────────────────────────────────────────
