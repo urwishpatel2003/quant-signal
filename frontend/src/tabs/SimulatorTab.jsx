@@ -62,7 +62,8 @@ export default function SimulatorTab({ market = 'US' }) {
 
   const [account,    setAccount]    = useState(null);
   const [positions,  setPositions]  = useState([]);
-  const [prices,     setPrices]     = useState({});
+  const [prices,       setPrices]       = useState({});
+  const [priceUpdatedAt, setPriceUpdatedAt] = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [tab,        setTab]        = useState('open'); // open | closed | stats
   const [resetting,    setResetting]    = useState(false);
@@ -89,7 +90,7 @@ export default function SimulatorTab({ market = 'US' }) {
         if (cancelled) return;
         setAccount(simRes.account || null);
         setPositions(simRes.positions || []);
-        setPrices(priceRes || {});
+        setPrices(priceRes || {}); setPriceUpdatedAt(new Date());
       } catch (e) {
         if (!cancelled) setError(e.message);
       } finally {
@@ -103,7 +104,7 @@ export default function SimulatorTab({ market = 'US' }) {
     const interval = setInterval(() => {
       if (!cancelled)
         fetch(`${BASE}/sim/${user.id}/prices?market=${market}`)
-          .then(r => r.json()).then(d => { if (!cancelled) setPrices(d); })
+          .then(r => r.json()).then(d => { if (!cancelled) { setPrices(d); setPriceUpdatedAt(new Date()); } })
           .catch(() => {});
     }, 60000);
 
@@ -135,31 +136,23 @@ export default function SimulatorTab({ market = 'US' }) {
 
   // Unrealized P&L across open positions
   // For each open position, compute current market value
-  const openLongValue = openPositions.reduce((sum, p) => {
-    if (p.direction !== 'LONG') return sum;
-    const cur = prices[p.ticker];
-    // If no live price yet, use entry notional (conservative)
-    return sum + (cur ? cur * p.quantity : p.notional);
-  }, 0);
-
+  // Unrealized P&L — only from actual price movement, 0 if no price data
   const unrealizedPnl = openPositions.reduce((sum, p) => {
     const cur = prices[p.ticker];
-    if (!cur) return sum;
+    if (!cur || cur === p.entry_price) return sum; // no movement yet
     const pnl = p.direction === 'LONG'
       ? (cur - p.entry_price) * p.quantity
       : (p.entry_price - cur) * p.quantity;
     return sum + pnl;
   }, 0);
 
-  // totalEquity = cash balance + current value of open longs + unrealized short pnl
-  const totalEquity = account
-    ? account.balance + openLongValue + openPositions.reduce((s, p) => {
-        if (p.direction !== 'SHORT') return s;
-        const cur = prices[p.ticker];
-        return s + (cur ? (p.entry_price - cur) * p.quantity : 0);
-      }, 0)
-    : 0;
-  const totalReturn = account ? totalEquity - account.starting_balance : 0;
+  // Realized P&L from closed trades
+  const realizedPnl = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0);
+
+  // Total equity = starting balance + realized pnl + unrealized pnl
+  // This way margin reservation doesn't show as a loss
+  const totalEquity  = account ? account.starting_balance + realizedPnl + unrealizedPnl : 0;
+  const totalReturn    = realizedPnl + unrealizedPnl;
   const totalReturnPct = account ? (totalReturn / account.starting_balance * 100) : 0;
 
   // High-confidence signals accuracy
@@ -244,14 +237,16 @@ export default function SimulatorTab({ market = 'US' }) {
       {/* ── Account summary ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         <StatCard
-          label="VIRTUAL CASH"
+          label="CASH BALANCE"
           value={fmtCurrency(account?.balance, currency, isInr)}
+          sub="Available to trade"
           border="#aa66ff33"
           color="#aa66ff"
         />
         <StatCard
           label="TOTAL EQUITY"
           value={fmtCurrency(totalEquity, currency, isInr)}
+          sub={`${openPositions.length} open position${openPositions.length !== 1 ? 's' : ''}`}
           color="#e8e8f0"
           border="#2a2a40"
         />
@@ -264,7 +259,8 @@ export default function SimulatorTab({ market = 'US' }) {
         />
         <StatCard
           label="UNREALIZED P&L"
-          value={`${unrealizedPnl >= 0 ? '+' : ''}${fmtCurrency(unrealizedPnl, currency, isInr)}`}
+          value={prices && Object.keys(prices).length ? `${unrealizedPnl >= 0 ? '+' : ''}${fmtCurrency(unrealizedPnl, currency, isInr)}` : 'Loading...'}
+          sub={priceUpdatedAt ? `Updated ${priceUpdatedAt.toLocaleTimeString()}` : 'Fetching prices'}
           color={unrealizedPnl >= 0 ? '#00ff8888' : '#ff444488'}
           border="#2a2a40"
         />
@@ -489,7 +485,12 @@ export default function SimulatorTab({ market = 'US' }) {
       )}
 
       <div style={{ fontSize: 10, color: '#2a2a3e', textAlign: 'center', marginTop: 8 }}>
-        {`${startingLabel} virtual balance · ${isInr ? 'NSE India' : 'US Market'} · No real money`}
+        {`${startingLabel} starting balance · ${isInr ? 'NSE India' : 'US Market'} · No real money involved`}
+        {openPositions.some(p => p.direction === 'SHORT') && (
+          <span style={{ display: 'block', marginTop: 2 }}>
+            SHORT positions don't tie up cash · P&L updates when prices load
+          </span>
+        )}
       </div>
     </div>
   );
