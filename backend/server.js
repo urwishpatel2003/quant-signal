@@ -3151,26 +3151,6 @@ const DEFAULT_BACKTEST_TICKERS = [
   'PLTR','SNOW','COIN','RIVN','LCID',
 ];
 
-// GET trigger for browser — no CORS issues
-app.get('/backtest/trigger', async (req, res) => {
-  const startDate = req.query.startDate || '2020-01-01';
-  const market    = req.query.market    || 'US';
-  res.json({ message: 'Backtest started', tickers: DEFAULT_BACKTEST_TICKERS.length, startDate });
-  runBacktest(DEFAULT_BACKTEST_TICKERS, startDate, new Date().toISOString().split('T')[0], market)
-    .then(r => console.log('[backtest] complete:', r.summary))
-    .catch(e => console.error('[backtest] error:', e.message));
-});
-
-app.post('/backtest/run', async (req, res) => {
-  const { tickers, startDate = '2020-01-01', endDate, market = 'US' } = req.body;
-  // Use comprehensive default list if none provided
-  const tickerList = (tickers && tickers.length > 0) ? tickers : DEFAULT_BACKTEST_TICKERS;
-  res.json({ message: 'Backtest started in background', tickers: tickerList.length, startDate, endDate: endDate || 'today' });
-  runBacktest(tickerList, startDate, endDate || new Date().toISOString().split('T')[0], market)
-    .then(r => console.log('[backtest] complete:', r.summary))
-    .catch(e => console.error('[backtest] error:', e.message));
-});
-
 async function runBacktest(tickers, startDate, endDate, market) {
   const results = [];
   // Fetch SPY as market regime indicator via Tradier
@@ -3318,6 +3298,28 @@ async function runBacktest(tickers, startDate, endDate, market) {
   }
   return { summary, factorCorrelations };
 }
+
+
+// GET trigger for browser — no CORS issues
+app.get('/backtest/trigger', async (req, res) => {
+  const startDate = req.query.startDate || '2020-01-01';
+  const market    = req.query.market    || 'US';
+  res.json({ message: 'Backtest started', tickers: DEFAULT_BACKTEST_TICKERS.length, startDate });
+  runBacktest(DEFAULT_BACKTEST_TICKERS, startDate, new Date().toISOString().split('T')[0], market)
+    .then(r => console.log('[backtest] complete:', r.summary))
+    .catch(e => console.error('[backtest] error:', e.message));
+});
+
+app.post('/backtest/run', async (req, res) => {
+  const { tickers, startDate = '2020-01-01', endDate, market = 'US' } = req.body;
+  // Use comprehensive default list if none provided
+  const tickerList = (tickers && tickers.length > 0) ? tickers : DEFAULT_BACKTEST_TICKERS;
+  res.json({ message: 'Backtest started in background', tickers: tickerList.length, startDate, endDate: endDate || 'today' });
+  runBacktest(tickerList, startDate, endDate || new Date().toISOString().split('T')[0], market)
+    .then(r => console.log('[backtest] complete:', r.summary))
+    .catch(e => console.error('[backtest] error:', e.message));
+});
+
 
 async function optimizeWeights(correlations, summary) {
   const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
