@@ -931,19 +931,24 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   if (sma20 && sma50 && sma20 > sma50) trendScore += 0.2;
   scores.trend = Math.max(-1, Math.min(1, trendScore));
 
-  // 3. RSI — adjusted for market regime
+  // 3. RSI — regime-aware, trend-following in downtrends
   const rsi = parseFloat(ta?.rsi14);
-  // Regime: is price below SMA200? Bear market = RSI mean reversion less reliable
   const inBearRegime = sma200 && cur && cur < sma200 * 0.97;
+  const inStrongUptrend = sma50 && sma200 && sma50 > sma200 && cur > sma50;
   let rsiScore = 0;
   if (!isNaN(rsi)) {
     if (inBearRegime) {
-      // In downtrend: oversold is a WARNING not a BUY. Reduce mean-reversion weight.
-      rsiScore = rsi < 25 ? 0.2 : rsi < 35 ? 0.0 : rsi < 55 ? -0.1 : rsi < 70 ? -0.3 : -0.6;
+      // Downtrend: RSI is a trend-following signal, NOT mean-reversion
+      // Oversold in downtrend = more downside likely. High RSI = strength.
+      rsiScore = rsi < 30 ? -0.5 : rsi < 40 ? -0.2 : rsi < 50 ? 0.0 : rsi < 60 ? 0.2 : rsi < 70 ? 0.4 : 0.3;
+    } else if (inStrongUptrend) {
+      // Strong uptrend: RSI can stay elevated. Mild overbought is fine.
+      rsiScore = rsi < 35 ? 0.8 : rsi < 45 ? 0.5 : rsi < 60 ? 0.2 : rsi < 75 ? 0.0 : -0.3;
     } else {
+      // Normal: mean reversion signal
       rsiScore = rsi < 25 ? 1.0 : rsi < 35 ? 0.7 : rsi < 45 ? 0.3 : rsi < 55 ? 0.0 : rsi < 65 ? -0.1 : rsi < 75 ? -0.4 : -0.7;
     }
-    debug.rsi = rsi; debug.bearRegime = inBearRegime;
+    debug.rsi = rsi; debug.regime = inBearRegime ? 'BEAR' : inStrongUptrend ? 'BULL' : 'NEUTRAL';
   }
   scores.rsi = rsiScore;
 
@@ -1042,19 +1047,26 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   total += (scores.catalyst||0);
   total  = Math.max(-1, Math.min(1, total));
 
-  // SIGNAL
+  // SIGNAL — with regime adjustment
   let signal, confidence;
+  const bearRegimeSignal = sma200 && cur && cur < sma200 * 0.97;
+
   if (total > 0.15) {
     signal     = 'BUY';
     confidence = Math.round(52 + (total - 0.15) / 0.85 * 43);
+    // In bear regime, cap BUY confidence — trend is against us
+    if (bearRegimeSignal) confidence = Math.min(confidence, 62);
   } else if (total < -0.15) {
     signal     = 'SELL';
     confidence = Math.round(52 + (Math.abs(total) - 0.15) / 0.85 * 43);
+    // In bear regime, boost SELL confidence slightly
+    if (bearRegimeSignal) confidence = Math.min(95, confidence + 5);
   } else {
     signal     = 'HOLD';
     confidence = Math.round(50 + (0.15 - Math.abs(total)) / 0.15 * 10);
   }
   confidence = Math.max(45, Math.min(95, confidence));
+  debug.bearRegime = bearRegimeSignal;
 
   debug.totalScore = total.toFixed(3);
   debug.scores     = scores;
@@ -3135,8 +3147,32 @@ async function runBacktest(tickers, startDate, endDate, market) {
     try {
       const prices = await tiingoGet(`/tiingo/daily/${ticker}/prices?startDate=${startDate}&endDate=${endDate}&resampleFreq=daily&sort=date`);
       if (!prices?.length || prices.length < 60) continue;
-      const fundData = await tiingoGet(`/tiingo/fundamentals/${ticker}/statements?startDate=2021-01-01&token=${TIINGO_TOKEN}`);
-      const quarters = (fundData?.statementData || []).filter(s => s.period === 'quarter').sort((a,b) => new Date(b.date)-new Date(a.date));
+      // Use Finnhub for fundamentals (already integrated, free, returns XBRL data)
+      let quarters = [];
+      try {
+        const finnhubFund = await finnhubGet(`/stock/financials-reported?symbol=${ticker}&freq=quarterly`);
+        quarters = (finnhubFund?.data || []).map(r => {
+          const ic = r.report?.ic || [];
+          const cf = r.report?.cf || [];
+          const bs = r.report?.bs || [];
+          const get = (arr, ...concepts) => {
+            for (const c of concepts) {
+              const item = arr.find(i => i.concept === c);
+              if (item?.value != null) return item.value;
+            }
+            return null;
+          };
+          return {
+            date:        r.endDate?.slice(0, 10) || r.period,
+            revenue:     get(ic, 'us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax', 'us-gaap_Revenues', 'us-gaap_SalesRevenueNet'),
+            netIncome:   get(ic, 'us-gaap_NetIncomeLoss'),
+            eps:         get(ic, 'us-gaap_EarningsPerShareDiluted', 'us-gaap_EarningsPerShareBasic'),
+            operatingCF: get(cf, 'us-gaap_NetCashProvidedByUsedInOperatingActivities'),
+            capex:       get(cf, 'us-gaap_PaymentsToAcquirePropertyPlantAndEquipment'),
+            equity:      get(bs, 'us-gaap_StockholdersEquity', 'us-gaap_StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest'),
+          };
+        }).filter(q => q.revenue != null);
+      } catch (e) { console.warn(`[backtest] finnhub fundamentals ${ticker}:`, e.message); }
 
       for (let i = 60; i < prices.length - 60; i++) {
         const date     = prices[i].date;
@@ -3161,15 +3197,16 @@ async function runBacktest(tickers, startDate, endDate, market) {
           return av > 0 ? rv/av : 1;
         })();
 
-        const availQ = quarters.filter(q => new Date(q.date) <= new Date(date));
-        const latestQ = availQ[0];
-        const yearAgoQ = availQ[4]; // same quarter prior year
-        const revNow  = latestQ?.overview?.revenue;
-        const revPrev = yearAgoQ?.overview?.revenue;
+        const availQ  = quarters.filter(q => q.date && new Date(q.date) <= new Date(date));
+        const latestQ  = availQ[0];
+        const yearAgoQ = availQ[4]; // same quarter prior year (approx)
+        const revNow   = latestQ?.revenue;
+        const revPrev  = yearAgoQ?.revenue;
         const revGrowth = revNow && revPrev ? ((revNow-revPrev)/Math.abs(revPrev)*100) : null;
 
         const ta = { sma20, sma50, sma200, rsi14: rsi14.toFixed(1), volumeRatio: volRatio, trendSignal: cur > (sma200||0) ? 'UPTREND' : 'DOWNTREND', macd: { cross: null, trend: cur > sma20 ? 'BULLISH' : 'BEARISH' } };
-        const fundamentals = { roe: latestQ ? (latestQ.overview?.netIncome/(latestQ.balanceSheet?.shareholderEquity||1)) : null };
+        const roe = latestQ?.netIncome && latestQ?.equity && latestQ.equity !== 0 ? latestQ.netIncome / latestQ.equity : null;
+        const fundamentals = { roe };
         const financials = { yoy: { revenueYoY: revGrowth, netIncomeYoY: null, epsYoY: null } };
 
         const { signal, confidence, totalScore, scores } = computeSignal({ ohlcv: { close: closeArr }, ta, fundamentals, financials, enhanced: null, options: null, market, timeframeKey: 'swing', news: [] });
@@ -3236,22 +3273,48 @@ async function runBacktest(tickers, startDate, endDate, market) {
 
 async function optimizeWeights(correlations, summary) {
   const factorNames = ['momentum','trend','rsi','macd','volume','revenue','quality','analyst','macro'];
-  const absCorr = {}, totalCorr = factorNames.reduce((s,f)=>{ absCorr[f]=Math.abs(correlations[f]||0.01); return s+absCorr[f]; }, 0);
-  const currentWeights = await getSignalWeights() || { swing: { momentum:0.20,trend:0.15,rsi:0.10,macd:0.10,volume:0.05,revenue:0.15,quality:0.10,analyst:0.10,macro:0.05 } };
+
+  // Key insight: factors with NEGATIVE correlation should get LOWER weight (not higher).
+  // A negative correlation means the factor predicts wrong — we should reduce its weight.
+  // Factors with zero correlation (no data) get a small floor weight.
+  // Formula: weight proportional to max(0, correlation) — negative factors get near-zero weight.
+
+  const posCorr = {};
+  let totalPos = 0;
+  for (const f of factorNames) {
+    const c = correlations[f] || 0;
+    posCorr[f] = Math.max(0.005, c); // floor at 0.005 so no factor fully disappears
+    totalPos += posCorr[f];
+  }
+
+  const currentWeights = await getSignalWeights() || {
+    swing: { momentum:0.20, trend:0.15, rsi:0.10, macd:0.10, volume:0.05, revenue:0.15, quality:0.10, analyst:0.10, macro:0.05 }
+  };
+
   const newSwing = {};
   for (const f of factorNames) {
-    const dw = absCorr[f]/totalCorr, pw = currentWeights.swing?.[f] || (1/factorNames.length);
-    newSwing[f] = parseFloat(((dw*0.5+pw*0.5)).toFixed(4));
+    const dataWeight  = posCorr[f] / totalPos;
+    const priorWeight = currentWeights.swing?.[f] || (1/factorNames.length);
+    // Blend: 60% data-driven, 40% prior (more aggressive update)
+    newSwing[f] = parseFloat((dataWeight * 0.6 + priorWeight * 0.4).toFixed(4));
   }
+
+  // Re-normalize
   const tot = Object.values(newSwing).reduce((s,v)=>s+v,0);
   for (const f of factorNames) newSwing[f] = parseFloat((newSwing[f]/tot).toFixed(4));
+
+  // Log which factors were penalized
+  const penalized = factorNames.filter(f => (correlations[f]||0) < 0);
+  console.log('[optimizer] penalized (negative correlation):', penalized);
+
   const newWeights = {
     swing:    newSwing,
-    short:    { ...newSwing, momentum: Math.min(0.35, newSwing.momentum+0.05), revenue: Math.max(0.02, newSwing.revenue-0.05) },
-    position: { ...newSwing, revenue: Math.min(0.30, newSwing.revenue+0.05), momentum: Math.max(0.05, newSwing.momentum-0.05) },
-    longterm: { ...newSwing, revenue: Math.min(0.35, newSwing.revenue+0.10), momentum: Math.max(0.02, newSwing.momentum-0.10) },
+    short:    { ...newSwing, momentum: Math.min(0.35, +(newSwing.momentum+0.05).toFixed(4)), revenue: Math.max(0.01, +(newSwing.revenue-0.03).toFixed(4)) },
+    position: { ...newSwing, revenue: Math.min(0.30, +(newSwing.revenue+0.05).toFixed(4)),   momentum: Math.max(0.03, +(newSwing.momentum-0.05).toFixed(4)) },
+    longterm: { ...newSwing, revenue: Math.min(0.35, +(newSwing.revenue+0.10).toFixed(4)),   momentum: Math.max(0.02, +(newSwing.momentum-0.08).toFixed(4)) },
   };
-  await saveSignalWeights(newWeights, { summary, correlations, optimizedAt: new Date().toISOString() });
+
+  await saveSignalWeights(newWeights, { summary, correlations, penalized, optimizedAt: new Date().toISOString() });
   console.log('[optimizer] weights updated:', newSwing);
   return newWeights;
 }
