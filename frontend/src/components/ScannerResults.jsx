@@ -93,6 +93,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
   const [simAdded,         setSimAdded]         = useState(false);
   const [showSimModal,     setShowSimModal]     = useState(false);
   const [simBalance,       setSimBalance]        = useState(null);
+  const [simToast,         setSimToast]          = useState('');
 
   const openSimModal = async () => {
     if (getSimBalance) {
@@ -118,6 +119,20 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* ── Success toast ── */}
+      {simToast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#00ff8822', border: '1px solid #00ff88',
+          color: '#00ff88', borderRadius: 8, padding: '12px 24px',
+          fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
+          zIndex: 10000, whiteSpace: 'nowrap',
+          boxShadow: '0 4px 24px rgba(0,255,136,0.2)',
+        }}>
+          {simToast}
+        </div>
+      )}
 
       {/* ── Top bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -208,7 +223,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             await onAddToSim(pos);
             setSimAdded(true);
             setShowSimModal(false);
-            // Refresh balance so next scan shows updated balance
+            setSimToast(`✓ ${pos.direction} position added to simulator`);
+            setTimeout(() => setSimToast(''), 3000);
             if (getSimBalance) {
               const bal = await getSimBalance(market);
               setSimBalance(bal);

@@ -2931,6 +2931,7 @@ app.post('/sim/:userId/open', async (req, res) => {
     const posResult = await supabase.from('sim_positions').insert(insertData).select().single();
 
     if (posResult.error) throw posResult.error;
+    console.log('[sim open] position created:', posResult.data?.id, ticker, direction, market, 'notional:', notional);
 
     // Deduct balance — use upsert so it works even if account row is missing
     const simId = `${req.params.userId}_${market}`;
