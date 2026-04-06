@@ -41,7 +41,7 @@ export default function SignalHistoryTab({ market = 'US' }) {
     if (!user?.id) { setLoading(false); return; }
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/signal-history/${user.id}?all=true`);
+      const res  = await fetch(`${BASE}/signal-history/${user.id}?market=${market}`);
       const json = await res.json();
       setData(json);
     } catch (e) { setError(e.message); }
