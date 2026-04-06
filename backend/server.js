@@ -2305,7 +2305,7 @@ const INDIA_MOVERS_TTL = 5 * 60 * 1000;  // 5 minutes
 const US_MOVERS_TTL    = 90 * 1000;       // 90 seconds during market hours
 const nseHistoryCache = new Map();
 const NSE_QUOTE_TTL   = 5  * 60 * 1000;
-const NSE_HISTORY_TTL = 30 * 60 * 1000;
+const NSE_HISTORY_TTL = 4 * 60 * 60 * 1000; // 4 hours
 
 const YAHOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2318,6 +2318,11 @@ async function getNSEHistory(symbol, range = '3mo') {
   const cacheKey = `${symbol}:${range}`;
   const cached   = nseHistoryCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < NSE_HISTORY_TTL) return cached.data;
+  // Serve stale cache up to 24h while refreshing in background
+  if (cached && Date.now() - cached.ts < 24 * 60 * 60 * 1000) {
+    refreshNSEHistory(symbol, range).catch(() => {});
+    return cached.data;
+  }
 
   let result = null;
 
@@ -2357,41 +2362,56 @@ async function getNSEHistory(symbol, range = '3mo') {
     } catch (e) { console.warn(`[NSE] history failed ${symbol}:`, e.message); }
   }
 
-  // Fallback: Yahoo Finance
+  // Fallback: Yahoo Finance (retry across hosts)
   if (!result) {
-    try {
-      const ySymbol     = `${symbol}.NS`;
-      const intervalMap = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1wk' };
-      const interval    = intervalMap[range] || '1d';
+    const ySymbol     = `${symbol}.NS`;
+    const intervalMap = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1wk', '2y': '1wk' };
+    const interval    = intervalMap[range] || '1d';
+
+    for (let attempt = 0; attempt < 3 && !result; attempt++) {
       for (const host of YAHOO_HOSTS) {
         try {
           const data = await httpsGet(host,
-            `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}&includePrePost=false`,
-            YAHOO_HEADERS
+            `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${interval}&range=${range}&includePrePost=false&events=history`,
+            { ...YAHOO_HEADERS, 'Cache-Control': 'no-cache' }
           );
           const cr = data?.chart?.result?.[0];
           if (!cr) continue;
           const q  = cr.indicators?.quote?.[0] || {};
-          const cl = q.close || [];
+          const cl = (q.close || []).filter(c => c != null);
           if (!cl.length) continue;
           result = {
             close: q.close, open: q.open, high: q.high, low: q.low, volume: q.volume,
             timestamps: cr.timestamp || [],
             current: cl[cl.length - 1], prev: cl[cl.length - 2],
+            source: 'yahoo_history',
           };
+          console.log(`[NSE history] Yahoo succeeded: ${symbol} ${cl.length} bars (attempt ${attempt+1})`);
           break;
         } catch { continue; }
       }
-    } catch { }
+      if (!result && attempt < 2) await new Promise(r => setTimeout(r, 800));
+    }
+    if (!result) console.warn(`[NSE history] Yahoo failed for ${symbol} after 3 attempts`);
+  }
+
+  // Last resort: Sharekhan history
+  if (!result && sharekhanToken && SHAREKHAN_API_KEY) {
+    result = await getSharekhanHistory(symbol, range).catch(() => null);
   }
 
   if (result) {
     nseHistoryCache.set(cacheKey, { data: result, ts: Date.now() });
   } else if (cached) {
-    console.warn(`[NSE] stale history cache for ${symbol}:${range}`);
+    console.warn(`[NSE] all history sources failed ${symbol}, using stale cache`);
     return cached.data;
   }
   return result;
+}
+
+// Alias for background refresh
+async function refreshNSEHistory(symbol, range) {
+  return getNSEHistory(symbol, range);
 }
 
 // ─── GET /india/debug/:symbol — inspect raw NSE data ─────────────────────────
