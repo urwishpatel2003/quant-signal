@@ -2329,32 +2329,40 @@ async function getNSEHistory(symbol, range = '3mo') {
   // Primary: stock-nse-india historical data
   if (nseIndia) {
     try {
-      const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
+      const daysMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365, '2y': 730 };
       const days  = daysMap[range] || 90;
       const end   = new Date();
       const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
       const data  = await nseIndia.getEquityHistoricalData(symbol, { start, end });
-      const rows  = data?.[0]?.data || data || [];
+      // Combine all pages — API returns array of {data:[...], meta:{}} chunks
+      let rows = [];
+      if (Array.isArray(data)) {
+        for (const chunk of data) {
+          const chunkRows = chunk?.data || (Array.isArray(chunk) ? chunk : []);
+          rows = rows.concat(chunkRows);
+        }
+      }
+      if (!rows.length) rows = data || [];
+
       if (rows.length) {
-        const sorted = [...rows].sort((a, b) => {
-          // mtimestamp format: "09-Mar-2026" — parse it
-          const parseDate = s => {
-            const [d, m, y] = s.split('-');
-            return new Date(`${m} ${d} ${y}`).getTime();
-          };
-          return parseDate(a.mtimestamp) - parseDate(b.mtimestamp);
-        });
-        const closes = sorted.map(r => r.chClosingPrice).filter(Boolean);
+        const parseDate = s => {
+          if (!s) return 0;
+          const [d, m, y] = s.split('-');
+          return new Date(`${m} ${d} ${y}`).getTime();
+        };
+        const sorted = [...rows]
+          .filter(r => r.mtimestamp && r.chClosingPrice)
+          .sort((a, b) => parseDate(a.mtimestamp) - parseDate(b.mtimestamp));
+
+        const closes = sorted.map(r => parseFloat(r.chClosingPrice));
+        console.log(`[NSE history] ${symbol}: ${sorted.length} rows from stock-nse-india`);
         result = {
-          close:      sorted.map(r => r.chClosingPrice),
-          open:       sorted.map(r => r.chOpeningPrice),
-          high:       sorted.map(r => r.chTradeHighPrice),
-          low:        sorted.map(r => r.chTradeLowPrice),
-          volume:     sorted.map(r => r.chTotTradedQty),
-          timestamps: sorted.map(r => {
-            const [d, m, y] = r.mtimestamp.split('-');
-            return new Date(`${m} ${d} ${y}`).getTime();
-          }),
+          close:      sorted.map(r => parseFloat(r.chClosingPrice)),
+          open:       sorted.map(r => parseFloat(r.chOpeningPrice)),
+          high:       sorted.map(r => parseFloat(r.chTradeHighPrice)),
+          low:        sorted.map(r => parseFloat(r.chTradeLowPrice)),
+          volume:     sorted.map(r => parseInt(r.chTotTradedQty) || 0),
+          timestamps: sorted.map(r => parseDate(r.mtimestamp)),
           current:    closes[closes.length - 1],
           prev:       closes[closes.length - 2],
         };
