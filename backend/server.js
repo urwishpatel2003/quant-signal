@@ -1,4 +1,53 @@
 require('dotenv').conf
+
+// ─── Persistent Cache (Supabase) ─────────────────────────────────────────────
+// Survives server restarts and redeployments
+// Falls back to in-memory cache if Supabase unavailable
+
+async function persistCacheGet(key) {
+  try {
+    const { data, error } = await supabase
+      .from('server_cache')
+      .select('value, cached_at')
+      .eq('key', key)
+      .maybeSingle();
+    if (error || !data) return null;
+    return { value: data.value, ts: new Date(data.cached_at).getTime() };
+  } catch { return null; }
+}
+
+async function persistCacheSet(key, value) {
+  try {
+    await supabase.from('server_cache').upsert({
+      key,
+      value,
+      cached_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  } catch (e) { console.warn('[cache] persist failed:', e.message); }
+}
+
+// On startup, hydrate in-memory caches from Supabase
+async function hydrateFromPersistentCache() {
+  try {
+    const keys = ['us_movers', 'india_movers', 'india_macro', 'market_regime'];
+    const results = await Promise.allSettled(keys.map(k => persistCacheGet(k)));
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+
+    results.forEach((r, i) => {
+      if (r.status !== 'fulfilled' || !r.value) return;
+      const { value, ts } = r.value;
+      const age = Date.now() - ts;
+      if (age > ONE_DAY) return; // skip if older than 1 day
+
+      const key = keys[i];
+      if (key === 'us_movers'    && !usMoversCache.data)    { usMoversCache.data    = value; usMoversCache.ts    = ts; console.log('[cache] hydrated us_movers from DB'); }
+      if (key === 'india_movers' && !indiaMoversCache.data) { indiaMoversCache.data = value; indiaMoversCache.ts = ts; console.log('[cache] hydrated india_movers from DB'); }
+      if (key === 'india_macro'  && !indiaMacroCache.data)  { indiaMacroCache.data  = value; indiaMacroCache.ts  = ts; console.log('[cache] hydrated india_macro from DB'); }
+      if (key === 'market_regime') { regimeCache.data = value; regimeCache.ts = ts; console.log('[cache] hydrated market_regime from DB'); }
+    });
+  } catch (e) { console.warn('[cache] hydration failed:', e.message); }
+}
+
 // ─── Shared caches (declared early — used throughout) ────────────────────────
 const nseQuoteCache    = new Map();
 const nseHistoryCache  = new Map();
@@ -459,6 +508,7 @@ app.get('/movers', async (req, res) => {
     const payload = { gainers, losers, volume };
     usMoversCache.data = payload;
     usMoversCache.ts   = Date.now();
+    persistCacheSet('us_movers', payload).catch(() => {});
     res.json({ ...payload, marketStatus: getMarketStatus() });
   } catch (e) {
     if (usMoversCache.data) return res.json({ ...usMoversCache.data, stale: true });
@@ -1447,6 +1497,7 @@ async function detectMarketRegime() {
 
     regimeCache.data = result;
     regimeCache.ts   = Date.now();
+    persistCacheSet('market_regime', result).catch(() => {});
     console.log(`[regime] ${regime} (${confidence}% confidence, score=${compositeScore.toFixed(2)})`);
     return result;
   } catch (e) {
@@ -2689,6 +2740,7 @@ app.get('/india/macro', async (req, res) => {
     const data = await fetchIndiaMacroData();
     indiaMacroCache.data = data;
     indiaMacroCache.ts   = Date.now();
+    persistCacheSet('india_macro', data).catch(() => {});
     res.json(data);
   } catch (e) {
     console.error('[india/macro]', e.message);
@@ -2701,15 +2753,23 @@ app.get('/india/macro', async (req, res) => {
 async function fetchIndiaMoversData() {
   let results = [];
 
-  // Method 1: Use NSE India package bulk equity list — single API call for all stocks
+  // Method 1: Fetch NIFTY 50 + NIFTY NEXT 50 for wider universe (100 stocks)
   if (nseIndia) {
     try {
-      // getEquityStockIndices returns all Nifty 50 stocks with price data in one call
-      const indexData = await nseIndia.getEquityStockIndices('NIFTY 50');
-      const stocks = indexData?.data || [];
-      if (stocks.length > 0) {
-        results = stocks
-          .filter(s => s.symbol && s.lastPrice)
+      const [nifty50, niftyNext50, nifty100] = await Promise.allSettled([
+        nseIndia.getEquityStockIndices('NIFTY 50'),
+        nseIndia.getEquityStockIndices('NIFTY NEXT 50'),
+        nseIndia.getEquityStockIndices('NIFTY MIDCAP 50'),
+      ]);
+      const seen = new Set();
+      const allStocks = [
+        ...(nifty50.value?.data    || []),
+        ...(niftyNext50.value?.data || []),
+        ...(nifty100.value?.data   || []),
+      ];
+      if (allStocks.length > 0) {
+        results = allStocks
+          .filter(s => s.symbol && s.lastPrice && !seen.has(s.symbol) && seen.add(s.symbol))
           .map(s => ({
             ticker:    s.symbol,
             name:      NSE_NAMES[s.symbol] || s.companyName || s.symbol,
@@ -2717,11 +2777,11 @@ async function fetchIndiaMoversData() {
             change:    s.change     ? parseFloat(s.change.toFixed(2))     : null,
             changePct: s.pChange    ? parseFloat(s.pChange.toFixed(2))    : null,
             volume:    s.totalTradedVolume || s.tradedVolume || 0,
-            open:      s.open       || null,
-            high:      s.dayHigh    || null,
-            low:       s.dayLow     || null,
+            open:      s.open    || null,
+            high:      s.dayHigh || null,
+            low:       s.dayLow  || null,
           }));
-        console.log(`[india/movers] got ${results.length} stocks from getEquityStockIndices`);
+        console.log(`[india/movers] got ${results.length} stocks from NIFTY 50+NEXT50+MIDCAP50`);
       }
     } catch (e) {
       console.warn('[india/movers] getEquityStockIndices failed:', e.message);
@@ -2799,7 +2859,11 @@ async function warmIndiaMoversCache() {
   try {
     console.log('[india/movers] warming cache...');
     const data = await fetchIndiaMoversData();
-    if (data) { indiaMoversCache.data = data; indiaMoversCache.ts = Date.now(); }
+    if (data) {
+      indiaMoversCache.data = data;
+      indiaMoversCache.ts   = Date.now();
+      persistCacheSet('india_movers', data).catch(() => {});
+    }
     console.log('[india/movers] cache warm');
   } catch (e) { console.error('[india/movers] warm error', e.message); }
 }
@@ -4678,6 +4742,8 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
 
 app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
   console.log(`✅ QuAInt Signal backend on port ${process.env.PORT || 3001}`);
+  // Hydrate in-memory caches from persistent DB on startup
+  hydrateFromPersistentCache().catch(e => console.warn('[cache] hydration error:', e.message));
 
   // Auto-run backtest 60s after startup if no weights exist yet
   setTimeout(async () => {
