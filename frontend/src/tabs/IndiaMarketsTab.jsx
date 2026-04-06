@@ -170,21 +170,21 @@ export default function IndiaMarketsTab() {
       <SectionHeader icon="📊" title="KEY METRICS" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
         <StatCard
-          label="NIFTY 50 (ETF)"
+          label="NIFTY 50"
           value={nifty?.price ? `₹${fmtPrice(nifty.price)}` : '—'}
           sub={fmtPct(nifty?.changePct)}
           color={pctColor(nifty?.changePct)}
           borderColor={pctColor(nifty?.changePct) + '44'}
         />
         <StatCard
-          label="NIFTY BANK (ETF)"
+          label="NIFTY BANK"
           value={bank?.price ? `₹${fmtPrice(bank.price)}` : '—'}
           sub={fmtPct(bank?.changePct)}
           color={pctColor(bank?.changePct)}
           borderColor={pctColor(bank?.changePct) + '44'}
         />
         <StatCard
-          label="NIFTY IT (ETF)"
+          label="NIFTY IT"
           value={it?.price ? `₹${fmtPrice(it.price)}` : '—'}
           sub={fmtPct(it?.changePct)}
           color={pctColor(it?.changePct)}

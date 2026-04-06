@@ -1,4 +1,23 @@
-require('dotenv').config();
+require('dotenv').conf
+// ─── Shared caches (declared early — used throughout) ────────────────────────
+const nseQuoteCache    = new Map();
+const nseHistoryCache  = new Map();
+const nseBhavCache     = new Map();
+const indiaMoversCache = { data: null, ts: 0 };
+const usMoversCache    = { data: null, ts: 0 };
+const INDIA_MOVERS_TTL = 5 * 60 * 1000;          // 5 minutes
+const US_MOVERS_TTL    = 90 * 1000;               // 90 seconds during market hours
+const NSE_QUOTE_TTL    = 5 * 60 * 1000;           // 5 minutes
+const NSE_HISTORY_TTL  = 4 * 60 * 60 * 1000;      // 4 hours
+
+const YAHOO_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Cache-Control': 'no-cache',
+};
+const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
+ig();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const express      = require('express');
@@ -392,8 +411,61 @@ app.get('/search', async (req, res) => {
 });
 
 app.get('/movers', async (req, res) => {
-  // Invalidate cache at 
-
+  // Invalidate cache when market opens
+  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const marketOpenToday = new Date(nowET);
+  marketOpenToday.setHours(9, 30, 0, 0);
+  if (usMoversCache.ts && usMoversCache.ts < marketOpenToday.getTime() && nowET >= marketOpenToday) {
+    usMoversCache.ts = 0;
+  }
+  const marketOpen = !isMarketClosed();
+  const ttl = marketOpen ? US_MOVERS_TTL : 10 * 60 * 1000;
+  if (usMoversCache.data && Date.now() - usMoversCache.ts < ttl) {
+    return res.json({ ...usMoversCache.data, marketStatus: getMarketStatus(), cached: true });
+  }
+  try {
+    const TICKERS = [
+      'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
+      'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
+      'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
+      'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
+      'MARA','RIOT','CLSK','CIFR','BTBT','HUT','CORZ','CRWV','SMLR','CRCL',
+      'RGTI','IONQ','QUBT','QBTS','ARQQ',
+      'RIVN','LCID','NIO','XPEV','LI','CHPT','BLNK','OKLO','SMR','CEG',
+      'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','SANA','BLUE','HIMS',
+      'CCJ','UEC','DNN','UUUU','LEU','NNE','BWXT','GEV','VST','RKLB',
+      'LMT','RTX','NOC','GD','BA','ASTS','LUNR','PL','SPCE','ACHR',
+      'DIS','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT','RBLX',
+      'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
+      'PFE','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN','JNJ','MRK',
+      'NBIS','GRAB','SE','DKNG','PENN','SHOP','MELI','JOBY','ACMR','KULR',
+      'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
+      'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
+    ];
+    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
+    const raw  = data?.quotes?.quote || [];
+    const list = (Array.isArray(raw) ? raw : [raw])
+      .filter(q => q.last && q.change_percentage != null)
+      .map(q => ({
+        ticker: q.symbol, price: parseFloat(q.last || 0),
+        change: parseFloat(q.change || 0), changePct: parseFloat(q.change_percentage || 0),
+        volume: parseInt(q.volume || 0), avgVolume: parseInt(q.average_volume || 0), type: 'stock',
+      }));
+    const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
+    const gainers = sorted.filter(s => s.changePct > 0).slice(0, 10);
+    const losers  = [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10);
+    const volume  = [...list].filter(s => s.price >= 5 && s.volume > 0)
+      .sort((a, b) => b.volume - a.volume).slice(0, 10)
+      .map(s => ({ ...s, volVsAvg: s.avgVolume > 0 ? parseFloat((s.volume / s.avgVolume).toFixed(1)) : null }));
+    const payload = { gainers, losers, volume };
+    usMoversCache.data = payload;
+    usMoversCache.ts   = Date.now();
+    res.json({ ...payload, marketStatus: getMarketStatus() });
+  } catch (e) {
+    if (usMoversCache.data) return res.json({ ...usMoversCache.data, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ─── Sharekhan API Integration ───────────────────────────────────────────────
 // Provides real-time NSE prices via Sharekhan broker API
@@ -654,7 +726,6 @@ async function yahooNSEQuote(symbol, retries = 2) {
 
 // ── NSE Bhav Copy fallback — official NSE EOD data, completely free ───────────
 // Published daily at ~6PM IST, no IP blocks, no auth needed
-const nseBhavCache = new Map();
 async function getNSEBhavPrice(symbol) {
   const today     = new Date();
   const cacheKey  = `bhav:${symbol}:${today.toISOString().split('T')[0]}`;
@@ -770,66 +841,7 @@ async function refreshNSEQuote(symbol) {
   return null;
 }
 
-  // market open — if cache is from before 9:30 AM ET today, force refresh
-  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const marketOpenToday = new Date(nowET);
-  marketOpenToday.setHours(9, 30, 0, 0);
-  if (usMoversCache.ts && usMoversCache.ts < marketOpenToday.getTime() && nowET >= marketOpenToday) {
-    usMoversCache.ts = 0; // force refresh when market opens
-  }
-  // During market hours use 90s TTL, outside hours use 10 min TTL
-  const marketOpen = !isMarketClosed();
-  const ttl = marketOpen ? US_MOVERS_TTL : 10 * 60 * 1000;
-  if (usMoversCache.data && Date.now() - usMoversCache.ts < ttl) {
-    return res.json({ ...usMoversCache.data, marketStatus: getMarketStatus(), cached: true });
-  }
-  try {
-    const TICKERS = [
-      'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
-      'INTC','MU','AVGO','QCOM','ARM','AMAT','LRCX','KLAC','MRVL','SMCI',
-      'PLTR','CRM','SNOW','DDOG','NET','MDB','AI','BBAI','SOUN','RXRX',
-      'COIN','SQ','PYPL','SOFI','HOOD','NU','AFRM','UPST','LC','MSTR',
-      'MARA','RIOT','CLSK','CIFR','BTBT','HUT','CORZ','CRWV','SMLR','CRCL',
-      'RGTI','IONQ','QUBT','QBTS','ARQQ',
-      'RIVN','LCID','NIO','XPEV','LI','CHPT','BLNK','OKLO','SMR','CEG',
-      'MRNA','BNTX','NVAX','CRSP','BEAM','EDIT','NTLA','SANA','BLUE','HIMS',
-      'CCJ','UEC','DNN','UUUU','LEU','NNE','BWXT','GEV','VST','RKLB',
-      'LMT','RTX','NOC','GD','BA','ASTS','LUNR','PL','SPCE','ACHR',
-      'DIS','SPOT','UBER','LYFT','ABNB','DASH','SNAP','PINS','RDDT','RBLX',
-      'JPM','BAC','GS','MS','WFC','C','BX','KKR','APO','ARES',
-      'PFE','LLY','ABBV','BMY','GILD','REGN','VRTX','AMGN','JNJ','MRK',
-      'NBIS','GRAB','SE','DKNG','PENN','SHOP','MELI','JOBY','ACMR','KULR',
-      'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','AG','MP','VALE',
-      'SPY','QQQ','IWM','ARKK','SOXL','TQQQ','SQQQ','GLD','USO','TLT',
-    ];
-    // session_filter=all includes pre/post market, ensures today's data
-    const data = await tradierGet(`/v1/markets/quotes?symbols=${TICKERS.join(',')}&greeks=false`);
-    const raw  = data?.quotes?.quote || [];
-    const list = (Array.isArray(raw) ? raw : [raw])
-      .filter(q => q.last && q.change_percentage != null)
-      .map(q => ({
-        ticker: q.symbol, price: parseFloat(q.last || 0),
-        change: parseFloat(q.change || 0), changePct: parseFloat(q.change_percentage || 0),
-        volume: parseInt(q.volume || 0), avgVolume: parseInt(q.average_volume || 0), type: 'stock',
-      }));
-    const sorted  = [...list].sort((a, b) => b.changePct - a.changePct);
-    const gainers = sorted.filter(s => s.changePct > 0).slice(0, 10);
-    const losers  = [...list].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10);
-    const volume  = [...list].filter(s => s.price >= 5 && s.volume > 0)
-      .sort((a, b) => b.volume - a.volume).slice(0, 10)
-      .map(s => ({ ...s, volVsAvg: s.avgVolume > 0 ? parseFloat((s.volume / s.avgVolume).toFixed(1)) : null }));
-    const status = getMarketStatus();
-    const payload = { gainers, losers, volume, marketStatus: status };
-    usMoversCache.data = payload;
-    usMoversCache.ts   = Date.now();
-    res.json(payload);
-  } catch (e) {
-    if (usMoversCache.data) return res.json({ ...usMoversCache.data, stale: true });
-    res.status(500).json({ error: e.message });
-  }
-});
 
-// ─── Debug: inspect raw Tradier quote for troubleshooting ───────────────────
 app.get('/debug/quote/:ticker', async (req, res) => {
   try {
     const data = await tradierGet(`/v1/markets/quotes?symbols=${req.params.ticker}&greeks=false`);
@@ -2298,21 +2310,9 @@ try {
   console.warn('[NSE] stock-nse-india not available, using Yahoo Finance fallback:', e.message);
 }
 
-const nseQuoteCache   = new Map();
-const indiaMoversCache = { data: null, ts: 0 };
-const usMoversCache    = { data: null, ts: 0 };
-const INDIA_MOVERS_TTL = 5 * 60 * 1000;  // 5 minutes
-const US_MOVERS_TTL    = 90 * 1000;       // 90 seconds during market hours
-const nseHistoryCache = new Map();
-const NSE_QUOTE_TTL   = 5  * 60 * 1000;
-const NSE_HISTORY_TTL = 4 * 60 * 60 * 1000; // 4 hours
+// cache declarations moved to top of file
 
-const YAHOO_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-};
-const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
+// YAHOO config moved to top
 
 async function getNSEHistory(symbol, range = '3mo') {
   const cacheKey = `${symbol}:${range}`;
@@ -2530,17 +2530,18 @@ app.get('/india/history/:symbol', async (req, res) => {
 // ─── India macro — sectoral indices + macro data ─────────────────────────────
 
 // Sectoral ETFs as proxies for sectoral indices (all NSE-listed)
+// NSE index symbols for Yahoo Finance (^NSEI etc) — more reliable than ETF proxies
 const SECTORAL_ETFS = [
-  { symbol: 'NIFTYBEES',  name: 'Nifty 50',       category: 'index'    },
-  { symbol: 'BANKBEES',   name: 'Nifty Bank',      category: 'sector'   },
-  { symbol: 'ITBEES',     name: 'Nifty IT',        category: 'sector'   },
-  { symbol: 'PHARMABEES', name: 'Nifty Pharma',    category: 'sector'   },
-  { symbol: 'AUTOBEES',   name: 'Nifty Auto',      category: 'sector'   },
-  { symbol: 'FMCGBEES',   name: 'Nifty FMCG',      category: 'sector'   },
-  { symbol: 'INFRABEES',  name: 'Nifty Infra',     category: 'sector'   },
-  { symbol: 'PSUBNKBEES', name: 'PSU Bank',        category: 'sector'   },
-  { symbol: 'GOLDBEES',   name: 'Gold',            category: 'commodity'},
-  { symbol: 'CPSEETF',    name: 'CPSE/Energy',     category: 'sector'   },
+  { symbol: 'NIFTYBEES',  yahooSymbol: '^NSEI',      name: 'Nifty 50',    category: 'index'    },
+  { symbol: 'BANKBEES',   yahooSymbol: '^NSEBANK',   name: 'Nifty Bank',  category: 'sector'   },
+  { symbol: 'ITBEES',     yahooSymbol: '^CNXIT',     name: 'Nifty IT',    category: 'sector'   },
+  { symbol: 'PHARMABEES', yahooSymbol: '^CNXPHARMA', name: 'Nifty Pharma',category: 'sector'   },
+  { symbol: 'AUTOBEES',   yahooSymbol: '^CNXAUTO',   name: 'Nifty Auto',  category: 'sector'   },
+  { symbol: 'FMCGBEES',   yahooSymbol: '^CNXFMCG',   name: 'Nifty FMCG',  category: 'sector'   },
+  { symbol: 'INFRABEES',  yahooSymbol: 'INFRABEES.NS',name: 'Nifty Infra', category: 'sector'   },
+  { symbol: 'PSUBNKBEES', yahooSymbol: '^NSPSE',     name: 'PSU Bank',    category: 'sector'   },
+  { symbol: 'GOLDBEES',   yahooSymbol: 'GC=F',       name: 'Gold',        category: 'commodity'},
+  { symbol: 'CPSEETF',    yahooSymbol: 'CPSEETF.NS', name: 'CPSE/Energy', category: 'sector'   },
 ];
 
 // Midcap/Smallcap index stocks as proxies
@@ -2550,10 +2551,34 @@ const indiaMacroCache = { data: null, ts: 0 };
 const INDIA_MACRO_TTL = 5 * 60 * 1000;
 
 async function fetchIndiaMacroData() {
-  // 1. Fetch sectoral ETF quotes
+  // 1. Fetch sectoral ETF quotes via Yahoo Finance directly
+  // ETFs use different NSE endpoint than equities — Yahoo .NS is more reliable here
   const sectorData = await Promise.allSettled(
     SECTORAL_ETFS.map(async etf => {
-      const q = await getNSEQuote(etf.symbol);
+      let q = null;
+      // Try Yahoo Finance using the index symbol (^NSEI, ^NSEBANK etc)
+      const ySymbol = etf.yahooSymbol || (etf.symbol + '.NS');
+      for (const host of YAHOO_HOSTS) {
+        try {
+          const data = await httpsGet(host,
+            `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
+            YAHOO_HEADERS
+          );
+          const meta = data?.chart?.result?.[0]?.meta;
+          if (meta?.regularMarketPrice) {
+            const price = meta.regularMarketPrice;
+            const prev  = meta.previousClose || meta.chartPreviousClose;
+            q = {
+              price,
+              changePct: prev ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : null,
+              change:    prev ? parseFloat((price - prev).toFixed(2)) : null,
+            };
+            break;
+          }
+        } catch { continue; }
+      }
+      // Fallback to getNSEQuote (equity endpoint)
+      if (!q) q = await getNSEQuote(etf.symbol);
       return { ...etf, price: q?.price || null, changePct: q?.changePct || null, change: q?.change || null };
     })
   );
@@ -2754,12 +2779,20 @@ async function fetchIndiaMoversData() {
 
   if (!results.length) return null;
 
-  const validResults = results.filter(s => s.changePct != null);
+  // Compute changePct from price/prevClose if missing
+  const enriched = results.map(s => {
+    if (s.changePct == null && s.price && s.prevClose && s.prevClose > 0) {
+      const chg = s.price - s.prevClose;
+      return { ...s, change: parseFloat(chg.toFixed(2)), changePct: parseFloat((chg / s.prevClose * 100).toFixed(2)) };
+    }
+    return s;
+  });
+  const validResults = enriched.filter(s => s.changePct != null);
   return {
     gainers: [...validResults].sort((a, b) => b.changePct - a.changePct).filter(s => s.changePct > 0).slice(0, 10),
     losers:  [...validResults].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
-    volume:  [...results].sort((a, b) => (b.volume||0) - (a.volume||0)).slice(0, 10),
-    total:   results.length,
+    volume:  [...enriched].filter(s => s.volume > 0).sort((a, b) => (b.volume||0) - (a.volume||0)).slice(0, 10),
+    total:   enriched.length,
   };
 }
 
