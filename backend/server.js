@@ -2637,65 +2637,108 @@ async function fetchIndiaMacroData() {
     .map(r => r.value);
 
   // 2–5. Fetch macro data via Polygon (reliable) + Yahoo fallback for USD/INR
-  // Polygon proxies: UUP≈DXY, USO≈crude, GLD≈gold
   let usdInr = null, crude = null, gold = null;
 
-  // Try Yahoo for USD/INR (no good Polygon proxy)
+  // ── USD/INR via open.er-api.com (free, no auth, no IP restrictions) ─────────
   try {
-    for (const host of ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']) {
-      try {
-        const d = await httpsGet(host,
-          '/v8/finance/chart/USDINR=X?interval=1d&range=5d',
-          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-        );
-        const meta = d?.chart?.result?.[0]?.meta;
-        if (meta?.regularMarketPrice) {
-          usdInr = {
-            price:     meta.regularMarketPrice,
-            prevClose: meta.previousClose || meta.chartPreviousClose,
-            changePct: meta.previousClose
-              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
-              : null,
-          };
-          break;
-        }
-      } catch { continue; }
-    }
-  } catch {}
-
-  // Crude + Gold via Polygon (USO = US Oil ETF, GLD = Gold ETF)
-  try {
-    const macroProxies = [
-      { poly: 'USO', yahoo: 'CL=F', key: 'crude' },
-      { poly: 'GLD', yahoo: 'GC=F', key: 'gold'  },
-    ];
-    const results = await polygonBatch(macroProxies, 5);
-    results.forEach((r, i) => {
-      if (r.current != null) {
-        const key = macroProxies[i].key;
-        if (key === 'crude') {
-          crude = { price: r.current, changePct: r.changePct };
-        } else if (key === 'gold') {
-          const inrRate = usdInr?.price || 84;
-          gold = {
-            priceUsd: r.current,
-            priceInr: Math.round(r.current * inrRate / 31.1035),
-            changePct: r.changePct,
-          };
-        }
+    const fxData = await httpsGet('open.er-api.com', '/v6/latest/USD', { 'Accept': 'application/json' });
+    if (fxData?.rates?.INR) {
+      const rate     = fxData.rates.INR;
+      const rateDate = fxData.time_last_update_utc;
+      usdInr = { price: parseFloat(rate.toFixed(4)), changePct: null, source: 'er-api', updatedAt: rateDate };
+      // Try to get prev day rate for changePct
+      const prevData = await httpsGet('open.er-api.com', '/v6/history/USD/1', { 'Accept': 'application/json' }).catch(() => null);
+      if (prevData?.rates?.INR) {
+        const prev = prevData.rates.INR;
+        usdInr.prevClose = parseFloat(prev.toFixed(4));
+        usdInr.changePct = parseFloat(((rate - prev) / prev * 100).toFixed(3));
       }
-    });
-  } catch (e) { console.warn('[india/macro] crude/gold error:', e.message); }
+      console.log(`[india/macro] USD/INR: ${rate} (er-api)`);
+    }
+  } catch (e) { console.warn('[india/macro] er-api USD/INR failed:', e.message); }
 
-  // India 10Y bond yield — Yahoo only (no Polygon proxy)
+  // Fallback: Yahoo Finance for USD/INR
+  if (!usdInr) {
+    try {
+      for (const host of YAHOO_HOSTS) {
+        try {
+          const d = await httpsGet(host, '/v8/finance/chart/USDINR=X?interval=1d&range=5d', YAHOO_HEADERS);
+          const meta = d?.chart?.result?.[0]?.meta;
+          if (meta?.regularMarketPrice) {
+            const price = meta.regularMarketPrice;
+            const prev  = meta.previousClose || meta.chartPreviousClose;
+            usdInr = { price, prevClose: prev, changePct: prev ? parseFloat(((price-prev)/prev*100).toFixed(3)) : null, source: 'yahoo' };
+            break;
+          }
+        } catch { continue; }
+      }
+    } catch {}
+  }
+
+  // ── Gold via Tradier (GLD ETF) + convert to per-gram INR ────────────────────
+  // GLD = 1/10 troy oz of gold. Gold price = GLD * 10 / 31.1035 per gram
+  try {
+    const gldData = await tradierGet('/v1/markets/quotes?symbols=GLD,USO&greeks=false');
+    const quotes  = gldData?.quotes?.quote || [];
+    const qlist   = Array.isArray(quotes) ? quotes : [quotes];
+    const gld     = qlist.find(q => q.symbol === 'GLD');
+    const uso     = qlist.find(q => q.symbol === 'USO');
+    const inrRate = usdInr?.price || 84;
+
+    if (gld?.last) {
+      const goldPriceUsd = parseFloat(gld.last) * 10; // GLD = 1/10 troy oz
+      const goldPct      = gld.change_percentage ? parseFloat(gld.change_percentage) : null;
+      gold = {
+        priceUsd: parseFloat(goldPriceUsd.toFixed(2)),
+        priceInr: Math.round(goldPriceUsd * inrRate / 31.1035), // per gram INR
+        changePct: goldPct,
+        source: 'tradier_gld',
+      };
+      console.log(`[india/macro] Gold: $${goldPriceUsd.toFixed(0)}/troy oz (GLD ETF)`);
+    }
+    if (uso?.last) {
+      // USO ≈ 0.1 barrel of WTI crude. Brent ≈ WTI + $2-4
+      const wti   = parseFloat(uso.last) * 10;
+      const brent = wti + 3; // rough Brent premium
+      crude = {
+        price:     parseFloat(brent.toFixed(2)),
+        priceWTI:  parseFloat(wti.toFixed(2)),
+        changePct: uso.change_percentage ? parseFloat(uso.change_percentage) : null,
+        source:    'tradier_uso',
+      };
+      console.log(`[india/macro] Crude: $${brent.toFixed(1)}/bbl Brent (USO ETF proxy)`);
+    }
+  } catch (e) { console.warn('[india/macro] Tradier GLD/USO failed:', e.message); }
+
+  // Fallback: Polygon for GLD/USO
+  if (!gold || !crude) {
+    try {
+      const macroProxies = [
+        ...(!gold  ? [{ poly: 'GLD', yahoo: 'GC=F', key: 'gold'  }] : []),
+        ...(!crude ? [{ poly: 'USO', yahoo: 'CL=F', key: 'crude' }] : []),
+      ];
+      const results = await polygonBatch(macroProxies, 5);
+      const inrRate = usdInr?.price || 84;
+      results.forEach((r, i) => {
+        if (r.current == null) return;
+        const key = macroProxies[i].key;
+        if (key === 'gold' && !gold) {
+          gold = { priceUsd: r.current * 10, priceInr: Math.round(r.current * 10 * inrRate / 31.1035), changePct: r.changePct, source: 'polygon' };
+        }
+        if (key === 'crude' && !crude) {
+          crude = { price: r.current * 10 + 3, changePct: r.changePct, source: 'polygon' };
+        }
+      });
+    } catch (e) { console.warn('[india/macro] Polygon fallback failed:', e.message); }
+  }
+
+  // ── India 10Y bond yield ───────────────────────────────────────────────────
+  // RBI publishes G-Sec yields. Use Yahoo as primary, fallback to last known.
   let india10Y = null;
   try {
-    for (const host of ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']) {
+    for (const host of YAHOO_HOSTS) {
       try {
-        const d = await httpsGet(host,
-          '/v8/finance/chart/%5EINBY?interval=1d&range=5d',
-          { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }
-        );
+        const d = await httpsGet(host, '/v8/finance/chart/%5EINBY?interval=1d&range=5d', YAHOO_HEADERS);
         const meta = d?.chart?.result?.[0]?.meta;
         if (meta?.regularMarketPrice) {
           india10Y = { yield: meta.regularMarketPrice, prevYield: meta.previousClose };
@@ -2704,6 +2747,8 @@ async function fetchIndiaMacroData() {
       } catch { continue; }
     }
   } catch {}
+  // Fallback: use a reasonable default if Yahoo blocked (RBI rate ~7%)
+  if (!india10Y) india10Y = { yield: 7.0, prevYield: 7.0, estimated: true };
 
   // Global signals — via Polygon (reliable)
   // Global signals — reuse Polygon data via polygonBatch (same as /international endpoint)
