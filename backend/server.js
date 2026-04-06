@@ -2675,25 +2675,91 @@ app.get('/india/macro', async (req, res) => {
 
 // ─── India movers — cached, background refresh ───────────────────────────────
 async function fetchIndiaMoversData() {
-  const batchSize = 10;
-  const results   = [];
-  for (let i = 0; i < NIFTY50.length; i += batchSize) {
-    const batch = NIFTY50.slice(i, i + batchSize);
-    const batchResults = await Promise.allSettled(batch.map(async ticker => {
-      const q = await getNSEQuote(ticker);
-      if (!q || q.price == null) return null;
-      return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
-    }));
-    for (const r of batchResults) {
-      if (r.status === 'fulfilled' && r.value) results.push(r.value);
+  let results = [];
+
+  // Method 1: Use NSE India package bulk equity list — single API call for all stocks
+  if (nseIndia) {
+    try {
+      // getEquityStockIndices returns all Nifty 50 stocks with price data in one call
+      const indexData = await nseIndia.getEquityStockIndices('NIFTY 50');
+      const stocks = indexData?.data || [];
+      if (stocks.length > 0) {
+        results = stocks
+          .filter(s => s.symbol && s.lastPrice)
+          .map(s => ({
+            ticker:    s.symbol,
+            name:      NSE_NAMES[s.symbol] || s.companyName || s.symbol,
+            price:     s.lastPrice,
+            change:    s.change     ? parseFloat(s.change.toFixed(2))     : null,
+            changePct: s.pChange    ? parseFloat(s.pChange.toFixed(2))    : null,
+            volume:    s.totalTradedVolume || s.tradedVolume || 0,
+            open:      s.open       || null,
+            high:      s.dayHigh    || null,
+            low:       s.dayLow     || null,
+          }));
+        console.log(`[india/movers] got ${results.length} stocks from getEquityStockIndices`);
+      }
+    } catch (e) {
+      console.warn('[india/movers] getEquityStockIndices failed:', e.message);
     }
-    if (i + batchSize < NIFTY50.length) await sleep(150); // reduced from 300ms
   }
+
+  // Method 2: Try gainers/losers endpoints directly from NSE
+  if (!results.length && nseIndia) {
+    try {
+      const [gainersData, losersData] = await Promise.allSettled([
+        nseIndia.getEquityStockIndices('NIFTY NEXT 50'),
+        nseIndia.getEquityStockIndices('NIFTY 100'),
+      ]);
+      const stocks = [
+        ...(gainersData.value?.data || []),
+        ...(losersData.value?.data  || []),
+      ];
+      if (stocks.length) {
+        const seen = new Set();
+        results = stocks
+          .filter(s => s.symbol && s.lastPrice && !seen.has(s.symbol) && seen.add(s.symbol))
+          .map(s => ({
+            ticker:    s.symbol,
+            name:      NSE_NAMES[s.symbol] || s.companyName || s.symbol,
+            price:     s.lastPrice,
+            change:    s.change  ? parseFloat(s.change.toFixed(2))  : null,
+            changePct: s.pChange ? parseFloat(s.pChange.toFixed(2)) : null,
+            volume:    s.totalTradedVolume || 0,
+          }));
+        console.log(`[india/movers] got ${results.length} stocks from index fallback`);
+      }
+    } catch (e) {
+      console.warn('[india/movers] index fallback failed:', e.message);
+    }
+  }
+
+  // Method 3: Individual quote fallback for NIFTY50 (last resort)
+  if (!results.length) {
+    console.warn('[india/movers] falling back to individual quotes');
+    const batchSize = 5;
+    for (let i = 0; i < NIFTY50.slice(0, 20).length; i += batchSize) {
+      const batch = NIFTY50.slice(i, i + batchSize);
+      const batchResults = await Promise.allSettled(batch.map(async ticker => {
+        const q = await getNSEQuote(ticker);
+        if (!q?.price) return null;
+        return { ticker, name: NSE_NAMES[ticker] || ticker, ...q };
+      }));
+      for (const r of batchResults) {
+        if (r.status === 'fulfilled' && r.value) results.push(r.value);
+      }
+      if (i + batchSize < 20) await sleep(300);
+    }
+  }
+
   if (!results.length) return null;
+
+  const validResults = results.filter(s => s.changePct != null);
   return {
-    gainers: [...results].sort((a, b) => b.changePct - a.changePct).filter(s => s.changePct > 0).slice(0, 10),
-    losers:  [...results].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
-    volume:  [...results].sort((a, b) => b.volume - a.volume).slice(0, 10),
+    gainers: [...validResults].sort((a, b) => b.changePct - a.changePct).filter(s => s.changePct > 0).slice(0, 10),
+    losers:  [...validResults].sort((a, b) => a.changePct - b.changePct).filter(s => s.changePct < 0).slice(0, 10),
+    volume:  [...results].sort((a, b) => (b.volume||0) - (a.volume||0)).slice(0, 10),
+    total:   results.length,
   };
 }
 
