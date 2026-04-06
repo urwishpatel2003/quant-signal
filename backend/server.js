@@ -17,7 +17,6 @@ const YAHOO_HEADERS = {
   'Cache-Control': 'no-cache',
 };
 const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
-ig();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const express      = require('express');
