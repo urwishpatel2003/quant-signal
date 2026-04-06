@@ -394,47 +394,339 @@ app.get('/search', async (req, res) => {
 app.get('/movers', async (req, res) => {
   // Invalidate cache at 
 
-async function yahooNSEQuote(symbol) {
+
+// ─── Sharekhan API Integration ───────────────────────────────────────────────
+// Provides real-time NSE prices via Sharekhan broker API
+// More reliable than Yahoo Finance scraping for Indian stocks
+// Docs: https://github.com/Sharekhan-API/shareconnectpython
+
+const SHAREKHAN_API_KEY    = process.env.SHAREKHAN_API_KEY    || '';
+const SHAREKHAN_SECRET_KEY = process.env.SHAREKHAN_SECRET_KEY || '';
+const SHAREKHAN_BASE       = 'api.sharekhan.com';
+
+// Token stored in memory — refreshed via /sharekhan/auth endpoint
+let sharekhanToken = process.env.SHAREKHAN_ACCESS_TOKEN || '';
+let sharekhanTokenExpiry = 0;
+
+// NSE exchange code mapping
+// NC = NSE Cash (equities), BC = BSE Cash
+const SHAREKHAN_EXCHANGE = 'NC';
+
+async function sharekhanGet(path, params = {}) {
+  if (!sharekhanToken) return null;
   try {
-    const ySymbol = `${symbol}.NS`;
-    for (const host of YAHOO_HOSTS) {
-      try {
-        const data = await httpsGet(host,
-          `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
-          YAHOO_HEADERS
-        );
-        const meta = data?.chart?.result?.[0]?.meta;
-        if (!meta?.regularMarketPrice) continue;
-        const price     = meta.regularMarketPrice;
-        const prevClose = meta.previousClose || meta.chartPreviousClose;
-        const change    = price && prevClose ? price - prevClose : null;
-        const changePct = change && prevClose ? (change / prevClose) * 100 : null;
-        return {
-          price, prevClose,
-          change:    change    ? parseFloat(change.toFixed(2))    : null,
-          changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
-          volume: meta.regularMarketVolume || 0,
-          open: meta.regularMarketOpen    || null,
-          high: meta.regularMarketDayHigh || null,
-          low:  meta.regularMarketDayLow  || null,
-        };
-      } catch { continue; }
-    }
+    const query  = new URLSearchParams({ ...params, apikey: SHAREKHAN_API_KEY }).toString();
+    const data   = await httpsGet(SHAREKHAN_BASE, `${path}?${query}`, {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${sharekhanToken}`,
+      'Accept':        'application/json',
+    });
+    return data;
+  } catch (e) {
+    console.warn('[sharekhan]', path, e.message);
     return null;
+  }
+}
+
+async function sharekhanPost(path, body = {}) {
+  if (!SHAREKHAN_API_KEY) return null;
+  try {
+    return new Promise((resolve, reject) => {
+      const payload   = JSON.stringify({ ...body, apikey: SHAREKHAN_API_KEY });
+      const options   = {
+        hostname: SHAREKHAN_BASE,
+        path,
+        method:   'POST',
+        headers:  {
+          'Content-Type':   'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'Authorization':  sharekhanToken ? `Bearer ${sharekhanToken}` : '',
+        },
+      };
+      const req = require('https').request(options, res => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); } catch { resolve(null); }
+        });
+      });
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
+  } catch (e) {
+    console.warn('[sharekhan POST]', path, e.message);
+    return null;
+  }
+}
+
+// Convert NSE symbol to Sharekhan scripcode
+// Sharekhan uses numeric scripcodes — need to look them up
+const sharekhanScripcodeCache = new Map();
+async function getScripcode(symbol) {
+  if (sharekhanScripcodeCache.has(symbol)) return sharekhanScripcodeCache.get(symbol);
+  try {
+    // Search by symbol name
+    const data = await sharekhanGet('/rest/v2/scripmaster/search', { exchange: SHAREKHAN_EXCHANGE, scripname: symbol });
+    const scrip = data?.data?.find(s => s.trading_symbol === symbol || s.scripname === symbol);
+    if (scrip?.scripcode) {
+      sharekhanScripcodeCache.set(symbol, scrip.scripcode);
+      return scrip.scripcode;
+    }
+  } catch (e) { console.warn('[sharekhan] scripcode lookup:', e.message); }
+  return null;
+}
+
+// GET live quote from Sharekhan
+async function getSharekhanQuote(symbol) {
+  if (!sharekhanToken || !SHAREKHAN_API_KEY) return null;
+  try {
+    const scripcode = await getScripcode(symbol);
+    if (!scripcode) return null;
+    const data = await sharekhanGet('/rest/v2/quotes', {
+      exchange: SHAREKHAN_EXCHANGE,
+      scripcode,
+    });
+    const q = data?.data?.[0];
+    if (!q) return null;
+    return {
+      price:     parseFloat(q.ltp || q.last_price || 0),
+      open:      parseFloat(q.open || 0),
+      high:      parseFloat(q.high || 0),
+      low:       parseFloat(q.low  || 0),
+      close:     parseFloat(q.close || q.prev_close || 0),
+      volume:    parseInt(q.volume || q.traded_quantity || 0),
+      change:    parseFloat(q.change || 0),
+      changePct: parseFloat(q.percent_change || 0),
+      symbol,
+      source:    'sharekhan',
+    };
+  } catch (e) {
+    console.warn('[sharekhan quote]', symbol, e.message);
+    return null;
+  }
+}
+
+// GET historical OHLCV from Sharekhan
+async function getSharekhanHistory(symbol, range = '3mo') {
+  if (!sharekhanToken || !SHAREKHAN_API_KEY) return null;
+  try {
+    const scripcode = await getScripcode(symbol);
+    if (!scripcode) return null;
+
+    const rangeMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365, '2y': 730 };
+    const days     = rangeMap[range] || 90;
+    const toDate   = new Date();
+    const fromDate = new Date(Date.now() - days * 864e5);
+    const fmt      = d => d.toISOString().split('T')[0];
+
+    const data = await sharekhanGet('/rest/v2/history', {
+      exchange:  SHAREKHAN_EXCHANGE,
+      scripcode,
+      startdate: fmt(fromDate),
+      enddate:   fmt(toDate),
+      interval:  '1d',
+    });
+
+    const bars = data?.data || [];
+    if (!bars.length) return null;
+
+    const closes = bars.map(b => parseFloat(b.close)).filter(Boolean);
+    return {
+      close:      bars.map(b => parseFloat(b.close)),
+      open:       bars.map(b => parseFloat(b.open)),
+      high:       bars.map(b => parseFloat(b.high)),
+      low:        bars.map(b => parseFloat(b.low)),
+      volume:     bars.map(b => parseInt(b.volume || 0)),
+      timestamps: bars.map(b => new Date(b.date || b.datetime).getTime()),
+      current:    closes[closes.length - 1],
+      prev:       closes[closes.length - 2] ?? closes[closes.length - 1],
+      source:     'sharekhan',
+    };
+  } catch (e) {
+    console.warn('[sharekhan history]', symbol, e.message);
+    return null;
+  }
+}
+
+// ── Auth endpoints ─────────────────────────────────────────────────────────────
+
+// GET /sharekhan/login-url — returns the URL user opens to authenticate
+app.get('/sharekhan/login-url', (req, res) => {
+  if (!SHAREKHAN_API_KEY) return res.status(503).json({ error: 'SHAREKHAN_API_KEY not set in Railway env vars' });
+  // Sharekhan OAuth login URL
+  const loginUrl = `https://api.sharekhan.com/rest/login/v1/token?api_key=${SHAREKHAN_API_KEY}&state=quaint_signal`;
+  res.json({ loginUrl, message: 'Open this URL in browser, login, copy the request_token from redirect URL' });
+});
+
+// POST /sharekhan/auth — exchange request token for access token
+app.post('/sharekhan/auth', async (req, res) => {
+  const { requestToken } = req.body;
+  if (!requestToken) return res.status(400).json({ error: 'requestToken required' });
+  if (!SHAREKHAN_API_KEY || !SHAREKHAN_SECRET_KEY) return res.status(503).json({ error: 'SHAREKHAN_API_KEY and SHAREKHAN_SECRET_KEY required in Railway env vars' });
+  try {
+    const crypto   = require('crypto');
+    // Sharekhan token generation: SHA256(api_key + request_token + secret_key)
+    const checksum = crypto.createHash('sha256')
+      .update(SHAREKHAN_API_KEY + requestToken + SHAREKHAN_SECRET_KEY)
+      .digest('hex');
+
+    const data = await sharekhanPost('/rest/login/v1/token', {
+      request_token: requestToken,
+      checksum,
+    });
+
+    if (data?.data?.token) {
+      sharekhanToken = data.data.token;
+      sharekhanTokenExpiry = Date.now() + 24*60*60*1000; // tokens valid ~24h
+      console.log('[sharekhan] authenticated successfully');
+      res.json({ success: true, message: 'Sharekhan authenticated. Token valid for ~24 hours.' });
+    } else {
+      res.status(401).json({ error: 'Auth failed', detail: data });
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /sharekhan/status — check if authenticated
+app.get('/sharekhan/status', (req, res) => {
+  res.json({
+    configured: !!(SHAREKHAN_API_KEY && SHAREKHAN_SECRET_KEY),
+    authenticated: !!sharekhanToken,
+    tokenExpiry: sharekhanTokenExpiry ? new Date(sharekhanTokenExpiry).toISOString() : null,
+  });
+});
+
+// ── Yahoo Finance NSE Quote (with retry + multiple hosts) ────────────────────
+async function yahooNSEQuote(symbol, retries = 2) {
+  const ySymbol = `${symbol}.NS`;
+  const paths = [
+    `/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=1d&range=5d&includePrePost=false`,
+    `/v10/finance/quoteSummary/${encodeURIComponent(ySymbol)}?modules=price`,
+  ];
+  // Rotate through hosts and paths
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    for (const host of YAHOO_HOSTS) {
+      for (const path of paths) {
+        try {
+          const data = await httpsGet(host, path, YAHOO_HEADERS);
+          // v8 chart format
+          const meta = data?.chart?.result?.[0]?.meta;
+          if (meta?.regularMarketPrice) {
+            const price     = meta.regularMarketPrice;
+            const prevClose = meta.previousClose || meta.chartPreviousClose;
+            const change    = price && prevClose ? price - prevClose : null;
+            const changePct = change && prevClose ? (change / prevClose) * 100 : null;
+            return {
+              price, prevClose,
+              change:    change    ? parseFloat(change.toFixed(2))    : null,
+              changePct: changePct ? parseFloat(changePct.toFixed(2)) : null,
+              volume: meta.regularMarketVolume || 0,
+              open: meta.regularMarketOpen    || null,
+              high: meta.regularMarketDayHigh || null,
+              low:  meta.regularMarketDayLow  || null,
+              source: 'yahoo',
+            };
+          }
+          // v10 quoteSummary format
+          const p = data?.quoteSummary?.result?.[0]?.price;
+          if (p?.regularMarketPrice?.raw) {
+            return {
+              price:     p.regularMarketPrice.raw,
+              prevClose: p.regularMarketPreviousClose?.raw || null,
+              change:    p.regularMarketChange?.raw    ? parseFloat(p.regularMarketChange.raw.toFixed(2))    : null,
+              changePct: p.regularMarketChangePercent?.raw ? parseFloat((p.regularMarketChangePercent.raw * 100).toFixed(2)) : null,
+              volume:    p.regularMarketVolume?.raw    || 0,
+              open:      p.regularMarketOpen?.raw      || null,
+              high:      p.regularMarketDayHigh?.raw   || null,
+              low:       p.regularMarketDayLow?.raw    || null,
+              source: 'yahoo_v10',
+            };
+          }
+        } catch { continue; }
+      }
+    }
+    if (attempt < retries) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+  }
+  return null;
+}
+
+// ── NSE Bhav Copy fallback — official NSE EOD data, completely free ───────────
+// Published daily at ~6PM IST, no IP blocks, no auth needed
+const nseBhavCache = new Map();
+async function getNSEBhavPrice(symbol) {
+  const today     = new Date();
+  const cacheKey  = `bhav:${symbol}:${today.toISOString().split('T')[0]}`;
+  if (nseBhavCache.has(cacheKey)) return nseBhavCache.get(cacheKey);
+  try {
+    // NSE bhav copy CSV URL
+    const dd  = String(today.getDate()).padStart(2, '0');
+    const mm  = String(today.getMonth() + 1).padStart(2, '0');
+    const yy  = today.getFullYear();
+    const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][today.getMonth()];
+    const url = `/content/historical/EQUITIES/${yy}/${MON}/cm${dd}${MON}${yy}bhav.csv.zip`;
+    // Try yesterday if today's isn't out yet (before 6PM IST)
+    const data = await httpsGet('nseindia.com', url, {
+      'User-Agent': 'Mozilla/5.0',
+      'Accept': '*/*',
+      'Referer': 'https://nseindia.com',
+    });
+    if (!data) return null;
+    // Parse CSV — format: SYMBOL,SERIES,OPEN,HIGH,LOW,CLOSE,LAST,PREVCLOSE,TOTTRDQTY,...
+    const lines = data.toString().split('\n');
+    const row   = lines.find(l => l.startsWith(symbol + ',EQ,'));
+    if (!row) return null;
+    const cols = row.split(',');
+    const result = {
+      price:     parseFloat(cols[5]) || parseFloat(cols[6]), // CLOSE or LAST
+      open:      parseFloat(cols[2]),
+      high:      parseFloat(cols[3]),
+      low:       parseFloat(cols[4]),
+      prevClose: parseFloat(cols[7]),
+      volume:    parseInt(cols[8]) || 0,
+      change:    null, changePct: null,
+      source:    'nse_bhav',
+    };
+    if (result.price && result.prevClose) {
+      result.change    = parseFloat((result.price - result.prevClose).toFixed(2));
+      result.changePct = parseFloat(((result.change / result.prevClose) * 100).toFixed(2));
+    }
+    nseBhavCache.set(cacheKey, result);
+    return result;
   } catch { return null; }
 }
 
 async function getNSEQuote(symbol) {
   const cached = nseQuoteCache.get(symbol);
+
+  // Return fresh cache immediately
   if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL) return cached.data;
 
-  let result = null;
+  // If stale cache exists, return it immediately AND refresh in background
+  // This prevents blocking the UI while fetching
+  if (cached && Date.now() - cached.ts < NSE_QUOTE_TTL * 6) {
+    refreshNSEQuote(symbol).catch(() => {}); // background refresh
+    return cached.data; // return stale immediately
+  }
 
-  // Primary: stock-nse-india (direct NSE API, no IP blocks)
-  if (nseIndia) {
+  return await refreshNSEQuote(symbol);
+}
+
+async function refreshNSEQuote(symbol) {
+  const cached = nseQuoteCache.get(symbol);
+  let result   = null;
+
+  // 1. Sharekhan (if configured)
+  if (sharekhanToken && SHAREKHAN_API_KEY) {
+    result = await getSharekhanQuote(symbol).catch(() => null);
+  }
+
+  // 2. stock-nse-india (direct NSE, no IP blocks)
+  if (!result && nseIndia) {
     try {
       const details = await nseIndia.getEquityDetails(symbol);
-      const p = details?.priceInfo;
+      const p       = details?.priceInfo;
       if (p?.lastPrice) {
         result = {
           price:     p.lastPrice,
@@ -442,24 +734,40 @@ async function getNSEQuote(symbol) {
           change:    p.change  ? parseFloat(p.change.toFixed(2))  : null,
           changePct: p.pChange ? parseFloat(p.pChange.toFixed(2)) : null,
           volume:    details?.preOpenMarket?.totalTradedVolume || details?.securityInfo?.tradedVolume || 0,
-          open: p.open || null,
-          high: p.intraDayHighLow?.max || null,
-          low:  p.intraDayHighLow?.min || null,
+          open:      p.open                   || null,
+          high:      p.intraDayHighLow?.max   || null,
+          low:       p.intraDayHighLow?.min   || null,
+          source:    'nse_india',
         };
       }
-    } catch (e) { console.warn(`[NSE] primary quote failed ${symbol}:`, e.message); }
+    } catch (e) { console.warn(`[NSE] stock-nse-india failed ${symbol}:`, e.message); }
   }
 
-  // Fallback: Yahoo Finance
-  if (!result) result = await yahooNSEQuote(symbol);
+  // 3. Yahoo Finance (with retry across 2 hosts and 2 API versions)
+  if (!result) {
+    result = await yahooNSEQuote(symbol, 2).catch(() => null);
+    if (result) console.log(`[NSE] Yahoo fallback used for ${symbol}`);
+  }
+
+  // 4. NSE Bhav Copy (EOD, always available after 6PM IST)
+  if (!result) {
+    result = await getNSEBhavPrice(symbol).catch(() => null);
+    if (result) console.log(`[NSE] Bhav copy fallback for ${symbol}`);
+  }
 
   if (result) {
     nseQuoteCache.set(symbol, { data: result, ts: Date.now() });
-  } else if (cached) {
-    console.warn(`[NSE] stale cache for ${symbol}`);
+    return result;
+  }
+
+  // 5. Last resort: return stale cache even if very old
+  if (cached) {
+    console.warn(`[NSE] all sources failed for ${symbol}, returning stale cache`);
     return cached.data;
   }
-  return result;
+
+  console.error(`[NSE] no data available for ${symbol}`);
+  return null;
 }
 
   // market open — if cache is from before 9:30 AM ET today, force refresh
@@ -2004,7 +2312,9 @@ const YAHOO_HEADERS = {
   'Accept': 'application/json, */*',
   'Accept-Language': 'en-US,en;q=0.9',
 };
-const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];async function getNSEHistory(symbol, range = '3mo') {
+const YAHOO_HOSTS = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
+
+async function getNSEHistory(symbol, range = '3mo') {
   const cacheKey = `${symbol}:${range}`;
   const cached   = nseHistoryCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < NSE_HISTORY_TTL) return cached.data;
