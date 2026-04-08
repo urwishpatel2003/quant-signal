@@ -18,6 +18,11 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* Scale up the root font size on large screens — all rem/em values scale with it */
+@media (min-width: 1024px) { html { font-size: 17px; } }
+@media (min-width: 1280px) { html { font-size: 18px; } }
+@media (min-width: 1600px) { html { font-size: 19px; } }
+
 /* Safe area support for notched phones */
 body {
   padding-top: env(safe-area-inset-top);
@@ -333,8 +338,8 @@ input, select, textarea {
 
   /* Base font + readability improvements for desktop */
   body {
-    font-size: 15px;
-    line-height: 1.65;
+    font-size: 16px;
+    line-height: 1.7;
     letter-spacing: 0em;
   }
 
@@ -351,27 +356,27 @@ input, select, textarea {
   .app-header { padding: 14px 32px; }
 
   /* Cards */
-  .card { padding: 22px 28px; font-size: 15px; line-height: 1.7; }
+  .card { padding: 22px 28px; font-size: 16px; line-height: 1.75; }
 
   /* KV rows */
-  .kv     { font-size: 15px; padding: 11px 0; }
-  .kv-key { font-size: 14px; }
+  .kv     { font-size: 16px; padding: 11px 0; }
+  .kv-key { font-size: 15px; }
 
   /* Buttons */
-  .btn    { font-size: 14px; padding: 13px 28px; }
-  .btn-sm { font-size: 13px; padding: 9px 18px; }
+  .btn    { font-size: 15px; padding: 13px 28px; }
+  .btn-sm { font-size: 14px; padding: 9px 18px; }
 
   /* Tab nav */
-  .tab-btn { font-size: 14px; padding: 16px 32px; letter-spacing: 0.08em; }
+  .tab-btn { font-size: 15px; padding: 16px 32px; letter-spacing: 0.08em; }
 
   /* Input */
-  .input { font-size: 15px; padding: 12px 16px; }
+  .input { font-size: 16px; padding: 12px 16px; }
 
   /* Tag */
-  .tag { font-size: 13px; padding: 4px 12px; }
+  .tag { font-size: 14px; padding: 4px 12px; }
 
   /* Label */
-  .label-sm { font-size: 12px; }
+  .label-sm { font-size: 13px; }
 
   /* Scanner */
   .scanner-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
