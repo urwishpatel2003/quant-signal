@@ -15,7 +15,8 @@ import OptionsTab     from './tabs/OptionsTab';
 import MarketsTab      from './tabs/MarketsTab';
 import IndiaMarketsTab  from './tabs/IndiaMarketsTab';
 import SimulatorTab       from './tabs/SimulatorTab';
-import SignalHistoryTab  from './tabs/SignalHistoryTab';
+import SignalHistoryTab    from './tabs/SignalHistoryTab';
+import PublicAccuracyTab  from './tabs/PublicAccuracyTab';
 import SharePage      from './pages/SharePage';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
@@ -100,16 +101,12 @@ export default function App() {
 
   // Hide Options tab for India market
   const baseTabs = market === 'INDIA'
-    ? TABS.filter(t => {
-        const id = typeof t === 'string' ? t : t.id;
-        return id !== 'options'; // remove options for India, keep markets (India version)
-      })
+    ? TABS.filter(t => t.id !== 'options') // no options for India
     : TABS;
   const visibleTabs = market === 'INDIA'
     ? baseTabs.reduce((acc, tab) => {
-        const id = typeof tab === 'string' ? tab.toLowerCase() : tab.id;
         acc.push(tab);
-        if (id === 'scanner') acc.push({ id: 'invest', label: 'INVEST' }); // Scanner → Invest → Markets → Watchlist → Help
+        if (tab.id === 'scanner') acc.push({ id: 'invest', label: 'INVEST' });
         return acc;
       }, [])
     : baseTabs;
@@ -281,6 +278,9 @@ export default function App() {
 
             <div style={{ display: activeTab === 'accuracy' ? 'block' : 'none' }}>
               <SignalHistoryTab market={market} />
+              <div style={{ marginTop:32, borderTop:'1px solid #1a1a2e', paddingTop:24 }}>
+                <PublicAccuracyTab />
+              </div>
             </div>
 
             <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>

@@ -4506,6 +4506,317 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
   }
 });
 
+
+// ─── Automated Batch Signal Engine ───────────────────────────────────────────
+// Runs every Sunday night for US, Monday morning IST for India
+// Generates signals for top stocks across all 4 timeframes
+// Stored under user_id = 'SYSTEM' for public accuracy tracking
+
+const BATCH_US_TICKERS = [
+  'AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','AVGO','LLY','JPM',
+  'V','UNH','XOM','WMT','MA','JNJ','PG','HD','COST','MRK',
+  'ABBV','BAC','NFLX','CRM','AMD','KO','PEP','ACN','ADBE','TMO',
+];
+
+const BATCH_INDIA_TICKERS = [
+  'RELIANCE','TCS','HDFCBANK','ICICIBANK','BHARTIARTL','INFOSYS','WIPRO',
+  'SBIN','HINDUNILVR','ITC','LT','AXISBANK','KOTAKBANK','BAJFINANCE',
+  'ASIANPAINT','MARUTI','SUNPHARMA','TATAMOTORS','TITAN','ULTRACEMCO',
+  'POWERGRID','NTPC','ONGC','COALINDIA','BAJAJFINSV','ADANIPORTS',
+  'TECHM','HCLTECH','DRREDDY','DIVISLAB',
+];
+
+const BATCH_TIMEFRAMES = ['short', 'swing', 'position', 'longterm'];
+const BATCH_USER_ID    = 'SYSTEM';
+const batchRunCache    = { lastRun: null, running: false };
+
+async function runBatchSignals(market = 'US') {
+  if (batchRunCache.running) {
+    console.log('[batch] already running, skipping');
+    return { skipped: true };
+  }
+  batchRunCache.running = true;
+  const tickers   = market === 'INDIA' ? BATCH_INDIA_TICKERS : BATCH_US_TICKERS;
+  const results   = { market, generated: 0, errors: 0, signals: [] };
+  const startedAt = Date.now();
+
+  console.log(`[batch] starting ${market} batch — ${tickers.length} tickers × ${BATCH_TIMEFRAMES.length} timeframes`);
+
+  for (const ticker of tickers) {
+    for (const timeframeKey of BATCH_TIMEFRAMES) {
+      try {
+        // Check if we already have a PENDING signal for this ticker+timeframe from today
+        const today = new Date().toISOString().split('T')[0];
+        const { data: existing } = await supabase
+          .from('signal_history')
+          .select('id')
+          .eq('user_id', BATCH_USER_ID)
+          .eq('ticker', ticker)
+          .eq('timeframe', timeframeKey)
+          .eq('market', market)
+          .gte('created_at', today + 'T00:00:00Z')
+          .maybeSingle();
+
+        if (existing) {
+          console.log(`[batch] skip ${ticker}/${timeframeKey} — already run today`);
+          continue;
+        }
+
+        // Fetch all data needed for the signal
+        const tf     = TIMEFRAMES[timeframeKey];
+        const isIndia = market === 'INDIA';
+
+        // Price history
+        let ohlcv = null, ta = null;
+        if (isIndia) {
+          try {
+            const hist = await getNSEHistory(ticker, tf.range);
+            if (hist?.close?.length >= 20) {
+              ohlcv = { close: hist.close, open: hist.open, high: hist.high, low: hist.low, volume: hist.volume };
+              ta    = computeTA(ohlcv, timeframeKey);
+            }
+          } catch {}
+        } else {
+          try {
+            const hist = await tradierHistory(ticker, tf.range);
+            if (hist?.close?.length >= 20) {
+              ohlcv = { close: hist.close, open: hist.open, high: hist.high, low: hist.low, volume: hist.volume };
+              ta    = computeTA(ohlcv, timeframeKey);
+            }
+          } catch {}
+        }
+        if (!ohlcv || !ta) { results.errors++; continue; }
+
+        const price = ohlcv.close[ohlcv.close.length - 1];
+        if (!price) { results.errors++; continue; }
+
+        // Fundamentals (lightweight — no options, no enhanced for batch speed)
+        let fundamentals = null, financials = null;
+        try {
+          const fin = await getFinnhubFinancials(ticker);
+          fundamentals = fin?.fundamentals || null;
+          financials   = fin?.financials   || null;
+        } catch {}
+
+        // Regime (cached — free)
+        let regime = null;
+        if (!isIndia) {
+          try { regime = regimeCache.data || null; } catch {}
+        }
+
+        // Compute signal deterministically
+        const computed = computeSignal({
+          ohlcv, ta, fundamentals, financials,
+          enhanced: null, options: null,
+          market, timeframeKey, news: [],
+          optimizedWeights: null, regime, bonds: null,
+        });
+
+        const { signal, confidence, totalScore } = computed;
+        const atr      = ta?.atr?.atr || null;
+        const priceTarget = atr ? parseFloat((signal === 'SELL' ? price - atr*2 : price + atr*2).toFixed(2)) : null;
+        const stopLoss    = atr ? parseFloat((signal === 'SELL' ? price + atr   : price - atr).toFixed(2))   : null;
+
+        // Save to signal_history under SYSTEM user
+        const { data: saved, error: saveErr } = await supabase.from('signal_history').insert({
+          user_id:         BATCH_USER_ID,
+          ticker:          ticker.toUpperCase(),
+          market,
+          signal,
+          confidence,
+          price_at_signal: price,
+          price_target:    priceTarget,
+          stop_loss:       stopLoss,
+          timeframe:       timeframeKey,
+          thesis:          `Batch signal. Score: ${totalScore.toFixed(3)}. Regime: ${regime?.regime || 'N/A'}.`,
+          outcome_result:  'PENDING',
+        }).select('id').single();
+
+        if (saveErr) throw saveErr;
+
+        results.generated++;
+        results.signals.push({ ticker, timeframeKey, signal, confidence, price });
+        console.log(`[batch] ${ticker}/${timeframeKey}: ${signal} ${confidence}% @ ${isIndia ? '₹' : '$'}${price}`);
+
+        // Small delay to avoid rate limits
+        await sleep(200);
+
+      } catch (e) {
+        console.warn(`[batch] error ${ticker}/${timeframeKey}:`, e.message);
+        results.errors++;
+      }
+    }
+  }
+
+  batchRunCache.running = false;
+  batchRunCache.lastRun = Date.now();
+  console.log(`[batch] complete — ${results.generated} signals generated, ${results.errors} errors in ${((Date.now()-startedAt)/1000).toFixed(0)}s`);
+  return results;
+}
+
+// ─── Batch outcomes checker — runs daily to check resolved signals ────────────
+async function checkBatchOutcomes() {
+  try {
+    const tfDays = { short: 5, swing: 28, position: 90, longterm: 365 };
+    const now    = Date.now();
+
+    const { data: pending } = await supabase
+      .from('signal_history')
+      .select('*')
+      .eq('user_id', BATCH_USER_ID)
+      .eq('outcome_result', 'PENDING');
+
+    if (!pending?.length) return;
+
+    const toCheck = pending.filter(s => {
+      const days = tfDays[s.timeframe] || 7;
+      return now - new Date(s.created_at).getTime() >= days * 864e5;
+    });
+
+    if (!toCheck.length) return;
+
+    // Batch fetch current prices
+    const usTickers    = [...new Set(toCheck.filter(s=>s.market!=='INDIA').map(s=>s.ticker))];
+    const indiaTickers = [...new Set(toCheck.filter(s=>s.market==='INDIA').map(s=>s.ticker))];
+    const prices = {};
+
+    if (usTickers.length) {
+      const q   = await tradierGet(`/v1/markets/quotes?symbols=${usTickers.join(',')}&greeks=false`);
+      const raw = q?.quotes?.quote || [];
+      (Array.isArray(raw) ? raw : [raw]).forEach(q => { if (q.symbol) prices[q.symbol] = parseFloat(q.last); });
+    }
+    for (const t of indiaTickers) {
+      try { const q = await getNSEQuote(t); if (q?.price) prices[t] = q.price; } catch {} 
+    }
+
+    let checked = 0;
+    for (const sig of toCheck) {
+      const cur = prices[sig.ticker];
+      if (!cur) continue;
+      const pct    = (cur - sig.price_at_signal) / sig.price_at_signal * 100;
+      let result;
+      if (sig.signal === 'BUY')  result = pct >  2 ? 'WIN' : pct < -2 ? 'LOSS' : 'SCRATCH';
+      if (sig.signal === 'SELL') result = pct < -2 ? 'WIN' : pct >  2 ? 'LOSS' : 'SCRATCH';
+      if (sig.signal === 'HOLD') result = Math.abs(pct) < 5 ? 'WIN' : 'LOSS';
+      await supabase.from('signal_history').update({
+        outcome_price:      cur,
+        outcome_checked_at: new Date().toISOString(),
+        outcome_pct:        parseFloat(pct.toFixed(2)),
+        outcome_result:     result,
+      }).eq('id', sig.id);
+      checked++;
+    }
+    console.log(`[batch outcomes] checked ${checked} signals`);
+  } catch (e) {
+    console.error('[batch outcomes]', e.message);
+  }
+}
+
+// ─── GET /batch/signals — public leaderboard of system signals ────────────────
+app.get('/batch/signals', async (req, res) => {
+  try {
+    const market     = req.query.market    || 'US';
+    const timeframe  = req.query.timeframe || null;
+    const status     = req.query.status    || null; // PENDING | WIN | LOSS | SCRATCH
+    const limit      = Math.min(parseInt(req.query.limit) || 120, 500);
+
+    let query = supabase
+      .from('signal_history')
+      .select('*')
+      .eq('user_id', BATCH_USER_ID)
+      .eq('market', market)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (timeframe) query = query.eq('timeframe', timeframe);
+    if (status)    query = query.eq('outcome_result', status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const resolved   = (data || []).filter(s => s.outcome_result !== 'PENDING');
+    const wins       = resolved.filter(s => s.outcome_result === 'WIN').length;
+    const losses     = resolved.filter(s => s.outcome_result === 'LOSS').length;
+    const scratches  = resolved.filter(s => s.outcome_result === 'SCRATCH').length;
+    const byTf       = {};
+    const bySignal   = { BUY:{wins:0,losses:0,total:0}, SELL:{wins:0,losses:0,total:0}, HOLD:{wins:0,losses:0,total:0} };
+
+    resolved.forEach(s => {
+      if (!byTf[s.timeframe]) byTf[s.timeframe] = { wins:0, losses:0, total:0 };
+      byTf[s.timeframe].total++;
+      if (s.outcome_result==='WIN')  byTf[s.timeframe].wins++;
+      if (s.outcome_result==='LOSS') byTf[s.timeframe].losses++;
+      if (bySignal[s.signal]) {
+        bySignal[s.signal].total++;
+        if (s.outcome_result==='WIN')  bySignal[s.signal].wins++;
+        if (s.outcome_result==='LOSS') bySignal[s.signal].losses++;
+      }
+    });
+
+    res.json({
+      signals: data || [],
+      stats: {
+        total: resolved.length, wins, losses, scratches,
+        winRate:   resolved.length ? Math.round(wins/resolved.length*100) : null,
+        pending:   (data||[]).filter(s=>s.outcome_result==='PENDING').length,
+        byTimeframe: byTf,
+        bySignal,
+        lastRun: batchRunCache.lastRun,
+      }
+    });
+  } catch (e) {
+    console.error('[batch/signals]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── POST /batch/run — trigger a batch run (protected by secret) ──────────────
+app.post('/batch/run', async (req, res) => {
+  const secret = req.headers['x-batch-secret'] || req.body?.secret;
+  if (secret !== process.env.BATCH_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  const market = req.body?.market || 'US';
+  res.json({ message: 'batch started', market });
+  runBatchSignals(market).catch(e => console.error('[batch/run]', e.message));
+});
+
+// ─── POST /batch/check-outcomes — trigger outcome check ──────────────────────
+app.post('/batch/check-outcomes', async (req, res) => {
+  const secret = req.headers['x-batch-secret'] || req.body?.secret;
+  if (secret !== process.env.BATCH_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  res.json({ message: 'checking outcomes...' });
+  checkBatchOutcomes().catch(e => console.error('[batch/check-outcomes]', e.message));
+});
+
+// ─── Scheduled batch runs ─────────────────────────────────────────────────────
+// Sunday 8PM ET = Monday 9:30AM IST — run US batch
+// Monday 3AM ET = Monday 8:30AM IST — run India batch
+function scheduleBatchRuns() {
+  setInterval(async () => {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const day  = now.getDay();    // 0=Sun
+    const hour = now.getHours();
+    const min  = now.getMinutes();
+
+    // Sunday 8:00 PM ET → US batch
+    if (day === 0 && hour === 20 && min < 5 && !batchRunCache.running) {
+      console.log('[batch scheduler] triggering US weekly batch');
+      runBatchSignals('US').catch(console.error);
+    }
+    // Monday 3:00 AM ET → India batch
+    if (day === 1 && hour === 3 && min < 5 && !batchRunCache.running) {
+      console.log('[batch scheduler] triggering India weekly batch');
+      runBatchSignals('INDIA').catch(console.error);
+    }
+    // Daily 6:00 AM ET → check outcomes
+    if (hour === 6 && min < 5) {
+      checkBatchOutcomes().catch(console.error);
+    }
+  }, 4 * 60 * 1000); // check every 4 minutes
+}
+
+scheduleBatchRuns();
+console.log('[batch] scheduler started');
+
 // ─── Share Cards ─────────────────────────────────────────────────────────────
 // Store shareable card data in Supabase, return a short ID
 
