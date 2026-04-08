@@ -106,14 +106,14 @@ export default function WelcomePage({ onEnter, onNavigate }) {
     { color:'#ff6644', name:'IV Rank',        badge:null,  weight:'US only',           desc:'Put/call IV skew as fear indicator' },
     { color:'#cc44ff', name:'Sector Rel. Strength', badge:null, weight:'20d vs ETF',  desc:'Outperforming sector +0.6, under = -0.6' },
     { color:'#4488ff', name:'Analyst Consensus', badge:null, weight:'Short 4% · Long 17%', desc:'Rec key + PT upside, weighted by count' },
-    { color:'#7788aa', name:'Macro / Regime', badge:null,  weight:'Short 8% · Long 10%',desc:'Bonds, regime, institutional, FII/DII' },
+    { color:'#8899bb', name:'Macro / Regime', badge:null,  weight:'Short 8% · Long 10%',desc:'Bonds, regime, institutional, FII/DII' },
     { color:'#ff4444', name:'News Catalyst',  badge:null,  weight:'Severity × recency', desc:'Upgrade/downgrade/short attack with age decay' },
     { color:'#ff2244', name:'Earnings Gate',  badge:null,  weight:'≤2d = force HOLD',  desc:'≤5d caps confidence at 60% — binary event guard' },
-    { color:'#556677', name:'Donchian Channel', badge:'§3.15', weight:'52W high/low', desc:'Within 5% of 52W high = breakout flag' },
+    { color:'#7a8fa8', name:'Donchian Channel', badge:'§3.15', weight:'52W high/low', desc:'Within 5% of 52W high = breakout flag' },
   ];
 
   const PRICING = [
-    { label:'FREE',          color:'#7788aa', price:'$0',   sub:'Forever free',           cta:'GET STARTED FREE',
+    { label:'FREE',          color:'#8899bb', price:'$0',   sub:'Forever free',           cta:'GET STARTED FREE',
       features:['5 stock scans / day','3 options analyses / day','5 watchlist items','All 4 timeframes','Signal accuracy tracker','US & India markets'] },
     { label:'PRO — US 🇺🇸', color:'#ffaa00', price:'$5',   sub:'/mo · No commitment',    cta:'START FREE TRIAL', popular:true,
       features:['Unlimited scans & options','Unlimited watchlist','Institutional + insider data','Earnings quality (SUE)','Market regime detection','First month FREE ✓'] },
@@ -174,7 +174,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
           <span style={{ color:'#ffaa00' }}>SIGNAL</span>
         </div>
 
-        <div style={{ fontSize:'clamp(13px,1.7vw,18px)', color:'#556677',
+        <div style={{ fontSize:'clamp(13px,1.7vw,18px)', color:'#7a8fa8',
           lineHeight:1.85, maxWidth:560, margin:'0 auto 28px', fontWeight:300 }}>
           The signal engine that tracks its own accuracy.<br />
           Every scan saved. Every outcome measured. Every edge compounding.
@@ -190,7 +190,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             lineHeight:1.5, marginBottom:8 }}>
             Your signal accuracy improves the longer you use it.
           </div>
-          <div style={{ fontSize:12, color:'#556677', lineHeight:1.75 }}>
+          <div style={{ fontSize:12, color:'#7a8fa8', lineHeight:1.75 }}>
             Every BUY/SELL/HOLD is saved with your entry price. When the timeframe elapses, the outcome is checked automatically — WIN, LOSS or SCRATCH. Over time you build a personal accuracy record no other tool gives you. That's your edge, compounding daily.
           </div>
         </div>
@@ -207,7 +207,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
           <button className="wc-btn" onClick={() => go('help')} style={{
             fontFamily:"'IBM Plex Mono',monospace", fontSize:'clamp(12px,1.3vw,14px)',
             padding:'clamp(12px,1.5vw,15px) clamp(28px,4vw,44px)',
-            background:'transparent', border:'1px solid #2a2a3e', color:'#7788aa',
+            background:'transparent', border:'1px solid #2a2a3e', color:'#8899bb',
             cursor:'pointer', borderRadius:3, letterSpacing:'.1em' }}>
             HOW IT WORKS
           </button>
@@ -226,7 +226,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             <div key={i} style={{ background:'#0c0c18', border:`1px solid ${s.c}22`,
               borderTop:`2px solid ${s.c}55`, borderRadius:6, padding:'13px 8px', textAlign:'center' }}>
               <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:26, color:s.c, lineHeight:1 }}>{s.v}</div>
-              <div style={{ fontSize:10, color:'#556677', marginTop:4 }}>{s.l}</div>
+              <div style={{ fontSize:10, color:'#7a8fa8', marginTop:4 }}>{s.l}</div>
             </div>
           ))}
         </div>
@@ -245,8 +245,8 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                 <div style={{ fontSize:18, marginBottom:10 }}>{s.icon}</div>
                 <div style={{ fontSize:12, fontWeight:700, color:'#ffaa00', marginBottom:6,
                   letterSpacing:'.06em', fontFamily:"'IBM Plex Mono',monospace" }}>{s.title}</div>
-                <div style={{ fontSize:12, color:'#7788aa', lineHeight:1.75, marginBottom:10 }}>{s.desc}</div>
-                <div style={{ fontSize:11, color:'#00ff8877', paddingTop:10,
+                <div style={{ fontSize:12, color:'#8899bb', lineHeight:1.75, marginBottom:10 }}>{s.desc}</div>
+                <div style={{ fontSize:11, color:'#00ff8899', paddingTop:10,
                   borderTop:'1px solid #1a1a2e', fontStyle:'italic' }}>→ {s.hook}</div>
               </div>
             ))}
@@ -264,7 +264,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                 lineHeight:1, color:'#00ff88', marginBottom:4 }}>58%</div>
               <div style={{ fontSize:10, color:'#00ff8866', letterSpacing:'.15em',
                 fontFamily:"'IBM Plex Mono',monospace", marginBottom:16 }}>WIN RATE · TOP 20% USERS</div>
-              <p style={{ fontSize:12, color:'#556677', lineHeight:1.8, margin:0 }}>
+              <p style={{ fontSize:12, color:'#7a8fa8', lineHeight:1.8, margin:0 }}>
                 The market is a coin flip at 50%. Every point above that is real edge. QuAInt Signal users who run 50+ scans see their personal accuracy stabilize — and it's trackable, provable, and yours.
               </p>
             </div>
@@ -278,7 +278,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               ].map((r, i) => (
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
                   padding:'9px 14px', background:'#0f1a14', border:'1px solid #00ff8811', borderRadius:4 }}>
-                  <span style={{ fontSize:11, color:'#7788aa' }}>{r.l}</span>
+                  <span style={{ fontSize:11, color:'#8899bb' }}>{r.l}</span>
                   <span style={{ fontSize:13, fontWeight:700, color:r.c }}>{r.v}</span>
                 </div>
               ))}
@@ -319,13 +319,13 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                 <div style={{ fontSize:'clamp(12px,1.3vw,14px)', fontWeight:700,
                   color:f.color, marginBottom:8, fontFamily:"'IBM Plex Mono',monospace",
                   letterSpacing:'.04em' }}>{f.title}</div>
-                <div style={{ fontSize:'clamp(11px,1.1vw,13px)', color:'#99aacc',
+                <div style={{ fontSize:'clamp(11px,1.1vw,13px)', color:'#b8c8e0',
                   lineHeight:1.75, marginBottom:12 }}>{f.desc}</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                   {f.points.map((p, j) => (
-                    <div key={j} style={{ fontSize:'clamp(10px,1vw,11px)', color:'#556677',
+                    <div key={j} style={{ fontSize:'clamp(10px,1vw,11px)', color:'#7a8fa8',
                       display:'flex', gap:7, alignItems:'flex-start' }}>
-                      <span style={{ color:f.color, flexShrink:0, marginTop:1 }}>›</span>{p}
+                      <span style={{ color:f.color, flexShrink:0, marginTop:1 }}>›</span><span style={{color:'#9ab0c8'}}>{p}</span>
                     </div>
                   ))}
                 </div>
@@ -333,36 +333,13 @@ export default function WelcomePage({ onEnter, onNavigate }) {
             ))}
           </div>
 
-          {/* Free / Pro stats grid */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:24 }}>
-            {['free','pro'].map(tier => (
-              <div key={tier} style={{ background:'#0c0c18', border:`1px solid ${statsAccent}${tier==='pro'?'44':'22'}`,
-                borderTop:`2px solid ${statsAccent}${tier==='pro'?'88':'44'}`, borderRadius:6,
-                padding:'clamp(12px,2vw,20px)' }}>
-                <div style={{ fontSize:8, color: tier==='pro' ? statsAccent+'cc' : '#556677',
-                  letterSpacing:'.18em', textAlign:'center', marginBottom:12,
-                  fontFamily:"'IBM Plex Mono',monospace", borderBottom:`1px solid #1a1a2a`, paddingBottom:8 }}>
-                  {tier.toUpperCase()}
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-                  {stats[tier].map((s, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:15,
-                        color: tier==='pro' ? statsAccent : '#b0c0dd', minWidth:38, lineHeight:1, flexShrink:0 }}>{s.value}</div>
-                      <div style={{ fontSize:11, color:'#556677', lineHeight:1.3 }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
       {/* ── SIGNAL ENGINE ──────────────────────────────────────────────────── */}
       <div className="wc">
         <div className="wc-lbl">THE SIGNAL ENGINE</div>
-        <div style={{ textAlign:'center', fontSize:11, color:'#334455', marginBottom:18 }}>
+        <div style={{ textAlign:'center', fontSize:11, color:'#6a7f98', marginBottom:18 }}>
           Based on{' '}
           <span style={{ color:'#4488ff77' }}>151 Trading Strategies (Kakushadze & Serur, SSRN-3247865)</span>
           {' '}+ institutional quant research
@@ -380,16 +357,16 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                     marginLeft:6, verticalAlign:'middle' }}>{f.badge}</span>
                 )}
               </div>
-              <div style={{ fontSize:10, color:'#556677', marginBottom:3 }}>{f.weight}</div>
-              <div style={{ fontSize:10, color:'#445566', lineHeight:1.4 }}>{f.desc}</div>
+              <div style={{ fontSize:10, color:'#7a8fa8', marginBottom:3 }}>{f.weight}</div>
+              <div style={{ fontSize:10, color:'#7a8fa8', lineHeight:1.4 }}>{f.desc}</div>
             </div>
           ))}
         </div>
-        <div style={{ marginTop:14, textAlign:'center', fontSize:11, color:'#334455' }}>
+        <div style={{ marginTop:14, textAlign:'center', fontSize:11, color:'#6a7f98' }}>
           Score −1 to +1 per factor &nbsp;·&nbsp;
           <span style={{ color:'#00ff88' }}>+0.15 = BUY</span> &nbsp;·&nbsp;
           <span style={{ color:'#ff4444' }}>−0.15 = SELL</span> &nbsp;·&nbsp;
-          <span style={{ color:'#7788aa' }}>else HOLD</span> &nbsp;·&nbsp;
+          <span style={{ color:'#8899bb' }}>else HOLD</span> &nbsp;·&nbsp;
           <span style={{ color:'#c8d8f0' }}>Confidence 45–95%</span>
         </div>
       </div>
@@ -415,7 +392,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
                   fontFamily:"'IBM Plex Mono',monospace" }}>{p.label}</div>
                 <div style={{ fontFamily:"'Bebas Neue',sans-serif",
                   fontSize:'clamp(34px,5vw,50px)', color:p.color, lineHeight:1, marginBottom:4 }}>{p.price}</div>
-                <div style={{ fontSize:11, color:'#7788aa', marginBottom:20 }}>{p.sub}</div>
+                <div style={{ fontSize:11, color:'#8899bb', marginBottom:20 }}>{p.sub}</div>
                 {p.features.map((f, j) => (
                   <div key={j} style={{ display:'flex', gap:8, alignItems:'center',
                     fontSize:'clamp(11px,1.1vw,12px)', color: f.startsWith('First month') ? '#00ff88' : '#b0c0dd',
@@ -452,7 +429,7 @@ export default function WelcomePage({ onEnter, onNavigate }) {
               "The signal factors are drawn from peer-reviewed academic research — specifically the Kakushadze & Serur \"151 Trading Strategies\" paper (SSRN-3247865) — combined with institutional quant methods. Risk-adjusted momentum, Internal Bar Strength, Standardized Unexpected Earnings, the 3-MA cascade filter and low-volatility anomaly are all implemented from the paper's formulas.",
               "For Indian stocks, FII/DII net buying, promoter holding changes, delivery % vs total volume and NSE circuit breaker proximity are scored as dedicated factors — not just mentioned in the thesis. The India Invest tab adds SIP planning, AI portfolio allocation and 10,000+ mutual fund search.",
             ].map((t, i) => (
-              <p key={i} style={{ fontSize:'clamp(12px,1.2vw,13px)', color:'#7788aa',
+              <p key={i} style={{ fontSize:'clamp(12px,1.2vw,13px)', color:'#8899bb',
                 lineHeight:1.9, marginBottom:14, marginTop:0 }}>{t}</p>
             ))}
           </div>
@@ -484,11 +461,11 @@ export default function WelcomePage({ onEnter, onNavigate }) {
       {/* ── FOOTER ─────────────────────────────────────────────────────────── */}
       <div style={{ borderTop:'1px solid #1a1a2e',
         padding:'clamp(18px,2.5vw,28px) clamp(16px,5vw,56px)', textAlign:'center' }}>
-        <div style={{ fontSize:'clamp(10px,.9vw,11px)', color:'#222233',
+        <div style={{ fontSize:'clamp(10px,.9vw,11px)', color:'#556677',
           maxWidth:760, margin:'0 auto', lineHeight:1.8 }}>
           ⚠ RISK DISCLAIMER: QuAInt Signal is an educational and analytical tool only. Nothing constitutes financial advice or a recommendation to buy or sell any security. Trading involves significant risk. Always consult a licensed financial advisor before trading.
         </div>
-        <div style={{ fontSize:10, color:'#1a1a2a', marginTop:10 }}>
+        <div style={{ fontSize:10, color:'#7a8fa8', marginTop:10 }}>
           © {new Date().getFullYear()} QuAInt Signal · Free to start · US Pro $5/mo · India Pro ₹249/mo
         </div>
       </div>
