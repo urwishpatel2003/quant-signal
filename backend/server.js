@@ -4513,17 +4513,25 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
 // Stored under user_id = 'SYSTEM' for public accuracy tracking
 
 const BATCH_US_TICKERS = [
-  'AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','AVGO','LLY','JPM',
-  'V','UNH','XOM','WMT','MA','JNJ','PG','HD','COST','MRK',
-  'ABBV','BAC','NFLX','CRM','AMD','KO','PEP','ACN','ADBE','TMO',
+  // Mega cap benchmark (8) — most liquid, hardest to beat
+  'AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','JPM',
+  // High-volatility momentum (8) — technicals dominate, signals have real edge
+  'MSTR','COIN','AMD','SMCI','PLTR','MARA','RIOT','HOOD',
+  // Mid-cap growth / SaaS (7) — earnings quality + momentum factors shine
+  'DDOG','NET','CRWD','SNOW','MNDY','GTLB','BILL',
+  // Sector leaders with strong fundamental signals (7) — earnings + analyst combo
+  'LLY','ABBV','AVGO','COST','V','XOM','GS',
 ];
 
 const BATCH_INDIA_TICKERS = [
-  'RELIANCE','TCS','HDFCBANK','ICICIBANK','BHARTIARTL','INFOSYS','WIPRO',
-  'SBIN','HINDUNILVR','ITC','LT','AXISBANK','KOTAKBANK','BAJFINANCE',
-  'ASIANPAINT','MARUTI','SUNPHARMA','TATAMOTORS','TITAN','ULTRACEMCO',
-  'POWERGRID','NTPC','ONGC','COALINDIA','BAJAJFINSV','ADANIPORTS',
-  'TECHM','HCLTECH','DRREDDY','DIVISLAB',
+  // Nifty large cap benchmark (8)
+  'RELIANCE','TCS','HDFCBANK','ICICIBANK','INFOSYS','BHARTIARTL','SBIN','LT',
+  // High-beta / momentum names (8) — circuit breakers, FII flow signals matter
+  'ADANIPORTS','ADANIENT','BAJFINANCE','TATAMOTORS','ZOMATO','NYKAA','PAYTM','IRCTC',
+  // Mid-cap quality (7) — delivery %, promoter holding signals strong here
+  'PERSISTENT','COFORGE','KPITTECH','DIXON','POLYCAB','TIINDIA','APARINDS',
+  // Sector leaders with strong fundamentals (7)
+  'SUNPHARMA','DRREDDY','TITAN','ASIANPAINT','MARUTI','KOTAKBANK','AXISBANK',
 ];
 
 const BATCH_TIMEFRAMES = ['short', 'swing', 'position', 'longterm'];
