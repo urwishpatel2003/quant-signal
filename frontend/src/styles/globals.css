@@ -29,13 +29,7 @@ input, select, textarea {
   font-size: 16px !important;
 }
 
-/* ── Global inline style overrides ── */
-/* These ensure small labels are always readable */
-[style*="font-size: 9px"],
-[style*="font-size:9px"] { font-size: 11px !important; }
-
-[style*="font-size: 10px"],
-[style*="font-size:10px"] { font-size: 12px !important; }
+/* inline font sizes are respected as-is */
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #111; }
@@ -344,25 +338,17 @@ input, select, textarea {
     letter-spacing: 0em;
   }
 
-  /* Override inline font sizes on desktop — bump everything up for readability */
-  [style*="font-size: 9px"],  [style*="font-size:9px"]  { font-size: 12px !important; }
-  [style*="font-size: 10px"], [style*="font-size:10px"] { font-size: 13px !important; }
-  [style*="font-size: 11px"], [style*="font-size:11px"] { font-size: 14px !important; }
-  [style*="font-size: 12px"], [style*="font-size:12px"] { font-size: 15px !important; }
-  [style*="font-size: 13px"], [style*="font-size:13px"] { font-size: 16px !important; }
-  [style*="font-size: 14px"], [style*="font-size:14px"] { font-size: 16px !important; }
+  /* inline font sizes respected as-is on desktop */
 
-  /* App content — constrained max width, centered, generous padding */
+  /* App content — full width, generous padding on desktop */
   .app-content {
-    padding: 32px 48px;
-    max-width: 1440px;
-    margin: 0 auto;
+    padding: 28px 32px;
     width: 100%;
     box-sizing: border-box;
   }
 
   /* Header */
-  .app-header { padding: 14px 48px; }
+  .app-header { padding: 14px 32px; }
 
   /* Cards */
   .card { padding: 22px 28px; font-size: 15px; line-height: 1.7; }
@@ -425,8 +411,8 @@ input, select, textarea {
 
 /* ── LARGE DESKTOP (min-width: 1280px) ───────────────────────────────────── */
 @media (min-width: 1280px) {
-  .app-content { padding: 36px 64px; }
-  .app-header  { padding: 14px 64px; }
+  .app-content { padding: 32px 40px; }
+  .app-header  { padding: 14px 40px; }
 
   .welcome-hero     { padding: 110px 80px 80px; }
   .welcome-features { padding: 0 80px 80px; }
