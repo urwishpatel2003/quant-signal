@@ -1515,20 +1515,23 @@ app.get('/regime', async (req, res) => {
 });
 
 // ─── QuAInt Signal Engine — Deterministic ───────────────────────────────────
-function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null, regime = null, bonds = null }) {
+function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null, regime = null, bonds = null, earningsDate = null }) {
   const isIndia = market === 'INDIA';
   const scores  = {};
   const debug   = {};
+  const flags   = []; // high-impact flags that override or boost score
 
   const tfConfig = {
-    short:    { regimeWeight: 0.3,  newsDecay: 1.0, fundamentalRelevance: 0.3 },
-    swing:    { regimeWeight: 0.5,  newsDecay: 0.7, fundamentalRelevance: 0.6 },
-    position: { regimeWeight: 0.7,  newsDecay: 0.4, fundamentalRelevance: 0.9 },
-    longterm: { regimeWeight: 0.9,  newsDecay: 0.1, fundamentalRelevance: 1.0 },
+    short:    { regimeWeight: 0.3, newsDecay: 1.0, days: 5   },
+    swing:    { regimeWeight: 0.5, newsDecay: 0.7, days: 20  },
+    position: { regimeWeight: 0.7, newsDecay: 0.4, days: 60  },
+    longterm: { regimeWeight: 0.9, newsDecay: 0.1, days: 252 },
   };
   const tf = tfConfig[timeframeKey] || tfConfig.swing;
 
-  // 1. MOMENTUM — timeframe-scaled lookbacks
+  // ── 1. MOMENTUM — timeframe-scaled + risk-adjusted (Paper §3.1, eq.269) ──────
+  // Paper finding: risk-adjusted momentum (Sharpe-like) outperforms raw momentum
+  // Ri_risk_adj = mean(returns) / std(returns) over formation period
   const closes = ohlcv?.close?.filter(c => c != null) || [];
   const cur    = closes[closes.length - 1];
   const lbMap  = { short:[5,10], swing:[10,20], position:[20,60], longterm:[60,120] };
@@ -1538,84 +1541,298 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   let mScore = 0;
   if (p1 && cur) { const r=(cur-p1)/p1*100; mScore+=r>5?1:r>2?.6:r>0?.2:r>-2?-.2:r>-5?-.6:-1; debug.ret_short=r.toFixed(1)+'%'; }
   if (p2 && cur) { const r=(cur-p2)/p2*100; mScore+=r>10?.5:r>3?.3:r>-3?0:r>-10?-.3:-.5; debug.ret_long=r.toFixed(1)+'%'; }
+
+  // Risk-adjusted momentum: penalize volatile momentum (mean/std over window)
+  const window = Math.min(closes.length, lb2 || 20);
+  if (window >= 5) {
+    const slice   = closes.slice(-window);
+    const rets    = slice.slice(1).map((c, i) => (c - slice[i]) / slice[i] * 100);
+    const meanRet = rets.reduce((s, r) => s + r, 0) / rets.length;
+    const stdRet  = Math.sqrt(rets.reduce((s, r) => s + (r - meanRet) ** 2, 0) / rets.length);
+    const riskAdjMom = stdRet > 0 ? meanRet / stdRet : 0; // Sharpe-like
+    // Blend raw and risk-adjusted momentum (60/40)
+    mScore = mScore * 0.6 + (riskAdjMom > 0.3 ? 0.4 : riskAdjMom > 0.1 ? 0.2 : riskAdjMom < -0.3 ? -0.4 : riskAdjMom < -0.1 ? -0.2 : 0) * 0.4;
+    debug.riskAdjMom = riskAdjMom.toFixed(2);
+  }
   scores.momentum = Math.max(-1, Math.min(1, mScore));
 
-  // 2. TREND
+  // ── 2. TREND — 3-MA cascade filter (Paper §3.13, eq.324) ────────────────────
+  // Paper: require MA(short) > MA(medium) > MA(long) for confirmed uptrend
+  // Reduces false signals vs two-MA crossover alone
   const sma20=ta?.sma20, sma50=ta?.sma50, sma200=ta?.sma200;
   let tScore=0;
   if (cur&&sma20)  tScore+=cur>sma20  ?.4:-.4;
   if (cur&&sma50)  tScore+=cur>sma50  ?.3:-.3;
   if (cur&&sma200) tScore+=cur>sma200 ?.3:-.3;
-  if (sma20&&sma50&&sma20>sma50) tScore+=.2;
-  scores.trend=Math.max(-1,Math.min(1,tScore));
+  if (sma20&&sma50&&sma20>sma50) tScore+=.2; // golden cross
+  if (sma50&&sma200&&sma50>sma200) tScore+=.1; // bull structure
+  // 3-MA full cascade confirmation (paper §3.13): all 3 aligned = strong signal
+  const fullBullCascade = cur && sma20 && sma50 && sma200 && cur>sma20 && sma20>sma50 && sma50>sma200;
+  const fullBearCascade = cur && sma20 && sma50 && sma200 && cur<sma20 && sma20<sma50 && sma50<sma200;
+  if (fullBullCascade) { tScore += 0.3; flags.push({ type: 'FULL_BULL_CASCADE', note: 'Price>SMA20>SMA50>SMA200 — confirmed uptrend', boost: 0 }); }
+  if (fullBearCascade) { tScore -= 0.3; flags.push({ type: 'FULL_BEAR_CASCADE', note: 'Price<SMA20<SMA50<SMA200 — confirmed downtrend', boost: 0 }); }
+  scores.trend = Math.max(-1, Math.min(1, tScore));
+  debug.trend = ta?.trendSignal;
+  debug.cascade = fullBullCascade ? 'BULL' : fullBearCascade ? 'BEAR' : 'NONE';
 
-  // 3. RSI — regime-aware
-  const rsi=parseFloat(ta?.rsi14);
-  const inBearRegime=(regime?.regime==='BEAR'||regime?.regime==='STRONG_BEAR')||(sma200&&cur&&cur<sma200*.97);
-  const inStrongBull=(regime?.regime==='STRONG_BULL')||(sma50&&sma200&&sma50>sma200&&cur>sma50);
-  let rsiScore=0;
+  // ── 3. RSI — regime-aware ─────────────────────────────────────────────────────
+  const rsi = parseFloat(ta?.rsi14);
+  const inBearRegime  = (regime?.regime==='BEAR'||regime?.regime==='STRONG_BEAR') || (sma200&&cur&&cur<sma200*.97);
+  const inStrongBull  = (regime?.regime==='STRONG_BULL') || (sma50&&sma200&&sma50>sma200&&cur>sma50);
+  let rsiScore = 0;
   if (!isNaN(rsi)) {
     if (inBearRegime)  rsiScore=rsi<30?-.3:rsi<40?-.1:rsi<55?.1:rsi<70?.4:.2;
     else if (inStrongBull) rsiScore=rsi<35?.8:rsi<50?.4:rsi<70?.1:rsi<80?-.1:-.4;
     else rsiScore=rsi<25?1:rsi<35?.7:rsi<45?.3:rsi<55?0:rsi<65?-.1:rsi<75?-.4:-.7;
-    debug.rsi=rsi;
+    debug.rsi = rsi;
   }
-  scores.rsi=rsiScore;
+  scores.rsi = rsiScore;
 
-  // 4. MACD
+  // ── 4. STOCH RSI — momentum confirmation ──────────────────────────────────────
+  const stochK = parseFloat(ta?.stochRSI?.k);
+  const stochCross = ta?.stochRSI?.crossover;
+  let stochScore = 0;
+  if (!isNaN(stochK)) {
+    stochScore = stochK < 10 ? 0.8 : stochK < 20 ? 0.5 : stochK < 40 ? 0.2
+               : stochK > 90 ? -0.8 : stochK > 80 ? -0.5 : stochK > 60 ? -0.2 : 0;
+    if (stochCross === 'BULLISH_CROSS') stochScore = Math.min(1, stochScore + 0.4);
+    if (stochCross === 'BEARISH_CROSS') stochScore = Math.max(-1, stochScore - 0.4);
+    debug.stochRSI = stochK + (stochCross ? ` ${stochCross}` : '');
+  }
+  scores.stochRsi = stochScore;
+
+  // ── 5. MACD ────────────────────────────────────────────────────────────────────
   const mc=ta?.macd?.cross, mt=ta?.macd?.trend;
-  scores.macd=mc==='BULLISH_CROSS'?.8:mc==='BEARISH_CROSS'?-.8:mt==='BULLISH'?.3:mt==='BEARISH'?-.3:0;
+  scores.macd = mc==='BULLISH_CROSS'?.8:mc==='BEARISH_CROSS'?-.8:mt==='BULLISH'?.3:mt==='BEARISH'?-.3:0;
+  debug.macd = mc || mt;
 
-  // 5. VOLUME
-  const vr=parseFloat(ta?.volumeRatio);
-  const priceUp=closes.length>=2?closes[closes.length-1]>closes[closes.length-2]:null;
-  scores.volume=isNaN(vr)?0:vr>1.5&&priceUp===true?.7:vr>1.5&&priceUp===false?-.7:vr>1?.2:vr<.7?-.2:0;
+  // ── 6. BOLLINGER BANDS — squeeze + position ────────────────────────────────────
+  const bbPos    = ta?.bb?.position;
+  const bbWidth  = parseFloat(ta?.bb?.bWidth);
+  const bbPct    = parseFloat(ta?.bb?.bPct);   // %B: 0=lower, 1=upper, 0.5=mid
+  const bbSqueeze = ta?.bb?.squeeze;
+  let bbScore = 0;
+  if (!isNaN(bbPct)) {
+    // %B position: below lower=oversold, above upper=overbought
+    if (bbPct < 0)    bbScore =  0.8;  // below lower band = very oversold
+    else if (bbPct < 0.2) bbScore = 0.4;
+    else if (bbPct < 0.4) bbScore = 0.1;
+    else if (bbPct > 1)   bbScore = -0.8; // above upper band = very overbought
+    else if (bbPct > 0.8) bbScore = -0.4;
+    else if (bbPct > 0.6) bbScore = -0.1;
+    // In strong trends, adjust: overbought in uptrend = momentum, not reversal
+    if (inStrongBull && bbScore < 0) bbScore *= 0.4;
+    if (inBearRegime && bbScore > 0) bbScore *= 0.4;
+    debug.bbPct = bbPct?.toFixed(2);
+  }
+  // BB Squeeze: low volatility = compression before breakout
+  // Direction unknown so boost whichever way momentum leans
+  if (bbSqueeze && !isNaN(bbWidth) && bbWidth < 5) {
+    flags.push({ type: 'BB_SQUEEZE', note: 'Volatility compression — breakout imminent', boost: scores.momentum > 0 ? 0.2 : -0.2 });
+    debug.bbSqueeze = true;
+  }
+  scores.bollinger = Math.max(-1, Math.min(1, bbScore));
 
-  // 6. REVENUE — timeframe-scaled
-  const revYoY=financials?.yoy?.revenueYoY??(fundamentals?.revenueGrowth!=null?fundamentals.revenueGrowth*100:null);
-  const q=financials?.quarters;
-  const revQoQ=(q?.length>=2&&q[0]?.revenue&&q[1]?.revenue)?((q[0].revenue-q[1].revenue)/Math.abs(q[1].revenue)*100):null;
-  const revInput=(timeframeKey==='short'||timeframeKey==='swing')?(revQoQ??revYoY):revYoY;
-  const thresholds=(timeframeKey==='short'||timeframeKey==='swing')?[15,5,-5,-15]:[25,10,-10,-25];
-  scores.revenue=revInput==null?0:revInput>thresholds[0]?(timeframeKey==='longterm'?1:.8):revInput>thresholds[1]?(timeframeKey==='longterm'?.6:.4):revInput>thresholds[2]?0:revInput>thresholds[3]?-.4:-.8;
-  debug.revYoY=revYoY?.toFixed(1)+'%'; debug.revQoQ=revQoQ?.toFixed(1)+'%';
+  // ── 7. ATR VOLATILITY REGIME + LOW-VOL ANOMALY (Paper §3.4) ─────────────────
+  // Paper finding: LOW volatility stocks OUTPERFORM high volatility stocks
+  // (counter-intuitive — lower risk = higher long-term return)
+  // Implemented as: low ATR% = mild positive signal; very high ATR% = mild negative
+  const atrVol = ta?.atr?.volatility;
+  const atrPct = parseFloat(ta?.atr?.atrPct);
+  let atrScore = 0;
+  if (atrVol) {
+    // Momentum/regime interaction
+    if (atrVol === 'HIGH' && scores.momentum > 0.3)  atrScore =  0.2;
+    if (atrVol === 'HIGH' && scores.momentum < -0.3) atrScore = -0.2;
+    if (atrVol === 'LOW'  && Math.abs(scores.rsi) > 0.4) atrScore = scores.rsi * 0.3;
+    debug.atrVol = atrVol;
+  }
+  // Low-volatility anomaly (paper §3.4): score based on ATR% of price
+  if (!isNaN(atrPct)) {
+    // Low vol (ATR < 1% of price) = outperforms historically → small positive
+    // Very high vol (ATR > 4% of price) = underperforms historically → small negative
+    const lowVolBonus = atrPct < 1.0 ? 0.2 : atrPct < 2.0 ? 0.1 : atrPct > 4.0 ? -0.2 : atrPct > 3.0 ? -0.1 : 0;
+    atrScore += lowVolBonus;
+    debug.atrPct = atrPct.toFixed(2) + '%';
+    debug.lowVolBonus = lowVolBonus;
+  }
+  scores.atr = Math.max(-0.5, Math.min(0.5, atrScore));
 
-  // 7. EARNINGS QUALITY
+  // ── 8. SUPPORT / RESISTANCE PROXIMITY ─────────────────────────────────────────
+  const distToSupport    = parseFloat(ta?.sr?.distToSupport);    // % below support
+  const distToResistance = parseFloat(ta?.sr?.distToResistance); // % above resistance
+  let srScore = 0;
+  if (!isNaN(distToSupport) && !isNaN(distToResistance)) {
+    // Near support = potential bounce. Near resistance = potential rejection.
+    if (distToSupport < 1)     srScore =  0.5;  // within 1% of support = strong BUY signal
+    else if (distToSupport < 3) srScore =  0.2;
+    if (distToResistance < 1)  srScore -= 0.5;  // at resistance = sell pressure
+    else if (distToResistance < 3) srScore -= 0.2;
+    debug.distToSupport    = distToSupport?.toFixed(1) + '%';
+    debug.distToResistance = distToResistance?.toFixed(1) + '%';
+  }
+  scores.supportResistance = Math.max(-1, Math.min(1, srScore));
+
+  // ── 9. VOLUME ACCELERATION + IBS (Paper §4.4, eq.370) ────────────────────────
+  // IBS = (Close - Low) / (High - Low): measures where price closes in daily range
+  // Paper: IBS near 0 = cheap (bullish), IBS near 1 = rich (bearish)
+  const vols = ohlcv?.volume?.filter(v => v != null) || [];
+  let volAccelScore = 0;
+  if (vols.length >= 20) {
+    const vol5d  = vols.slice(-5).reduce((s,v)=>s+v,0)  / 5;
+    const vol20d = vols.slice(-20).reduce((s,v)=>s+v,0) / 20;
+    const volAccel = vol5d / vol20d;
+    const priceUp  = closes.length >= 2 ? closes[closes.length-1] > closes[closes.length-6] : null;
+    if (volAccel > 1.5 && priceUp === true)  volAccelScore =  0.7;
+    else if (volAccel > 1.5 && priceUp === false) volAccelScore = -0.7;
+    else if (volAccel > 1.2 && priceUp === true)  volAccelScore =  0.3;
+    else if (volAccel > 1.2 && priceUp === false) volAccelScore = -0.3;
+    else if (volAccel < 0.7) volAccelScore = -0.2;
+    debug.volAccel = volAccel?.toFixed(2) + 'x';
+  }
+  // Internal Bar Strength — average last 5 days
+  const highs = ohlcv?.high?.filter(h => h != null) || [];
+  const lows  = ohlcv?.low?.filter(l => l != null)  || [];
+  if (highs.length >= 5 && lows.length >= 5 && closes.length >= 5) {
+    let ibsSum = 0, ibsCount = 0;
+    for (let i = Math.max(0, highs.length-5); i < highs.length; i++) {
+      const range = highs[i] - lows[i];
+      if (range > 0) { ibsSum += (closes[i] - lows[i]) / range; ibsCount++; }
+    }
+    if (ibsCount > 0) {
+      const avgIBS = ibsSum / ibsCount;
+      // IBS < 0.3 = consistently closing near lows = bearish short-term (paper: mean reversion BUY)
+      // IBS > 0.7 = closing near highs = bullish (paper: mean reversion SELL)
+      // But in trending markets flip the signal: IBS > 0.7 in uptrend = momentum
+      const ibsScore = inStrongBull
+        ? (avgIBS > 0.7 ? 0.3 : avgIBS < 0.3 ? -0.3 : 0)  // trend-following in bull
+        : (avgIBS < 0.3 ? 0.4 : avgIBS > 0.7 ? -0.4 : 0);  // mean-reversion normally
+      volAccelScore = (volAccelScore + ibsScore) / 2; // blend
+      debug.avgIBS = avgIBS.toFixed(2);
+    }
+  }
+  scores.volumeAccel = volAccelScore;
+
+  // ── 10. IV RANK (US only) ──────────────────────────────────────────────────────
+  // High IVR = options expensive, market pricing big move
+  // Low IVR  = options cheap, complacency
+  let ivrScore = 0;
+  if (!isIndia && options?.avgCallIV && options?.avgPutIV) {
+    const avgIV = (parseFloat(options.avgCallIV) + parseFloat(options.avgPutIV)) / 2;
+    // High IV with put skew = market pricing downside risk
+    const putCallRatio = parseFloat(options.putCallRatio) || 1;
+    if (avgIV > 60) {
+      ivrScore = putCallRatio > 1.2 ? -0.5 : -0.2; // high IV + put heavy = fear
+    } else if (avgIV > 40) {
+      ivrScore = putCallRatio > 1.3 ? -0.3 : 0;
+    } else if (avgIV < 20) {
+      ivrScore = 0.1; // low IV = complacency, slight bullish
+    }
+    // IV skew: put IV much higher than call IV = traders buying downside protection
+    const putIV = parseFloat(options.avgPutIV), callIV = parseFloat(options.avgCallIV);
+    if (putIV && callIV && putIV > callIV * 1.3) ivrScore -= 0.2; // strong put skew = bearish
+    debug.avgIV = avgIV?.toFixed(1); debug.pcRatio = putCallRatio?.toFixed(2);
+  }
+  scores.ivRank = ivrScore;
+
+  // ── 11. SECTOR RELATIVE STRENGTH ──────────────────────────────────────────────
+  // Is this stock outperforming its sector? Requires sector data in enhanced
+  let sectorScore = 0;
+  if (enhanced?.sectorReturn != null && p2 && cur) {
+    const stockRet  = (cur - p2) / p2 * 100;
+    const sectorRet = enhanced.sectorReturn; // % return of sector ETF over same period
+    const relStrength = stockRet - sectorRet;
+    sectorScore = relStrength > 5 ? 0.6 : relStrength > 2 ? 0.3 : relStrength > -2 ? 0 : relStrength > -5 ? -0.3 : -0.6;
+    debug.relStrength = relStrength?.toFixed(1) + '% vs sector';
+  }
+  scores.sectorRelStrength = sectorScore;
+
+  // ── 12. REVENUE GROWTH — timeframe-scaled ─────────────────────────────────────
+  const revYoY   = financials?.yoy?.revenueYoY ?? (fundamentals?.revenueGrowth!=null ? fundamentals.revenueGrowth*100 : null);
+  const q        = financials?.quarters;
+  const revQoQ   = (q?.length>=2&&q[0]?.revenue&&q[1]?.revenue) ? ((q[0].revenue-q[1].revenue)/Math.abs(q[1].revenue)*100) : null;
+  const revInput = (timeframeKey==='short'||timeframeKey==='swing') ? (revQoQ??revYoY) : revYoY;
+  const revTh    = (timeframeKey==='short'||timeframeKey==='swing') ? [15,5,-5,-15] : [25,10,-10,-25];
+  scores.revenue = revInput==null ? 0 : revInput>revTh[0]?(timeframeKey==='longterm'?1:.8) : revInput>revTh[1]?(timeframeKey==='longterm'?.6:.4) : revInput>revTh[2] ? 0 : revInput>revTh[3]?-.4:-.8;
+  debug.revYoY = revYoY?.toFixed(1)+'%'; debug.revQoQ = revQoQ?.toFixed(1)+'%';
+
+  // ── 13. EARNINGS QUALITY — with debt trend ────────────────────────────────────
   const niYoY=financials?.yoy?.netIncomeYoY, epsYoY=financials?.yoy?.epsYoY, roe=fundamentals?.roe;
   let qScore=0, qCount=0;
-  if (niYoY!=null){qScore+=niYoY>20?.5:niYoY>0?.2:niYoY>-20?-.2:-.5;qCount++;}
-  if (epsYoY!=null){qScore+=epsYoY>20?.3:epsYoY>0?.1:-.2;qCount++;}
-  if (roe!=null){qScore+=roe>.2?.3:roe>.1?.1:roe>0?0:-.3;qCount++;}
-  const epsHist=financials?.epsHistory||[];
-  const beats=epsHist.slice(0,3).filter(e=>e.beat===true).length;
-  const misses=epsHist.slice(0,3).filter(e=>e.beat===false).length;
-  if (epsHist.length>=2){qScore+=beats>=2?.3:misses>=2?-.3:0;qCount++;debug.epsBeat=beats+'B/'+misses+'M';}
-  scores.quality=qCount>0?Math.max(-1,Math.min(1,qScore/Math.max(qCount*.5,1))):0;
+  if (niYoY !=null){qScore+=niYoY >20?.5:niYoY >0?.2:niYoY >-20?-.2:-.5; qCount++;}
+  if (epsYoY!=null){qScore+=epsYoY>20?.3:epsYoY>0?.1:-.2; qCount++;}
+  if (roe   !=null){qScore+=roe>.2?.3:roe>.1?.1:roe>0?0:-.3; qCount++;}
 
-  // 8. ANALYST
+  // Debt trend — rising debt while revenue flat/declining = quality deterioration
+  if (q?.length >= 3) {
+    const debt0 = q[0]?.totalDebt, debt2 = q[2]?.totalDebt;
+    if (debt0 && debt2 && debt2 > 0) {
+      const debtGrowth = (debt0 - debt2) / debt2 * 100;
+      if (debtGrowth > 20 && (revQoQ ?? 0) < 5) { qScore -= 0.4; flags.push({ type: 'DEBT_RISING', note: `Debt +${debtGrowth.toFixed(0)}% while revenue flat` }); }
+      else if (debtGrowth < -10) qScore += 0.2; // paying down debt = positive
+      debug.debtTrend = debtGrowth?.toFixed(1) + '%';
+    }
+    // Operating leverage: revenue growth → NI growth amplified = high operating leverage (good in growth)
+    if (revYoY != null && niYoY != null && revYoY > 5 && niYoY > revYoY * 1.5) {
+      qScore += 0.2; debug.opLeverage = 'HIGH';
+    }
+  }
+
+  // EPS beat/miss streak with surprise magnitude
+  const epsHist = financials?.epsHistory || [];
+  const beats   = epsHist.slice(0,4).filter(e=>e.beat===true).length;
+  const misses  = epsHist.slice(0,4).filter(e=>e.beat===false).length;
+  if (epsHist.length>=2) {
+    qScore += beats>=3?.4:beats>=2?.2:misses>=3?-.4:misses>=2?-.2:0; qCount++;
+    // Average surprise magnitude
+    const surprises = epsHist.slice(0,4).filter(e=>e.surprisePct!=null).map(e=>e.surprisePct);
+    if (surprises.length) { const avgSurprise = surprises.reduce((s,v)=>s+v,0)/surprises.length; qScore += avgSurprise>10?.2:avgSurprise<-10?-.2:0; debug.avgEpsSurprise = avgSurprise?.toFixed(1)+'%'; }
+    debug.epsBeat = beats+'B/'+misses+'M';
+  }
+  scores.quality = qCount>0 ? Math.max(-1, Math.min(1, qScore/Math.max(qCount*.5,1))) : 0;
+
+  // ── 14. ANALYST CONSENSUS ─────────────────────────────────────────────────────
   const rec=fundamentals?.recommendationKey?.toLowerCase(), tp=fundamentals?.targetMeanPrice;
   let aScore=rec==='strong_buy'?1:rec==='buy'?.6:rec==='hold'?0:rec==='underperform'?-.6:rec==='sell'?-1:0;
-  if (tp&&cur){const up=(tp-cur)/cur;aScore+=up>.25?.4:up>.1?.2:up>-.1?0:up>-.25?-.2:-.4;debug.upside=(up*100).toFixed(1)+'%';}
-  scores.analyst=Math.max(-1,Math.min(1,aScore));
+  if (tp&&cur){const up=(tp-cur)/cur; aScore+=up>.25?.4:up>.1?.2:up>-.1?0:up>-.25?-.2:-.4; debug.upside=(up*100).toFixed(1)+'%';}
+  const analysts = fundamentals?.numberOfAnalystOpinions || 0;
+  if (analysts < 3) aScore *= 0.5; // very few analysts = low conviction
+  scores.analyst = Math.max(-1, Math.min(1, aScore));
 
-  // 9. MACRO — properly integrated
+  // ── 15. MACRO — bonds, regime, institutional, FII/DII ─────────────────────────
   let macroScore=0;
   const hi52=fundamentals?.fiftyTwoWeekHigh, lo52=fundamentals?.fiftyTwoWeekLow;
-  if (hi52&&lo52&&cur){const pos=(cur-lo52)/(hi52-lo52);macroScore+=pos>.8?.3:pos>.5?.1:pos<.2?-.3:-.1;}
-  if (bonds?.tenYear!=null){const y=parseFloat(bonds.tenYear);if(!isNaN(y)){macroScore+=y>5?-.4:y>4.5?-.2:y<3?.3:0;debug.yield10y=y;}}
-  if (regime){macroScore+=regime.compositeScore*.4*tf.regimeWeight;debug.regime=regime.regime;debug.regimeScore=regime.compositeScore;}
+  if (hi52&&lo52&&cur){
+    const pos=(cur-lo52)/(hi52-lo52);
+    macroScore+=pos>.85?.3:pos>.6?.1:pos<.2?-.3:-.1;
+    debug['52wPos']=(pos*100).toFixed(0)+'%';
+    // Donchian channel breakout (paper §3.15): near 52W high = breakout momentum signal
+    if (pos > 0.95) flags.push({ type: 'NEAR_52W_HIGH', note: 'Within 5% of 52W high — breakout momentum', boost: 0.1 });
+    if (pos < 0.05) flags.push({ type: 'NEAR_52W_LOW',  note: 'Within 5% of 52W low — breakdown risk',     boost: -0.1 });
+  }
+  if (bonds?.tenYear!=null){const y=parseFloat(bonds.tenYear);if(!isNaN(y)){macroScore+=y>5?-.4:y>4.5?-.2:y<3?.3:0; debug.yield10y=y;}}
+  if (regime){macroScore+=regime.compositeScore*.4*tf.regimeWeight; debug.regime=regime.regime; debug.regimeScore=regime.compositeScore;}
   if (isIndia) {
-    if (enhanced?.fiiDii?.fiiNetBuy!=null) macroScore+=enhanced.fiiDii.fiiNetBuy>500?.3:enhanced.fiiDii.fiiNetBuy>0?.1:enhanced.fiiDii.fiiNetBuy<-500?-.3:-.1;
-    if (enhanced?.shareholding?.promoter){const p=parseFloat(enhanced.shareholding.promoter);macroScore+=p>60?.2:p<25?-.2:0;if(enhanced.shareholding.promoterChange>1)macroScore+=.2;else if(enhanced.shareholding.promoterChange<-1)macroScore-=.2;}
-    if (enhanced?.delivery?.deliveryPct){const d=parseFloat(enhanced.delivery.deliveryPct);macroScore+=d>60?.2:d<25?-.2:0;}
+    if (enhanced?.fiiDii?.fiiNetBuy!=null){const f=enhanced.fiiDii.fiiNetBuy; macroScore+=f>500?.3:f>0?.1:f<-500?-.3:-.1;}
+    if (enhanced?.shareholding?.promoter){const p=parseFloat(enhanced.shareholding.promoter); macroScore+=p>60?.2:p<25?-.2:0; if(enhanced.shareholding.promoterChange>1)macroScore+=.2; else if(enhanced.shareholding.promoterChange<-1)macroScore-=.2;}
+    if (enhanced?.delivery?.deliveryPct){const d=parseFloat(enhanced.delivery.deliveryPct); macroScore+=d>60?.2:d<25?-.2:0;}
+    // India circuit breaker proximity
+    if (enhanced?.upperCircuit && hi52 && cur) {
+      const distToUC = ((enhanced.upperCircuit - cur) / cur * 100);
+      if (distToUC < 3) { macroScore += 0.3; flags.push({ type: 'NEAR_UPPER_CIRCUIT', note: `${distToUC.toFixed(1)}% from upper circuit` }); }
+    }
+    if (enhanced?.lowerCircuit && cur) {
+      const distToLC = ((cur - enhanced.lowerCircuit) / cur * 100);
+      if (distToLC < 3) { macroScore -= 0.4; flags.push({ type: 'NEAR_LOWER_CIRCUIT', note: `${distToLC.toFixed(1)}% from lower circuit` }); }
+    }
   } else {
     if (enhanced?.shortInterest?.shortPct>20&&scores.momentum>0) macroScore+=.2;
-    if (enhanced?.insiderSummary){const{buys,sells}=enhanced.insiderSummary;macroScore+=buys>sells+2?.3:sells>buys+2?-.3:0;}
-    if (enhanced?.institutionalOwnership?.topHolders){const nb=enhanced.institutionalOwnership.topHolders.filter(h=>h.change>0).length;const ns=enhanced.institutionalOwnership.topHolders.filter(h=>h.change<0).length;macroScore+=nb>ns+1?.2:ns>nb+1?-.2:0;}
+    if (enhanced?.insiderSummary){const{buys,sells}=enhanced.insiderSummary; macroScore+=buys>sells+2?.3:sells>buys+2?-.3:0;}
+    if (enhanced?.institutionalOwnership?.topHolders){const nb=enhanced.institutionalOwnership.topHolders.filter(h=>h.change>0).length; const ns=enhanced.institutionalOwnership.topHolders.filter(h=>h.change<0).length; macroScore+=nb>ns+1?.2:ns>nb+1?-.2:0;}
   }
-  scores.macro=Math.max(-1,Math.min(1,macroScore));
+  scores.macro = Math.max(-1, Math.min(1, macroScore));
 
-  // 10. NEWS/CATALYST — severity + recency weighted
+  // ── 16. NEWS/CATALYST — severity + recency ────────────────────────────────────
   const catNews=(news||[]).map(n=>typeof n==='string'?n:'');
   let catalyst=0;
   if (catNews.some(n=>n.startsWith('[UPGRADE]')))      catalyst+=0.6*tf.newsDecay;
@@ -1624,14 +1841,33 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
   if (catNews.some(n=>n.startsWith('[INSIDER/FUND]'))) catalyst+=0.4*tf.newsDecay;
   if (catNews.some(n=>n.startsWith('[EARNINGS]'))&&epsHist.length>0) {
     const last=epsHist[0];
-    if (last?.beat===true){const mag=last.surprisePct?Math.min(1,last.surprisePct/20):.3;catalyst+=(.5+mag*.5)*tf.newsDecay;}
-    else if (last?.beat===false){const mag=last.surprisePct?Math.min(1,Math.abs(last.surprisePct)/20):.3;catalyst-=(.5+mag*.5)*tf.newsDecay;}
+    if (last?.beat===true){const mag=last.surprisePct?Math.min(1,last.surprisePct/20):.3; catalyst+=(.5+mag*.5)*tf.newsDecay;}
+    else if (last?.beat===false){const mag=last.surprisePct?Math.min(1,Math.abs(last.surprisePct)/20):.3; catalyst-=(.5+mag*.5)*tf.newsDecay;}
   }
   if (revYoY!=null&&revYoY<-10) catalyst-=.4;
-  scores.catalyst=Math.max(-1,Math.min(1,catalyst));
+  scores.catalyst = Math.max(-1, Math.min(1, catalyst));
 
-  // REGIME SCORE ADJUSTMENTS
-  if (regime&&regime.regime!=='UNKNOWN') {
+  // ── 17. EARNINGS PROXIMITY GATE ───────────────────────────────────────────────
+  // If earnings within 5 days: reduce confidence, flag as binary event risk
+  // If earnings within 2 days: force HOLD regardless of signal (too binary)
+  let earningsProximityPenalty = 0;
+  if (earningsDate) {
+    const daysToEarnings = Math.ceil((new Date(earningsDate) - new Date()) / (1000 * 60 * 60 * 24));
+    if (daysToEarnings >= 0 && daysToEarnings <= 2) {
+      flags.push({ type: 'EARNINGS_IMMINENT', note: `Earnings in ${daysToEarnings} day(s) — binary event risk`, forceHold: true, daysToEarnings });
+      earningsProximityPenalty = 1; // will force HOLD
+      debug.earningsIn = daysToEarnings + 'd';
+    } else if (daysToEarnings >= 0 && daysToEarnings <= 5) {
+      flags.push({ type: 'EARNINGS_SOON', note: `Earnings in ${daysToEarnings} days — elevated risk`, confidenceCap: 60, daysToEarnings });
+      earningsProximityPenalty = 0.5;
+      debug.earningsIn = daysToEarnings + 'd';
+    } else if (daysToEarnings >= 0 && daysToEarnings <= 14) {
+      debug.earningsIn = daysToEarnings + 'd';
+    }
+  }
+
+  // ── REGIME SCORE ADJUSTMENTS ──────────────────────────────────────────────────
+  if (regime && regime.regime !== 'UNKNOWN') {
     const r=regime.regime, rw=tf.regimeWeight;
     const isBull=r==='BULL'||r==='STRONG_BULL', isBear=r==='BEAR'||r==='STRONG_BEAR';
     if (isBull) scores.momentum=Math.min(1,scores.momentum+.15*rw);
@@ -1642,49 +1878,57 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
     if (isBear&&scores.trend<0) scores.trend=Math.max(-1,scores.trend*(1+.2*rw));
   }
 
-  // WEIGHTS
+  // ── WEIGHTS — timeframe-scaled ────────────────────────────────────────────────
   const defaultWeights = {
-    short:    {momentum:.25,trend:.18,rsi:.10,macd:.12,volume:.08,revenue:.05,quality:.03,analyst:.04,macro:.08,catalyst:.07},
-    swing:    {momentum:.18,trend:.13,rsi:.08,macd:.09,volume:.05,revenue:.12,quality:.08,analyst:.09,macro:.10,catalyst:.08},
-    position: {momentum:.12,trend:.08,rsi:.05,macd:.05,volume:.03,revenue:.20,quality:.13,analyst:.13,macro:.12,catalyst:.09},
-    longterm: {momentum:.07,trend:.04,rsi:.03,macd:.03,volume:.02,revenue:.25,quality:.18,analyst:.18,macro:.12,catalyst:.08},
+    short:    { momentum:.20, trend:.15, rsi:.08, stochRsi:.06, macd:.09, bollinger:.05, atr:.03, supportResistance:.04, volumeAccel:.06, ivRank:.03, sectorRelStrength:.03, revenue:.04, quality:.03, analyst:.03, macro:.05, catalyst:.06 },
+    swing:    { momentum:.14, trend:.10, rsi:.06, stochRsi:.04, macd:.07, bollinger:.05, atr:.02, supportResistance:.04, volumeAccel:.05, ivRank:.03, sectorRelStrength:.04, revenue:.10, quality:.07, analyst:.08, macro:.08, catalyst:.07 },
+    position: { momentum:.10, trend:.07, rsi:.04, stochRsi:.02, macd:.04, bollinger:.03, atr:.02, supportResistance:.03, volumeAccel:.03, ivRank:.02, sectorRelStrength:.05, revenue:.17, quality:.12, analyst:.12, macro:.10, catalyst:.08 },
+    longterm: { momentum:.06, trend:.03, rsi:.02, stochRsi:.01, macd:.02, bollinger:.02, atr:.01, supportResistance:.02, volumeAccel:.02, ivRank:.01, sectorRelStrength:.05, revenue:.22, quality:.17, analyst:.17, macro:.10, catalyst:.07 },
   };
-  const weights=optimizedWeights||defaultWeights;
-  const w=weights[timeframeKey]||weights.swing;
+  const weights = optimizedWeights || defaultWeights;
+  const w = weights[timeframeKey] || weights.swing;
 
-  // TOTAL SCORE
-  let total=0;
-  total+=(scores.momentum||0)*w.momentum;
-  total+=(scores.trend   ||0)*w.trend;
-  total+=(scores.rsi     ||0)*w.rsi;
-  total+=(scores.macd    ||0)*w.macd;
-  total+=(scores.volume  ||0)*w.volume;
-  total+=(scores.revenue ||0)*w.revenue;
-  total+=(scores.quality ||0)*w.quality;
-  total+=(scores.analyst ||0)*w.analyst;
-  total+=(scores.macro   ||0)*w.macro;
-  total+=(scores.catalyst||0)*(w.catalyst||.08);
-  total=Math.max(-1,Math.min(1,total));
-
-  // NEWS OVERRIDE — catastrophic news floors the signal
-  if (scores.catalyst<-.7){total=Math.min(total,-.1);debug.newsOverride='CATASTROPHIC_NEWS';}
-  if (scores.catalyst>.7) {total=Math.max(total, .1);debug.newsOverride='MAJOR_CATALYST';}
-
-  // SIGNAL
-  const bearReg=(regime?.regime==='BEAR'||regime?.regime==='STRONG_BEAR')||(sma200&&cur&&cur<sma200*.97);
-  let signal, confidence;
-  if (total>.15){
-    signal='BUY'; confidence=Math.round(52+(total-.15)/.85*43);
-    if (bearReg) confidence=Math.min(confidence,62);
-  } else if (total<-.15){
-    signal='SELL'; confidence=Math.round(52+(Math.abs(total)-.15)/.85*43);
-    if (bearReg) confidence=Math.min(95,confidence+5);
-  } else {
-    signal='HOLD'; confidence=Math.round(50+(0.15-Math.abs(total))/.15*10);
+  // ── TOTAL SCORE ───────────────────────────────────────────────────────────────
+  let total = 0;
+  for (const [factor, weight] of Object.entries(w)) {
+    total += (scores[factor] || 0) * weight;
   }
-  confidence=Math.max(45,Math.min(95,confidence));
 
-  if (regime){
+  // Apply flag bonuses/penalties
+  for (const flag of flags) {
+    if (flag.boost) total += flag.boost;
+  }
+  total = Math.max(-1, Math.min(1, total));
+
+  // NEWS OVERRIDE — catastrophic news floors signal
+  if (scores.catalyst < -.7) { total=Math.min(total,-.1); debug.newsOverride='CATASTROPHIC'; }
+  if (scores.catalyst > .7)  { total=Math.max(total, .1); debug.newsOverride='MAJOR_CATALYST'; }
+
+  // ── SIGNAL ────────────────────────────────────────────────────────────────────
+  const bearReg = (regime?.regime==='BEAR'||regime?.regime==='STRONG_BEAR') || (sma200&&cur&&cur<sma200*.97);
+  let signal, confidence;
+
+  // Earnings imminent → force HOLD
+  const forceHold = flags.some(f => f.forceHold);
+  if (forceHold) {
+    signal = 'HOLD'; confidence = 50;
+    debug.forceHold = 'EARNINGS_IMMINENT';
+  } else if (total > .15) {
+    signal = 'BUY'; confidence = Math.round(52 + (total-.15)/.85*43);
+    if (bearReg) confidence = Math.min(confidence, 62);
+  } else if (total < -.15) {
+    signal = 'SELL'; confidence = Math.round(52 + (Math.abs(total)-.15)/.85*43);
+    if (bearReg) confidence = Math.min(95, confidence+5);
+  } else {
+    signal = 'HOLD'; confidence = Math.round(50 + (.15-Math.abs(total))/.15*10);
+  }
+
+  // Apply earnings confidence cap
+  const earningsCap = flags.find(f => f.confidenceCap);
+  if (earningsCap) confidence = Math.min(confidence, earningsCap.confidenceCap);
+
+  // Regime confidence adjustments
+  if (regime) {
     const r=regime.regime;
     if (r==='NEUTRAL') confidence=Math.min(confidence,65);
     if (r==='STRONG_BEAR'&&signal==='BUY') confidence=Math.min(confidence,58);
@@ -1692,32 +1936,15 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
     if ((r==='STRONG_BULL'&&signal==='BUY')||(r==='STRONG_BEAR'&&signal==='SELL')) confidence=Math.min(95,confidence+5);
   }
 
-  debug.totalScore=total.toFixed(3); debug.scores=scores; debug.timeframe=timeframeKey;
-  return {signal,confidence,totalScore:total,scores,debug};
+  confidence = Math.max(45, Math.min(95, confidence));
+  debug.totalScore = total.toFixed(3);
+  debug.scores     = scores;
+  debug.flags      = flags.map(f => f.type);
+  debug.timeframe  = timeframeKey;
+
+  return { signal, confidence, totalScore: total, scores, flags, debug };
 }
 
-
-async function getSignalWeights() {
-  try {
-    const { data, error } = await supabase
-      .from('signal_weights')
-      .select('weights')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) return null;
-    return data?.weights || null;
-  } catch { return null; }
-}
-
-async function saveSignalWeights(weights, metadata) {
-  try {
-    await supabase.from('signal_weights').insert({
-      weights, metadata, created_at: new Date().toISOString(),
-    });
-    console.log('[saveWeights] saved successfully');
-  } catch (e) { console.error('[saveWeights]', e.message); }
-}
 
 app.post('/api/analyze/price', async (req, res) => {
   try {
@@ -1852,22 +2079,49 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
     // ── Step 1: Compute signal deterministically ────────────────────────────────
-    // Load optimized weights + market regime in parallel (both non-blocking)
-    const [optimizedWeights, regime] = await Promise.all([
-      Promise.race([
-        (async () => { return null; /* backtest weights disabled — using defaultWeights */ })(),
-        new Promise(r => setTimeout(() => r(null), 500))
-      ]),
+    // Load optimized weights + market regime + earnings date + sector return
+    const [optimizedWeights, regime, earningsInfo, sectorReturn] = await Promise.all([
+      Promise.resolve(null), // backtest weights disabled — using defaultWeights
       market === 'US' ? Promise.race([detectMarketRegime().catch(() => null), new Promise(r => setTimeout(() => r(null), 2000))]) : Promise.resolve(null),
+      // Earnings date from Finnhub (US only)
+      (async () => {
+        if (isIndia) return null;
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          const fut   = new Date(Date.now() + 30*864e5).toISOString().split('T')[0];
+          const data  = await finnhubGet(`/calendar/earnings?from=${today}&to=${fut}&symbol=${ticker}`);
+          const next  = data?.earningsCalendar?.[0];
+          return next?.date || null;
+        } catch { return null; }
+      })(),
+      // Sector relative strength — 20d stock return vs sector ETF
+      (async () => {
+        if (isIndia) return null;
+        try {
+          const sectorMap = { 'XLK':['AAPL','MSFT','NVDA','AMD','INTC','AVGO','QCOM','CRM','ORCL','ADBE','SMCI','MU','AMAT','LRCX'], 'XLF':['JPM','BAC','GS','MS','WFC','C','BX','KKR','V','MA','AXP','BLK'], 'XLV':['JNJ','UNH','PFE','MRK','ABBV','LLY','TMO','ABT','MDT','AMGN','GILD','REGN','VRTX'], 'XLE':['XOM','CVX','COP','SLB','EOG','OXY'], 'XLY':['AMZN','TSLA','HD','MCD','NKE','SBUX','LOW','TGT'], 'XLI':['CAT','DE','BA','HON','GE','MMM','UPS','FDX','RTX','LMT'], 'XLP':['PG','KO','PEP','WMT','COST','PM','MO'], 'XLRE':['AMT','PLD','CCI','EQIX'], 'XLU':['NEE','DUK','SO','D'], 'XLC':['META','GOOGL','GOOG','NFLX','DIS','CMCSA','T','VZ'] };
+          let sectorETF = null;
+          for (const [etf, tickers] of Object.entries(sectorMap)) { if (tickers.includes(ticker)) { sectorETF = etf; break; } }
+          if (!sectorETF) return null;
+          const q = await tradierGet(`/v1/markets/history?symbol=${sectorETF}&interval=daily&start=${new Date(Date.now()-30*864e5).toISOString().split('T')[0]}`);
+          const bars = q?.history?.day || [];
+          if (bars.length < 20) return null;
+          const etfCur = bars[bars.length-1]?.close, etfPrev = bars[bars.length-21]?.close;
+          return etfCur && etfPrev ? parseFloat(((etfCur-etfPrev)/etfPrev*100).toFixed(2)) : null;
+        } catch { return null; }
+      })(),
     ]);
 
+    const enhancedWithSector = enhanced ? { ...enhanced, sectorReturn } : (sectorReturn != null ? { sectorReturn } : null);
+
     const computed = computeSignal({
-      ohlcv, ta, fundamentals, financials, enhanced,
+      ohlcv, ta, fundamentals, financials, enhanced: enhancedWithSector,
       options, market, timeframeKey, news,
-      optimizedWeights, regime, bonds,
+      optimizedWeights, regime, bonds, earningsDate: earningsInfo,
     });
 
-    const { signal, confidence, totalScore, scores, debug: sigDebug } = computed;
+    const { signal, confidence, totalScore, scores, flags, debug: sigDebug } = computed;
+    if (earningsInfo) console.log(`[signal] ${ticker} next earnings: ${earningsInfo}`);
+    if (sectorReturn != null) console.log(`[signal] ${ticker} sector return: ${sectorReturn}%`);
     const safeScore = isFinite(totalScore) ? totalScore : 0;
     console.log(`[signal] ${ticker} ${signal} ${confidence}% score=${safeScore.toFixed(3)}`);
 
