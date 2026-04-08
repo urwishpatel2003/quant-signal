@@ -339,7 +339,18 @@ input, select, textarea {
     letter-spacing: 0em;
   }
 
-  /* inline font sizes respected as-is on desktop */
+  /* Desktop text scaling — class-based only, never inline styles */
+  /* These classes are used throughout for secondary/label text */
+  .text-dim, .text-muted, .label-sm, .kv-key { font-size: 14px; }
+  .kv-value { font-size: 15px; }
+  .card { font-size: 15px; }
+
+  /* Tab button and navigation text */
+  .tab-btn { font-size: 15px; }
+
+  /* btn text */  
+  .btn    { font-size: 14px; }
+  .btn-sm { font-size: 13px; }
 
   /* App content — full width, generous padding on desktop */
   /* zoom scales all inline px values proportionally without touching mobile */
@@ -347,7 +358,6 @@ input, select, textarea {
     padding: 28px 32px;
     width: 100%;
     box-sizing: border-box;
-    zoom: 1.18;
   }
 
   /* Header */
@@ -414,7 +424,7 @@ input, select, textarea {
 
 /* ── LARGE DESKTOP (min-width: 1280px) ───────────────────────────────────── */
 @media (min-width: 1280px) {
-  .app-content { padding: 32px 40px; zoom: 1.22; }
+  .app-content { padding: 32px 40px; }
   .app-header  { padding: 14px 40px; }
 
   .welcome-hero     { padding: 110px 80px 80px; }
