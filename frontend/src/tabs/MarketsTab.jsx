@@ -31,10 +31,10 @@ function Row({ name, data, fmt }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       padding: '9px 0', borderBottom: '1px solid #1a1a26' }}>
-      <div style={{ fontSize: 12, color: '#aab' }}>{name}</div>
+      <div style={{ fontSize: 15, color: '#c0d0e8' }}>{name}</div>
       <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{fmt(data.current)}</div>
-        <div style={{ fontSize: 10, color: up ? '#00ff88' : '#ff4444' }}>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{fmt(data.current)}</div>
+        <div style={{ fontSize: 16, color: up ? '#00ff88' : '#ff4444' }}>
           {up ? '▲' : '▼'} {Math.abs(data.changePct)?.toFixed(2)}%
         </div>
       </div>
@@ -47,7 +47,7 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
 
   if (!intlMarkets?.length) return (
     <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-      <div className="pulse" style={{ fontSize: 12, color: '#666' }}>Loading global markets...</div>
+      <div className="pulse" style={{ fontSize: 15, color: '#c8d8ec' }}>Loading global markets...</div>
     </div>
   );
 
@@ -84,15 +84,15 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
             gold?.changePct != null ? `${gold.changePct > 0 ? '▲' : '▼'} ${Math.abs(gold.changePct).toFixed(2)}%` : ''],
         ].map(([l, v, c, sub]) => (
           <div key={l} className="card" style={{ textAlign: 'center', borderColor: c + '33' }}>
-            <div style={{ fontSize: 10, color: '#8899bb', marginBottom: 4 }}>{l}</div>
+            <div style={{ fontSize: 16, color: '#b0c4dc', marginBottom: 4 }}>{l}</div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(20px, 4vw, 28px)', color: c }}>{v}</div>
-            <div style={{ fontSize: 10, color: c }}>{sub}</div>
+            <div style={{ fontSize: 16, color: c }}>{sub}</div>
           </div>
         ))}
       </div>
 
       {/* ── ETF proxy notice ── */}
-      <div style={{ fontSize: 10, color: '#7788aa', textAlign: 'center' }}>
+      <div style={{ fontSize: 16, color: '#d0dff0', textAlign: 'center' }}>
         * International markets shown as ETF proxy prices (EWJ, EWH, FXI, INDA, EWG, EWU, EWQ, FEZ, VIXY, UUP, GLD, USO)
       </div>
 
@@ -100,27 +100,27 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
       <div className="markets-grid">
         {REGIONS.map(r => (
           <div key={r.label} className="card">
-            <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>{r.label}</div>
+            <div style={{ fontSize: 16, color: '#ffaa00aa', letterSpacing: '0.15em', marginBottom: 10 }}>{r.label}</div>
             {r.syms.map(({ name, sym, fmt }) => <Row key={sym} name={name} data={find(sym)} fmt={fmt} />)}
           </div>
         ))}
 
         {bonds && (
           <div className="card">
-            <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>📊 US BONDS <span style={{ fontSize: 8, color: '#7788aa' }}>(ETF PRICES)</span></div>
+            <div style={{ fontSize: 16, color: '#ffaa00aa', letterSpacing: '0.15em', marginBottom: 10 }}>📊 US BONDS <span style={{ fontSize: 14, color: '#d0dff0' }}>(ETF PRICES)</span></div>
             {[
               ['TLT (20Y)',    bonds.tlt, bonds.tlt?.changePct > 0 ? '#00ff88' : '#ff4444'],
               ['IEF (7-10Y)',  bonds.ief, bonds.ief?.changePct > 0 ? '#00ff88' : '#ff4444'],
               ['SHY (1-3Y)',   bonds.irx, bonds.irx?.changePct > 0 ? '#00ff88' : '#ff4444'],
             ].map(([k, d, c]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid #1a1a26' }}>
-                <div style={{ fontSize: 12, color: '#aab' }}>{k}</div>
+                <div style={{ fontSize: 15, color: '#c0d0e8' }}>{k}</div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: c }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: c }}>
                     {d?.current ? `$${d.current.toFixed(2)}` : '—'}
                   </div>
                   {d?.changePct != null && (
-                    <div style={{ fontSize: 10, color: c }}>
+                    <div style={{ fontSize: 16, color: c }}>
                       {d.changePct > 0 ? '▲' : '▼'} {Math.abs(d.changePct).toFixed(2)}%
                     </div>
                   )}
@@ -128,7 +128,7 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
               </div>
             ))}
             {bonds.inverted && (
-              <div style={{ marginTop: 8, fontSize: 10, color: '#ff444488', borderLeft: '2px solid #ff444433', paddingLeft: 8 }}>
+              <div style={{ marginTop: 8, fontSize: 16, color: '#ff4444bb', borderLeft: '2px solid #ff444433', paddingLeft: 8 }}>
                 ⚠ Inverted curve — historical recession precursor
               </div>
             )}
@@ -139,13 +139,13 @@ export default function MarketsTab({ intlMarkets, bonds, macroNews, calendar }) 
 
         {macroNews?.length > 0 && (
           <div className="card">
-            <div style={{ fontSize: 10, color: '#ffaa0066', letterSpacing: '0.15em', marginBottom: 10 }}>🌍 MACRO & GEO NEWS</div>
+            <div style={{ fontSize: 16, color: '#ffaa00aa', letterSpacing: '0.15em', marginBottom: 10 }}>🌍 MACRO & GEO NEWS</div>
             {macroNews.slice(0, 8).map((n, i) => (
-              <div key={i} style={{ padding: '5px 0', borderBottom: '1px solid #1a1a26', fontSize: 10 }}>
-                <div style={{ color: '#ffaa0055', fontSize: 9, marginBottom: 2 }}>
+              <div key={i} style={{ padding: '5px 0', borderBottom: '1px solid #1a1a26', fontSize: 15 }}>
+                <div style={{ color: '#ffaa0099', fontSize: 15, marginBottom: 2 }}>
                   {n.topic?.split(' ').slice(0, 3).join(' ')?.toUpperCase()}
                 </div>
-                <div style={{ color: '#aab', lineHeight: 1.4 }}>{n.title}</div>
+                <div style={{ color: '#c0d0e8', lineHeight: 1.4 }}>{n.title}</div>
               </div>
             ))}
           </div>

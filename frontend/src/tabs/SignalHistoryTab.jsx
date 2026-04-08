@@ -10,21 +10,21 @@ function fmtPct(n) {
 
 function OutcomeBadge({ result }) {
   if (!result || result === 'PENDING') return (
-    <span style={{ fontSize: 10, color: '#556677', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 3, padding: '2px 7px' }}>PENDING</span>
+    <span style={{ fontSize: 16, color: '#b0c4dc', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 3, padding: '2px 7px' }}>PENDING</span>
   );
   const map = { WIN: ['#00ff88', '#00ff8811', '#00ff8833'], LOSS: ['#ff4444', '#ff444411', '#ff444433'], SCRATCH: ['#ffaa00', '#ffaa0011', '#ffaa0033'] };
   const [col, bg, bdr] = map[result] || map.SCRATCH;
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, color: col, background: bg, border: `1px solid ${bdr}`, borderRadius: 3, padding: '2px 7px' }}>{result}</span>
+    <span style={{ fontSize: 16, fontWeight: 700, color: col, background: bg, border: `1px solid ${bdr}`, borderRadius: 3, padding: '2px 7px' }}>{result}</span>
   );
 }
 
 function StatBox({ label, value, sub, color = '#e8e8f0', border = '#2a2a40' }) {
   return (
     <div style={{ background: '#0f0f1a', border: `1px solid ${border}`, borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>
-      <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.12em', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 15, color: '#99aabb', letterSpacing: '0.12em', marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: '#7788aa', marginTop: 3 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 16, color: '#d0dff0', marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }
@@ -73,10 +73,10 @@ export default function SignalHistoryTab({ market = 'US' }) {
   }, [isLoaded, user?.id, market]);
 
   if (!isLoaded || loading) return (
-    <div style={{ textAlign: 'center', padding: '60px 0', color: '#7788aa', fontSize: 13 }}>Loading signal history...</div>
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#d0dff0', fontSize: 17 }}>Loading signal history...</div>
   );
   if (!user) return (
-    <div style={{ textAlign: 'center', padding: '60px 0', color: '#7788aa', fontSize: 13 }}>Sign in to view signal history</div>
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#d0dff0', fontSize: 17 }}>Sign in to view signal history</div>
   );
 
   const stats   = data?.stats || {};
@@ -93,12 +93,12 @@ export default function SignalHistoryTab({ market = 'US' }) {
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#ffaa00', letterSpacing: '0.08em' }}>
             📈 SIGNAL ACCURACY
           </div>
-          <div style={{ fontSize: 11, color: '#556677', marginTop: 2 }}>
+          <div style={{ fontSize: 17, color: '#b0c4dc', marginTop: 2 }}>
             {market === 'INDIA' ? '🇮🇳 NSE India' : '🇺🇸 US Market'} · Every scan saved automatically
           </div>
         </div>
         <button onClick={checkOutcomes} disabled={checking} style={{
-          padding: '6px 14px', fontSize: 10, cursor: 'pointer', borderRadius: 4,
+          padding: '6px 14px', fontSize: 16, cursor: 'pointer', borderRadius: 4,
           border: '1px solid #ffaa0033', background: '#ffaa0011', color: '#ffaa00',
           fontFamily: 'inherit', letterSpacing: '0.08em', opacity: checking ? 0.6 : 1,
         }}>
@@ -107,7 +107,7 @@ export default function SignalHistoryTab({ market = 'US' }) {
       </div>
 
       {error && (
-        <div style={{ fontSize: 12, color: '#ff4444', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
+        <div style={{ fontSize: 15, color: '#ff4444', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
           {error}
         </div>
       )}
@@ -127,14 +127,14 @@ export default function SignalHistoryTab({ market = 'US' }) {
           )}
         </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '20px 0', color: '#556677', fontSize: 13 }}>
+        <div style={{ textAlign: 'center', padding: '20px 0', color: '#b0c4dc', fontSize: 17 }}>
           No resolved signals yet — run scans and check outcomes after the timeframe elapses
         </div>
       )}
 
       {/* How it works */}
       {stats.pending > 0 && (
-        <div style={{ background: '#ffaa0011', border: '1px solid #ffaa0022', borderRadius: 6, padding: '10px 14px', fontSize: 11, color: '#7788aa' }}>
+        <div style={{ background: '#ffaa0011', border: '1px solid #ffaa0022', borderRadius: 6, padding: '10px 14px', fontSize: 17, color: '#d0dff0' }}>
           ⏳ <strong style={{ color: '#ffaa00' }}>{stats.pending} pending signals</strong> — outcomes are checked after the signal's timeframe elapses (5 days for short-term, 4 weeks for swing, etc). Click ↻ CHECK OUTCOMES to update.
         </div>
       )}
@@ -145,20 +145,20 @@ export default function SignalHistoryTab({ market = 'US' }) {
           {['ALL', 'BUY', 'SELL', 'HOLD'].map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
               padding: '5px 12px', borderRadius: 4, cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+              fontFamily: 'inherit', fontSize: 17, fontWeight: 700,
               border: `1px solid ${filter === f ? sigColor(f) || '#ffaa00' : '#2a2a3e'}`,
               background: filter === f ? `${sigColor(f) || '#ffaa00'}11` : '#0a0a14',
               color: filter === f ? (sigColor(f) || '#ffaa00') : '#556677',
             }}>{f}</button>
           ))}
-          <span style={{ fontSize: 11, color: '#445', marginLeft: 'auto', alignSelf: 'center' }}>{signals.length} signals</span>
+          <span style={{ fontSize: 17, color: '#99aabb', marginLeft: 'auto', alignSelf: 'center' }}>{signals.length} signals</span>
         </div>
       )}
 
       {/* Signal list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {signals.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#556677', fontSize: 13 }}>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#b0c4dc', fontSize: 17 }}>
             No signals yet · Run a scan to start tracking accuracy
           </div>
         ) : signals.map(s => (
@@ -171,16 +171,16 @@ export default function SignalHistoryTab({ market = 'US' }) {
             {/* Ticker + signal */}
             <div style={{ minWidth: 80 }}>
               <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: '#e8e8f0' }}>{s.ticker}</div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: sigColor(s.signal) }}>{s.signal} · {s.confidence}%</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: sigColor(s.signal) }}>{s.signal} · {s.confidence}%</div>
             </div>
 
             {/* Prices */}
             <div style={{ flex: 1, minWidth: 120 }}>
-              <div style={{ fontSize: 11, color: '#7788aa' }}>
+              <div style={{ fontSize: 17, color: '#d0dff0' }}>
                 Entry: {market === 'INDIA' ? '₹' : '$'}{s.price_at_signal?.toFixed(2)}
                 {s.price_target && ` · Target: ${market === 'INDIA' ? '₹' : '$'}${parseFloat(s.price_target).toFixed(2)}`}
               </div>
-              <div style={{ fontSize: 10, color: '#445', marginTop: 2 }}>
+              <div style={{ fontSize: 16, color: '#99aabb', marginTop: 2 }}>
                 {s.timeframe} · {new Date(s.created_at).toLocaleDateString()}
               </div>
             </div>
@@ -189,12 +189,12 @@ export default function SignalHistoryTab({ market = 'US' }) {
             <div style={{ textAlign: 'right' }}>
               <OutcomeBadge result={s.outcome_result} />
               {s.outcome_pct != null && (
-                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 4, color: s.outcome_pct >= 0 ? '#00ff88' : '#ff4444' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4, color: s.outcome_pct >= 0 ? '#00ff88' : '#ff4444' }}>
                   {fmtPct(s.outcome_pct)}
                 </div>
               )}
               {s.outcome_price && (
-                <div style={{ fontSize: 10, color: '#445' }}>
+                <div style={{ fontSize: 16, color: '#99aabb' }}>
                   Exit: {market === 'INDIA' ? '₹' : '$'}{s.outcome_price?.toFixed(2)}
                 </div>
               )}
@@ -203,7 +203,7 @@ export default function SignalHistoryTab({ market = 'US' }) {
         ))}
       </div>
 
-      <div style={{ fontSize: 10, color: '#2a2a3e', textAlign: 'center', marginTop: 8 }}>
+      <div style={{ fontSize: 16, color: '#667799', textAlign: 'center', marginTop: 8 }}>
         WIN = signal direction correct by &gt;2% · LOSS = wrong by &gt;2% · SCRATCH = within 2%
       </div>
     </div>

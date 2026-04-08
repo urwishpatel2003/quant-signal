@@ -22,7 +22,7 @@ function fmtCurrency(n, sym = '$', isInr = false) {
 }
 
 function PnlBadge({ value, pct, size = 'sm', currency = '$', isInr = false }) {
-  if (value == null) return <span style={{ color: '#445' }}>—</span>;
+  if (value == null) return <span style={{ color: '#99aabb' }}>—</span>;
   const pos  = value >= 0;
   const col  = pos ? '#00ff88' : '#ff4444';
   const bg   = pos ? '#00ff8811' : '#ff444411';
@@ -46,9 +46,9 @@ function StatCard({ label, value, sub, color = '#e8e8f0', border }) {
       background: '#0f0f1a', border: `1px solid ${border || '#2a2a40'}`,
       borderRadius: 6, padding: '12px 14px', textAlign: 'center',
     }}>
-      <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.12em', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 15, color: '#99aabb', letterSpacing: '0.12em', marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: '#7788aa', marginTop: 3 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 16, color: '#d0dff0', marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }
@@ -167,13 +167,13 @@ export default function SimulatorTab({ market = 'US' }) {
   const highConfRate    = highConfSignals.length ? Math.round(highConfWins / highConfSignals.length * 100) : null;
 
   if (!isLoaded || loading) return (
-    <div style={{ textAlign: 'center', padding: '60px 0', color: '#7788aa', fontSize: 13 }}>
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#d0dff0', fontSize: 17 }}>
       Loading simulator...
     </div>
   );
 
   if (!user) return (
-    <div style={{ textAlign: 'center', padding: '60px 0', color: '#7788aa', fontSize: 13 }}>
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#d0dff0', fontSize: 17 }}>
       Sign in to use the simulator
     </div>
   );
@@ -187,7 +187,7 @@ export default function SimulatorTab({ market = 'US' }) {
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#aa66ff', letterSpacing: '0.08em' }}>
             {market === 'INDIA' ? '🇮🇳' : '🇺🇸'} SIGNAL SIMULATOR
           </div>
-          <div style={{ fontSize: 11, color: '#556677', marginTop: 2 }}>
+          <div style={{ fontSize: 17, color: '#b0c4dc', marginTop: 2 }}>
             {`${market === 'INDIA' ? '🇮🇳 NSE India' : '🇺🇸 US Market'} · Virtual paper trading · ${startingLabel} starting balance`}
           </div>
         </div>
@@ -202,7 +202,7 @@ export default function SimulatorTab({ market = 'US' }) {
                 disabled={resetting || hasReset}
                 title={hasReset ? 'Reset already used — results are permanent' : 'One-time reset (cannot be undone)'}
                 style={{
-                  padding: '6px 14px', fontSize: 10, cursor: hasReset ? 'not-allowed' : 'pointer',
+                  padding: '6px 14px', fontSize: 16, cursor: hasReset ? 'not-allowed' : 'pointer',
                   borderRadius: 4, fontFamily: 'inherit', letterSpacing: '0.08em',
                   border: `1px solid ${hasReset ? '#2a2a3e' : '#ff444433'}`,
                   background: hasReset ? '#0a0a14' : '#ff444411',
@@ -212,7 +212,7 @@ export default function SimulatorTab({ market = 'US' }) {
                 {resetting ? 'RESETTING...' : hasReset ? '↺ RESET USED' : '↺ RESET (1×)'}
               </button>
               {lastReset && (
-                <div style={{ fontSize: 8, color: '#2a2a3e', textAlign: 'center', marginTop: 2 }}>
+                <div style={{ fontSize: 14, color: '#667799', textAlign: 'center', marginTop: 2 }}>
                   Reset on {new Date(lastReset).toLocaleDateString()}
                 </div>
               )}
@@ -220,7 +220,7 @@ export default function SimulatorTab({ market = 'US' }) {
           );
         })()}
         <button onClick={() => setShowShare(true)} style={{
-          padding: '6px 14px', fontSize: 10, cursor: 'pointer', borderRadius: 4,
+          padding: '6px 14px', fontSize: 16, cursor: 'pointer', borderRadius: 4,
           border: '1px solid #ffaa0033', background: '#ffaa0011', color: '#ffaa00',
           fontFamily: 'inherit', letterSpacing: '0.08em',
         }}>
@@ -229,13 +229,13 @@ export default function SimulatorTab({ market = 'US' }) {
       </div>
 
       {resetError && (
-        <div style={{ fontSize: 12, color: '#ff444488', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
+        <div style={{ fontSize: 15, color: '#ff4444bb', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
           {resetError}
         </div>
       )}
 
       {error && (
-        <div style={{ fontSize: 12, color: '#ff4444', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
+        <div style={{ fontSize: 15, color: '#ff4444', background: '#ff444411', border: '1px solid #ff444433', borderRadius: 4, padding: '8px 12px' }}>
           {error}
         </div>
       )}
@@ -296,7 +296,7 @@ export default function SimulatorTab({ market = 'US' }) {
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            padding: '8px 14px', fontSize: 12, fontFamily: 'inherit', fontWeight: 700,
+            padding: '8px 14px', fontSize: 15, fontFamily: 'inherit', fontWeight: 700,
             letterSpacing: '0.1em', color: tab === t.key ? '#aa66ff' : '#556677',
             borderBottom: `2px solid ${tab === t.key ? '#aa66ff' : 'transparent'}`,
             marginBottom: -1,
@@ -308,7 +308,7 @@ export default function SimulatorTab({ market = 'US' }) {
       {tab === 'open' && (
         <div>
           {openPositions.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#556677', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#b0c4dc', fontSize: 17 }}>
               No open positions · Run a scan and click <strong style={{ color: '#aa66ff' }}>📊 SIMULATE</strong>
             </div>
           ) : (
@@ -341,28 +341,28 @@ export default function SimulatorTab({ market = 'US' }) {
                           <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#e8e8f0' }}>{pos.ticker}</span>
                           {pos.position_type === 'OPTION' ? (
                             <span style={{
-                              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+                              fontSize: 16, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
                               background: pos.option_type === 'CALL' ? '#00ff8811' : '#ff444411',
                               border: `1px solid ${pos.option_type === 'CALL' ? '#00ff8833' : '#ff444433'}`,
                               color: pos.option_type === 'CALL' ? '#00ff88' : '#ff4444',
                             }}>{pos.option_type} ${pos.strike} {pos.expiry}</span>
                           ) : (
                             <span style={{
-                              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+                              fontSize: 16, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
                               background: pos.direction === 'LONG' ? '#00ff8811' : '#ff444411',
                               border: `1px solid ${pos.direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
                               color: pos.direction === 'LONG' ? '#00ff88' : '#ff4444',
                             }}>{pos.direction}</span>
                           )}
                           {pos.signal && (
-                            <span style={{ fontSize: 10, color: '#7788aa' }}>
+                            <span style={{ fontSize: 16, color: '#d0dff0' }}>
                               {pos.signal} · {pos.confidence}% conf
                             </span>
                           )}
-                          {hitTarget && <span style={{ fontSize: 10, color: '#00ff88', fontWeight: 700 }}>🎯 TARGET HIT</span>}
-                          {hitStop   && <span style={{ fontSize: 10, color: '#ff4444', fontWeight: 700 }}>⚠ STOP HIT</span>}
+                          {hitTarget && <span style={{ fontSize: 16, color: '#00ff88', fontWeight: 700 }}>🎯 TARGET HIT</span>}
+                          {hitStop   && <span style={{ fontSize: 16, color: '#ff4444', fontWeight: 700 }}>⚠ STOP HIT</span>}
                         </div>
-                        <div style={{ fontSize: 10, color: '#556677', marginTop: 2 }}>
+                        <div style={{ fontSize: 16, color: '#b0c4dc', marginTop: 2 }}>
                           {pos.position_type === 'OPTION'
                           ? `${pos.contracts} contract${pos.contracts > 1 ? 's' : ''} · premium ${sym}${pos.premium?.toFixed(2)}/sh · expires ${pos.expiry}`
                           : `${pos.quantity} shares · entered ${sym}${pos.entry_price.toFixed(2)} · ${new Date(pos.opened_at).toLocaleDateString()}`}
@@ -376,21 +376,21 @@ export default function SimulatorTab({ market = 'US' }) {
                       {[
                         ...(pos.position_type === 'OPTION' ? [
                           { label: 'PREMIUM NOW', value: cur ? `${sym}${cur.toFixed(2)}` : '—', color: isPos ? '#00ff88' : '#ff4444' },
-                          { label: 'ENTRY PREM',  value: `${sym}${pos.premium?.toFixed(2)}`, color: '#7788aa' },
+                          { label: 'ENTRY PREM',  value: `${sym}${pos.premium?.toFixed(2)}`, color: '#d0dff0' },
                           { label: 'BREAK EVEN',  value: pos.option_type === 'CALL'
                               ? `${sym}${(pos.strike + pos.premium).toFixed(2)}`
-                              : `${sym}${(pos.strike - pos.premium).toFixed(2)}`, color: '#ffaa0077' },
+                              : `${sym}${(pos.strike - pos.premium).toFixed(2)}`, color: '#ffaa00cc' },
                           { label: 'MAX LOSS',    value: `${sym}${(pos.premium * pos.contracts * 100).toFixed(2)}`, color: '#ff444477' },
                         ] : [
                           { label: 'CURRENT', value: cur ? `${sym}${cur.toFixed(2)}` : '—', color: isPos ? '#00ff88' : '#ff4444' },
-                          { label: 'ENTRY',   value: `${sym}${pos.entry_price.toFixed(2)}`, color: '#7788aa' },
+                          { label: 'ENTRY',   value: `${sym}${pos.entry_price.toFixed(2)}`, color: '#d0dff0' },
                           { label: 'TARGET',  value: pos.price_target ? `${sym}${parseFloat(pos.price_target).toFixed(2)}` : '—', color: '#00ff8877' },
                           { label: 'STOP',    value: pos.stop_loss    ? `${sym}${parseFloat(pos.stop_loss).toFixed(2)}` : '—',    color: '#ff444477' },
                         ]),
                       ].map(({ label, value, color }) => (
                         <div key={label} style={{ background: '#0a0a14', borderRadius: 5, padding: '6px 10px', minWidth: 70 }}>
-                          <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 3 }}>{label}</div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+                          <div style={{ fontSize: 15, color: '#99aabb', letterSpacing: '0.1em', marginBottom: 3 }}>{label}</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
                         </div>
                       ))}
                     </div>
@@ -398,17 +398,17 @@ export default function SimulatorTab({ market = 'US' }) {
                     {/* Auto-close status */}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0 0' }}>
                       {hitTarget ? (
-                        <div style={{ fontSize: 11, color: '#00ff88', background: '#00ff8811',
+                        <div style={{ fontSize: 17, color: '#00ff88', background: '#00ff8811',
                           border: '1px solid #00ff8833', borderRadius: 5, padding: '6px 12px', flex: 1, textAlign: 'center' }}>
                           🎯 TARGET REACHED — Auto-closing next check
                         </div>
                       ) : hitStop ? (
-                        <div style={{ fontSize: 11, color: '#ff4444', background: '#ff444411',
+                        <div style={{ fontSize: 17, color: '#ff4444', background: '#ff444411',
                           border: '1px solid #ff444433', borderRadius: 5, padding: '6px 12px', flex: 1, textAlign: 'center' }}>
                           ⚠ STOP HIT — Auto-closing next check
                         </div>
                       ) : (
-                        <div style={{ fontSize: 10, color: '#445', flex: 1 }}>
+                        <div style={{ fontSize: 16, color: '#99aabb', flex: 1 }}>
                           ⏱ Auto-closes when target or stop is hit · Checks every 60s
                         </div>
                       )}
@@ -425,7 +425,7 @@ export default function SimulatorTab({ market = 'US' }) {
       {tab === 'closed' && (
         <div>
           {closedPositions.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#556677', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#b0c4dc', fontSize: 17 }}>
               No closed positions yet
             </div>
           ) : (
@@ -442,13 +442,13 @@ export default function SimulatorTab({ market = 'US' }) {
                   }}>
                     <div style={{ minWidth: 60 }}>
                       <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: '#e8e8f0' }}>{pos.ticker}</div>
-                      <div style={{ fontSize: 9, color: pos.direction === 'LONG' ? '#00ff8866' : '#ff444466' }}>{pos.direction}</div>
+                      <div style={{ fontSize: 15, color: pos.direction === 'LONG' ? '#00ff8866' : '#ff444466' }}>{pos.direction}</div>
                     </div>
                     <div style={{ flex: 1, minWidth: 120 }}>
-                      <div style={{ fontSize: 11, color: '#7788aa' }}>
+                      <div style={{ fontSize: 17, color: '#d0dff0' }}>
                         {sym}{pos.entry_price.toFixed(2)} → {sym}{pos.exit_price?.toFixed(2)} · {pos.quantity} shares
                       </div>
-                      <div style={{ fontSize: 10, color: '#445', marginTop: 2 }}>
+                      <div style={{ fontSize: 16, color: '#99aabb', marginTop: 2 }}>
                         {new Date(pos.opened_at).toLocaleDateString()} → {new Date(pos.closed_at).toLocaleDateString()}
                         {pos.exit_reason && pos.exit_reason !== 'MANUAL' && (
                           <span style={{ marginLeft: 6, color: pos.exit_reason === 'TARGET' ? '#00ff8866' : '#ff444466' }}>
@@ -458,7 +458,7 @@ export default function SimulatorTab({ market = 'US' }) {
                       </div>
                     </div>
                     {pos.signal && (
-                      <div style={{ fontSize: 10, color: '#556677' }}>
+                      <div style={{ fontSize: 16, color: '#b0c4dc' }}>
                         {pos.signal} {pos.confidence}%
                       </div>
                     )}
@@ -472,7 +472,7 @@ export default function SimulatorTab({ market = 'US' }) {
                 background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6,
                 padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
               }}>
-                <div style={{ fontSize: 11, color: '#556677' }}>
+                <div style={{ fontSize: 17, color: '#b0c4dc' }}>
                   {closedPositions.length} trades · {wins} wins · {losses} losses
                   {avgWin  != null && ` · Avg win: +${avgWin.toFixed(1)}%`}
                   {avgLoss != null && ` · Avg loss: ${avgLoss.toFixed(1)}%`}
@@ -510,7 +510,7 @@ export default function SimulatorTab({ market = 'US' }) {
         />
       )}
 
-      <div style={{ fontSize: 10, color: '#2a2a3e', textAlign: 'center', marginTop: 8 }}>
+      <div style={{ fontSize: 16, color: '#667799', textAlign: 'center', marginTop: 8 }}>
         {`${startingLabel} starting balance · ${isInr ? 'NSE India' : 'US Market'} · No real money involved`}
         {openPositions.some(p => p.direction === 'SHORT') && (
           <span style={{ display: 'block', marginTop: 2 }}>
