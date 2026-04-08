@@ -259,28 +259,31 @@ export default function WelcomePage({ onEnter, onNavigate }) {
       <div className="wc">
         <div className="wc-lbl">SIGNAL ACCURACY — YOUR PERSONAL EDGE</div>
         <div style={{ background:'#0c1a14', border:'1px solid #00ff8822', borderRadius:8, padding:'clamp(20px,3vw,32px)' }}>
-          <div className="acc-grid">
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:32, alignItems:'center' }}>
             <div>
-              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(56px,8vw,80px)',
-                lineHeight:1, color:'#00ff88', marginBottom:4 }}>58%</div>
-              <div style={{ fontSize:10, color:'#00ff88aa', letterSpacing:'.15em',
-                fontFamily:"'IBM Plex Mono',monospace", marginBottom:16 }}>WIN RATE · TOP 20% USERS</div>
-              <p style={{ fontSize:12, color:'#a0b8cc', lineHeight:1.8, margin:0 }}>
-                The market is a coin flip at 50%. Every point above that is real edge. QuAInt Signal users who run 50+ scans see their personal accuracy stabilize — and it's trackable, provable, and yours.
+              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(28px,4vw,44px)',
+                lineHeight:1.1, color:'#00ff88', marginBottom:16 }}>
+                YOUR EDGE.<br />TRACKED AUTOMATICALLY.
+              </div>
+              <p style={{ fontSize:14, color:'#d0e0f0', lineHeight:1.85, margin:'0 0 14px' }}>
+                Every BUY/SELL/HOLD you run is saved with your entry price and timeframe. When the timeframe elapses, the outcome is checked against the real price — WIN, LOSS or SCRATCH.
+              </p>
+              <p style={{ fontSize:13, color:'#a0b8cc', lineHeight:1.8, margin:0 }}>
+                Over time your personal accuracy record builds. No other tool shows you whether your signals actually work. This one does — and the data is yours forever.
               </p>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {[
-                { l:'BUY signals (high confidence)',   v:'61% win',            c:'#00ff88' },
-                { l:'SELL signals (high confidence)',  v:'57% win',            c:'#00ff88' },
-                { l:'Confidence ≥70% tracked',         v:'separately',         c:'#ffaa00' },
-                { l:'Outcomes auto-checked after',     v:'timeframe elapses',  c:'#4488ff' },
-                { l:'Signal history stored',           v:'forever',            c:'#aa44ff' },
+                { l:'Every scan auto-saved',           v:'entry price + timeframe', c:'#00ff88' },
+                { l:'Outcomes checked automatically',  v:'when timeframe elapses',  c:'#00ff88' },
+                { l:'WIN / LOSS / SCRATCH',            v:'vs real price move',      c:'#ffaa00' },
+                { l:'High-confidence signals',         v:'tracked separately',      c:'#4488ff' },
+                { l:'Signal history',                  v:'stored forever',          c:'#aa44ff' },
               ].map((r, i) => (
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-                  padding:'9px 14px', background:'#0f1a14', border:'1px solid #00ff8811', borderRadius:4 }}>
-                  <span style={{ fontSize:11, color:'#b0c4dc' }}>{r.l}</span>
-                  <span style={{ fontSize:13, fontWeight:700, color:r.c }}>{r.v}</span>
+                  padding:'10px 14px', background:'#0f1a14', border:'1px solid #00ff8811', borderRadius:4 }}>
+                  <span style={{ fontSize:12, color:'#c0d4e8' }}>{r.l}</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:r.c }}>{r.v}</span>
                 </div>
               ))}
             </div>
