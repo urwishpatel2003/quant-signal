@@ -4798,19 +4798,29 @@ async function fetchUnusualActivity(market = 'US') {
   try {
     if (market === 'INDIA') {
       // Use NSE quotes for India tickers
+      // NSE returns: price, pChange (%), totalTradedVolume, weekHigh52, weekLow52
+      // Avg volume not available — use delivery% and pChange as signals instead
       for (const ticker of uniqueTickers.slice(0, 30)) {
         try {
           const q = await getNSEQuote(ticker);
-          if (q?.price) quotes[ticker] = {
-            symbol: ticker, last: q.price,
-            change_percentage: q.pChange || 0,
-            volume: q.totalTradedVolume || 0,
-            average_volume: q.totalTradedVolume || 0, // NSE doesn't give avg vol easily
-            fifty_two_week_high: q.weekHigh52 || 0,
-            fifty_two_week_low:  q.weekLow52  || 0,
-          };
+          if (q?.price) {
+            // Estimate avg volume: NSE movers cache has recent volumes
+            // Use a heuristic: if volume is very high in absolute terms flag it
+            const vol    = q.totalTradedVolume || 0;
+            const avgVol = q.totalTradedVolume5d || q.totalTradedVolume || 1;
+            quotes[ticker] = {
+              symbol:              ticker,
+              last:                q.price,
+              change_percentage:   q.pChange || 0,
+              volume:              vol,
+              average_volume:      avgVol,
+              fifty_two_week_high: q.weekHigh52 || 0,
+              fifty_two_week_low:  q.weekLow52  || 0,
+              delivery_pct:        q.deliveryToTradedQuantity || null,
+            };
+          }
         } catch {}
-        await sleep(120);
+        await sleep(100);
       }
     } else {
       const batches = [];
@@ -4847,15 +4857,24 @@ async function fetchUnusualActivity(market = 'US') {
     const avgVol  = parseInt(q.average_volume) || parseInt(q.volume) || 1;
     const volRatio = vol / avgVol;
 
-    if (volRatio >= 5)       { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'high' });   score += 3; }
-    else if (volRatio >= 3)  { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'medium' }); score += 2; }
-    else if (volRatio >= 2)  { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'low' });    score += 1; }
+    const volHigh = market === 'INDIA' ? 3 : 5;
+    const volMed  = market === 'INDIA' ? 2 : 3;
+    const volLow  = market === 'INDIA' ? 1.5 : 2;
+    if (volRatio >= volHigh)     { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'high' });   score += 3; }
+    else if (volRatio >= volMed) { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'medium' }); score += 2; }
+    else if (volRatio >= volLow) { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'low' });    score += 1; }
 
-    // 2. Price move — big move with high volume = real signal
+    // 2. Price move — India stocks are more volatile, lower threshold
     const pct = parseFloat(q.change_percentage) || 0;
-    if (Math.abs(pct) >= 5 && volRatio >= 2) {
-      signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% on volume`, severity: Math.abs(pct) >= 10 ? 'high' : 'medium' });
-      score += Math.abs(pct) >= 10 ? 3 : 2;
+    const priceThreshold = market === 'INDIA' ? 3 : 5;
+    const volThreshold   = market === 'INDIA' ? 1 : 2; // India avg vol unreliable
+    if (Math.abs(pct) >= priceThreshold && volRatio >= volThreshold) {
+      signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% on volume`, severity: Math.abs(pct) >= 8 ? 'high' : 'medium' });
+      score += Math.abs(pct) >= 8 ? 3 : 2;
+    } else if (market === 'INDIA' && Math.abs(pct) >= 4) {
+      // For India: big % move alone is a signal even without vol confirmation
+      signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% move`, severity: 'medium' });
+      score += 2;
     }
 
     // 3. News velocity
@@ -4890,8 +4909,8 @@ async function fetchUnusualActivity(market = 'US') {
     });
   }
 
-  // Sort by score descending
-  results.sort((a, b) => b.score - a.score);
+  // Sort by absolute % change descending — biggest movers first
+  results.sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
   return results.slice(0, 20);
 }
 

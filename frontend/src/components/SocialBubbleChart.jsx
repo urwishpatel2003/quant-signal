@@ -157,8 +157,6 @@ export default function SocialBubbleChart({ onScan }) {
   useEffect(() => {
     if (!data?.tickers?.length || width < 100) return;
 
-    // Pack into a generous canvas then trim height to actual bubble bounds
-    const h = Math.round(width * 1.1); // generous initial height
     setCanvasWidth(width);
 
     const filtered = data.tickers
@@ -169,13 +167,13 @@ export default function SocialBubbleChart({ onScan }) {
       })
       .slice(0, 30);
 
-    const packed = packBubbles(filtered, width, h);
+    const packed = packBubbles(filtered, width);
     setBubbles(packed);
 
-    // Trim SVG height to actual content + small padding
+    // Height = exact bounds of placed bubbles + small padding
     if (packed.length > 0) {
       const maxY = Math.max(...packed.map(b => b.y + b.r));
-      setSvgHeight(maxY + 12);
+      setSvgHeight(maxY + 16);
     } else {
       setSvgHeight(200);
     }
