@@ -17,15 +17,11 @@ function IndiaMacroBar({ macro }) {
   const { usdInr, crude, gold, india10Y, sectors } = macro;
 
   const tiles = [
-    usdInr  && { label:'USD/INR', value:`₹${usdInr.price?.toFixed(2)}`, pct: usdInr.changePct, color:'#4488ff' },
-    crude   && { label:'CRUDE',   value:`$${crude.price?.toFixed(1)}`,    pct: crude.changePct,  color:'#ff8844' },
-    gold    && { label:'GOLD',    value:`$${gold.price?.toFixed(0)}`,     pct: gold.changePct,   color:'#ffcc00' },
-    india10Y && { label:'10Y YIELD', value:`${india10Y.price?.toFixed(2)}%`, pct: india10Y.changePct, color:'#aa44ff' },
-  ].filter(Boolean);
-
-  const niftyBank = sectors?.find(s => s.symbol === 'NIFTYBANK' || s.name?.includes('Bank'));
-  const niftyIT   = sectors?.find(s => s.symbol === 'NIFTYIT'   || s.name?.includes('IT'));
-  const niftyAuto = sectors?.find(s => s.name?.includes('Auto'));
+    { label:'USD/INR',   value: usdInr?.price   ? `₹${usdInr.price.toFixed(2)}`      : '—', pct: usdInr?.changePct,   color:'#4488ff' },
+    { label:'GOLD',      value: gold?.priceInr   ? `₹${Math.round(gold.priceInr)}/g`  : gold?.priceUsd ? `$${gold.priceUsd.toFixed(0)}` : '—', pct: gold?.changePct, color:'#ffcc00' },
+    { label:'CRUDE',     value: crude?.price     ? `$${crude.price.toFixed(1)}`        : '—', pct: crude?.changePct,    color:'#ff8844' },
+    { label:'10Y YIELD', value: india10Y?.yield  ? `${india10Y.yield.toFixed(2)}%`     : '—', pct: india10Y?.changePct, color:'#aa44ff' },
+  ];
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
