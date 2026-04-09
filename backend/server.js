@@ -4551,6 +4551,178 @@ app.get('/backtest/results', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ─── Social Sentiment Screener ────────────────────────────────────────────────
+// Aggregates Reddit WSB + StockTwits + Finnhub + Yahoo trending
+// Returns ticker mention counts + sentiment for bubble chart
+
+const socialCache = { data: null, ts: 0 };
+const SOCIAL_TTL  = 15 * 60 * 1000; // 15 minutes
+
+async function fetchSocialSentiment() {
+  const tickers = {};
+
+  const addTicker = (symbol, source, bullish = null, mentions = 1) => {
+    if (!symbol || symbol.length > 5 || symbol.length < 1) return;
+    const s = symbol.toUpperCase().replace(/[^A-Z]/g, '');
+    if (!s || s.length > 5) return;
+    if (!tickers[s]) tickers[s] = { symbol: s, mentions: 0, bullish: 0, bearish: 0, sources: new Set() };
+    tickers[s].mentions  += mentions;
+    tickers[s].sources.add(source);
+    if (bullish === true)  tickers[s].bullish++;
+    if (bullish === false) tickers[s].bearish++;
+  };
+
+  // ── 1. StockTwits trending ─────────────────────────────────────────────────
+  try {
+    const st = await httpsGet('api.stocktwits.com', '/api/2/trending/symbols.json', { 'User-Agent': 'Mozilla/5.0' });
+    const symbols = st?.response?.symbols || [];
+    for (const s of symbols) {
+      const bull = s.messages?.[0]?.entities?.sentiment?.basic === 'Bullish';
+      const bear = s.messages?.[0]?.entities?.sentiment?.basic === 'Bearish';
+      addTicker(s.symbol, 'stocktwits', bull ? true : bear ? false : null, s.watchlist_count ? Math.floor(s.watchlist_count / 1000) + 1 : 2);
+    }
+    console.log(`[social] StockTwits: ${symbols.length} tickers`);
+  } catch (e) { console.warn('[social] StockTwits failed:', e.message); }
+
+  // ── 2. Reddit WSB — public JSON API (no auth) ─────────────────────────────
+  try {
+    const wsb = await httpsGet('www.reddit.com', '/r/wallstreetbets/hot.json?limit=50&t=day', {
+      'User-Agent': 'QuAIntSignal/1.0 (market research tool)',
+      'Accept': 'application/json',
+    });
+    const posts = wsb?.data?.children || [];
+    // Extract tickers from post titles using regex
+    const tickerRe = /([A-Z]{1,5})/g;
+    const SKIP = new Set(['DD','WSB','CEO','IPO','ETF','OTM','ATM','ITM','PUT','CALL','SPY','QQQ','THE','AND','FOR','NOT','ARE','YOU','NOW','ALL','NEW','GET','OUT','CAN','HAS','ITS','YTD','EPS','PE','AI','IV']);
+    for (const post of posts) {
+      const title     = post.data?.title || '';
+      const upvotes   = post.data?.ups || 0;
+      const sentiment = post.data?.link_flair_text?.toLowerCase();
+      const bull = sentiment?.includes('bull') || title.toLowerCase().includes('moon') || title.toLowerCase().includes('calls');
+      const bear = sentiment?.includes('bear') || title.toLowerCase().includes('puts')  || title.toLowerCase().includes('short');
+      const matches = [...title.matchAll(tickerRe)].map(m => m[1]).filter(t => !SKIP.has(t) && t.length >= 2);
+      const weight  = Math.max(1, Math.floor(upvotes / 500));
+      for (const ticker of matches) {
+        addTicker(ticker, 'reddit_wsb', bull ? true : bear ? false : null, weight);
+      }
+    }
+    console.log(`[social] Reddit WSB: ${posts.length} posts parsed`);
+  } catch (e) { console.warn('[social] Reddit WSB failed:', e.message); }
+
+  // ── 3. Reddit stocks ──────────────────────────────────────────────────────
+  try {
+    const rs = await httpsGet('www.reddit.com', '/r/stocks/hot.json?limit=25', {
+      'User-Agent': 'QuAIntSignal/1.0 (market research tool)',
+      'Accept': 'application/json',
+    });
+    const posts = rs?.data?.children || [];
+    const SKIP2 = new Set(['DD','CEO','IPO','ETF','THE','AND','FOR','NOT','ARE','YOU','NOW','ALL','NEW','GET','OUT','CAN','EPS','PE','AI','IV','SEC','GDP','CPI','USA','USD','EUR']);
+    const tickerRe2 = /([A-Z]{2,5})/g;
+    for (const post of posts) {
+      const title = post.data?.title || '';
+      const matches = [...title.matchAll(tickerRe2)].map(m => m[1]).filter(t => !SKIP2.has(t));
+      for (const ticker of matches) addTicker(ticker, 'reddit_stocks', null, 1);
+    }
+  } catch (e) { console.warn('[social] Reddit stocks failed:', e.message); }
+
+  // ── 4. Finnhub social sentiment ───────────────────────────────────────────
+  const TOP_TICKERS = ['AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','AMD','PLTR','COIN','MSTR','SPY','QQQ'];
+  try {
+    const from = new Date(Date.now() - 24*3600*1000).toISOString().split('T')[0];
+    const to   = new Date().toISOString().split('T')[0];
+    for (const ticker of TOP_TICKERS) {
+      try {
+        const data = await finnhubGet(`/stock/social-sentiment?symbol=${ticker}&from=${from}&to=${to}`);
+        const reddit = data?.reddit || [];
+        const twitter = data?.twitter || [];
+        const allPosts = [...reddit, ...twitter];
+        if (!allPosts.length) continue;
+        const totalMentions = allPosts.reduce((s, p) => s + (p.mention || 0), 0);
+        const avgScore      = allPosts.reduce((s, p) => s + (p.score || 0), 0) / allPosts.length;
+        addTicker(ticker, 'finnhub', avgScore > 0 ? true : avgScore < 0 ? false : null, Math.max(1, Math.floor(totalMentions / 10)));
+      } catch {}
+      await sleep(50);
+    }
+    console.log(`[social] Finnhub sentiment: ${TOP_TICKERS.length} tickers`);
+  } catch (e) { console.warn('[social] Finnhub failed:', e.message); }
+
+  // ── 5. Yahoo Finance trending ────────────────────────────────────────────
+  try {
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const data = await httpsGet(host, '/v1/finance/trending/US?count=20', YAHOO_HEADERS);
+        const quotes = data?.finance?.result?.[0]?.quotes || [];
+        for (const q of quotes) {
+          if (q.symbol) addTicker(q.symbol, 'yahoo', null, 3);
+        }
+        console.log(`[social] Yahoo trending: ${quotes.length} tickers`);
+        break;
+      } catch { continue; }
+    }
+  } catch (e) { console.warn('[social] Yahoo trending failed:', e.message); }
+
+  // ── Normalize + score ─────────────────────────────────────────────────────
+  // Filter noise — must have ≥2 mentions or appear in multiple sources
+  const KNOWN_TICKERS = new Set([
+    'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','GOOG','AMD','NFLX',
+    'PLTR','COIN','MSTR','MARA','RIOT','HOOD','SOFI','GME','AMC','BB',
+    'SPY','QQQ','IWM','GLD','SOXL','TQQQ','ARKK','INTC','MU','AVGO',
+    'SMCI','NET','CRWD','DDOG','SNOW','SHOP','UBER','LYFT','ABNB','RDDT',
+    'ARM','AMAT','LRCX','KLAC','QCOM','TXN','ORCL','CRM','ADBE','NOW',
+    'RKLB','LUNR','ASTS','JOBY','ACHR','OKLO','SMR','NNE','IONQ','RGTI',
+    'LLY','ABBV','PFE','MRNA','BNTX','NVAX','GILD','REGN','VRTX','AMGN',
+    'JPM','BAC','GS','MS','WFC','BX','KKR','V','MA','PYPL','SQ',
+    'TSLA','RIVN','LCID','NIO','XPEV','LI','GM','F','STLA',
+    'XOM','CVX','OXY','SLB','FCX','NEM','GOLD','MP',
+    'DIS','NFLX','SPOT','SNAP','PINS','RDDT','RBLX','TTWO',
+  ]);
+
+  const maxMentions = Math.max(...Object.values(tickers).map(t => t.mentions), 1);
+  const result = Object.values(tickers)
+    .filter(t => t.mentions >= 2 || KNOWN_TICKERS.has(t.symbol) && t.mentions >= 1)
+    .map(t => {
+      const total     = t.bullish + t.bearish;
+      const sentiment = total > 0 ? (t.bullish - t.bearish) / total : 0; // -1 to +1
+      return {
+        symbol:       t.symbol,
+        mentions:     t.mentions,
+        normalizedSize: t.mentions / maxMentions, // 0-1 for bubble size
+        sentiment,    // -1 bearish, 0 neutral, +1 bullish
+        bullPct:      total > 0 ? Math.round(t.bullish / total * 100) : null,
+        bearPct:      total > 0 ? Math.round(t.bearish / total * 100) : null,
+        sources:      [...t.sources],
+      };
+    })
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 40); // top 40
+
+  return result;
+}
+
+app.get('/social/trending', async (req, res) => {
+  try {
+    if (socialCache.data && Date.now() - socialCache.ts < SOCIAL_TTL) {
+      return res.json({ tickers: socialCache.data, cached: true, cachedAt: socialCache.ts });
+    }
+    const data = await fetchSocialSentiment();
+    socialCache.data = data;
+    socialCache.ts   = Date.now();
+    res.json({ tickers: data, cached: false });
+  } catch (e) {
+    console.error('[social/trending]', e.message);
+    if (socialCache.data) return res.json({ tickers: socialCache.data, cached: true, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Warm social cache on startup
+setTimeout(() => {
+  fetchSocialSentiment()
+    .then(data => { socialCache.data = data; socialCache.ts = Date.now(); console.log(`[social] warmed: ${data.length} tickers`); })
+    .catch(e => console.warn('[social] warm failed:', e.message));
+}, 5000);
+
 // ─── Signal History ──────────────────────────────────────────────────────────
 
 app.post('/signal-history', async (req, res) => {

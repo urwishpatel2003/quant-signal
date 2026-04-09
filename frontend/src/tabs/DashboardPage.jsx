@@ -1,0 +1,399 @@
+import { useState, useEffect, useCallback } from 'react';
+import SocialBubbleChart from '../components/SocialBubbleChart';
+
+const BASE = import.meta.env.VITE_API_BASE;
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+function StatPill({ label, value, color = '#ffaa00', sub, border }) {
+  return (
+    <div style={{ background:'#0f0f1a', border:`1px solid ${border || color + '22'}`,
+      borderTop:`2px solid ${color}55`, borderRadius:6, padding:'12px 14px', flex:1, minWidth:100 }}>
+      <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.08em', marginBottom:4 }}>{label}</div>
+      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, color, lineHeight:1 }}>{value ?? '—'}</div>
+      {sub && <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginTop:3 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function MoverRow({ ticker, changePct, price, onClick, market }) {
+  const up = (changePct || 0) >= 0;
+  return (
+    <div onClick={() => onClick(ticker)}
+      style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+        padding:'8px 12px', cursor:'pointer', borderRadius:4, transition:'background .1s' }}
+      onMouseEnter={e => e.currentTarget.style.background = '#ffffff08'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+      <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, color:'#ffaa00' }}>{ticker}</span>
+      <div style={{ textAlign:'right' }}>
+        <div style={{ fontSize:'var(--fs-xs)', color:'#c8d8f0', fontWeight:600 }}>
+          {market === 'INDIA' ? '₹' : '$'}{price?.toFixed(2)}
+        </div>
+        <div style={{ fontSize:'var(--fs-xs)', fontWeight:700, color: up ? '#00ff88' : '#ff4444' }}>
+          {up ? '▲' : '▼'} {Math.abs(changePct || 0).toFixed(2)}%
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccuracyRing({ winRate, total }) {
+  if (!winRate || !total) return (
+    <div style={{ textAlign:'center', padding:'16px 0', fontSize:'var(--fs-xs)', color:'#334455' }}>
+      Run scans to build your accuracy record
+    </div>
+  );
+  const r = 40, circ = 2 * Math.PI * r;
+  const color = winRate >= 60 ? '#00ff88' : winRate >= 50 ? '#ffaa00' : '#ff4444';
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+      <svg width={96} height={96} viewBox="0 0 96 96">
+        <circle cx={48} cy={48} r={r} fill="none" stroke="#1a1a2e" strokeWidth={9} />
+        <circle cx={48} cy={48} r={r} fill="none" stroke={color} strokeWidth={9}
+          strokeDasharray={`${(winRate/100)*circ} ${circ}`}
+          strokeLinecap="round" transform="rotate(-90 48 48)" />
+        <text x={48} y={44} textAnchor="middle" dominantBaseline="middle"
+          fontFamily="'Bebas Neue',sans-serif" fontSize={22} fill={color}>{winRate}%</text>
+        <text x={48} y={60} textAnchor="middle" dominantBaseline="middle"
+          fontSize={9} fill="#445566">WIN RATE</text>
+      </svg>
+      <div>
+        <div style={{ fontSize:'var(--fs-sm)', color:'#c8d8f0', marginBottom:4, fontWeight:600 }}>{total} resolved signals</div>
+        <div style={{ fontSize:'var(--fs-xs)', color:'#445566', lineHeight:1.6 }}>Your personal edge,<br/>tracked automatically</div>
+      </div>
+    </div>
+  );
+}
+
+// ── India macro tiles ────────────────────────────────────────────────────────
+function IndiaMacroBar({ macro }) {
+  if (!macro) return null;
+  const { usdInr, crude, gold, india10Y, sectors } = macro;
+
+  const tiles = [
+    usdInr  && { label:'USD/INR', value:`₹${usdInr.price?.toFixed(2)}`, pct: usdInr.changePct, color:'#4488ff' },
+    crude   && { label:'CRUDE',   value:`$${crude.price?.toFixed(1)}`,    pct: crude.changePct,  color:'#ff8844' },
+    gold    && { label:'GOLD',    value:`$${gold.price?.toFixed(0)}`,     pct: gold.changePct,   color:'#ffcc00' },
+    india10Y && { label:'10Y YIELD', value:`${india10Y.price?.toFixed(2)}%`, pct: india10Y.changePct, color:'#aa44ff' },
+  ].filter(Boolean);
+
+  const niftyBank = sectors?.find(s => s.symbol === 'NIFTYBANK' || s.name?.includes('Bank'));
+  const niftyIT   = sectors?.find(s => s.symbol === 'NIFTYIT'   || s.name?.includes('IT'));
+  const niftyAuto = sectors?.find(s => s.name?.includes('Auto'));
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+      {/* Macro tiles */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(130px, 1fr))', gap:8 }}>
+        {tiles.map(t => (
+          <div key={t.label} style={{ background:'#0f0f1a', border:`1px solid ${t.color}22`,
+            borderTop:`2px solid ${t.color}44`, borderRadius:6, padding:'10px 12px' }}>
+            <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginBottom:3 }}>{t.label}</div>
+            <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:t.color, lineHeight:1 }}>{t.value}</div>
+            {t.pct != null && (
+              <div style={{ fontSize:'var(--fs-xs)', color: t.pct >= 0 ? '#00ff88' : '#ff4444', marginTop:2 }}>
+                {t.pct >= 0 ? '▲' : '▼'} {Math.abs(t.pct).toFixed(2)}%
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Sector pulse */}
+      {sectors?.length > 0 && (
+        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, padding:'12px 14px' }}>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:10 }}>SECTOR PULSE</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {sectors.slice(0, 6).map(s => {
+              const pct = s.changePct || 0;
+              const color = pct > 1 ? '#00ff88' : pct < -1 ? '#ff4444' : pct > 0 ? '#44cc88' : '#cc6644';
+              const barW = Math.min(100, Math.abs(pct) * 15);
+              return (
+                <div key={s.symbol} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ fontSize:'var(--fs-xs)', color:'#8899bb', width:90, flexShrink:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {s.name || s.symbol}
+                  </div>
+                  <div style={{ flex:1, background:'#1a1a2e', borderRadius:2, height:5, overflow:'hidden' }}>
+                    <div style={{ height:'100%', width:`${barW}%`, background:color, borderRadius:2,
+                      marginLeft: pct < 0 ? `${100-barW}%` : 0 }} />
+                  </div>
+                  <div style={{ fontSize:'var(--fs-xs)', color, fontWeight:700, width:48, textAlign:'right', flexShrink:0 }}>
+                    {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── US regime card ────────────────────────────────────────────────────────────
+function USRegimeCard({ regime }) {
+  if (!regime?.regime) return null;
+  const colors = { STRONG_BULL:'#00ff88', BULL:'#44cc88', NEUTRAL:'#ffaa00', BEAR:'#ff8844', STRONG_BEAR:'#ff4444' };
+  const color = colors[regime.regime] || '#ffaa00';
+  return (
+    <div style={{ background: color + '0a', border:`1px solid ${color}33`,
+      borderLeft:`3px solid ${color}`, borderRadius:6, padding:'10px 14px',
+      display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+      <div>
+        <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginBottom:2 }}>MARKET REGIME</div>
+        <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color, lineHeight:1 }}>
+          {regime.regime.replace('_', ' ')}
+        </div>
+        <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginTop:2 }}>{regime.confidence}% confidence</div>
+      </div>
+      {regime.summary && (
+        <div style={{ fontSize:'var(--fs-xs)', color:'#8899bb', lineHeight:1.6, flex:1 }}>{regime.summary}</div>
+      )}
+    </div>
+  );
+}
+
+// ── India regime card ─────────────────────────────────────────────────────────
+function IndiaRegimeCard({ macro, movers }) {
+  if (!macro) return null;
+  // Derive regime from Nifty movers + sector breadth
+  const sectors   = macro.sectors || [];
+  const advancing = sectors.filter(s => (s.changePct || 0) > 0).length;
+  const declining = sectors.filter(s => (s.changePct || 0) < 0).length;
+  const breadth   = sectors.length > 0 ? advancing / sectors.length : 0.5;
+  const usdInr    = macro.usdInr?.price;
+  const inrWeak   = usdInr > 84;
+
+  const regime    = breadth > 0.7 ? 'BULL' : breadth > 0.5 ? 'MILD BULL' : breadth < 0.3 ? 'BEAR' : 'NEUTRAL';
+  const color     = breadth > 0.6 ? '#00ff88' : breadth < 0.4 ? '#ff4444' : '#ffaa00';
+
+  return (
+    <div style={{ background: color + '0a', border:`1px solid ${color}33`,
+      borderLeft:`3px solid ${color}`, borderRadius:6, padding:'10px 14px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+        <div>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginBottom:2 }}>NIFTY REGIME</div>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color, lineHeight:1 }}>{regime}</div>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginTop:2 }}>
+            {advancing} sectors up · {declining} sectors down
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'var(--fs-xs)', color:'#556677' }}>USD/INR</div>
+            <div style={{ fontSize:'var(--fs-sm)', fontWeight:700, color: inrWeak ? '#ff8844' : '#00ff88' }}>
+              ₹{usdInr?.toFixed(2) || '—'}
+            </div>
+          </div>
+          {macro.globalSignals?.nifty && (
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:'var(--fs-xs)', color:'#556677' }}>NIFTY</div>
+              <div style={{ fontSize:'var(--fs-sm)', fontWeight:700,
+                color: (macro.globalSignals.nifty.changePct || 0) >= 0 ? '#00ff88' : '#ff4444' }}>
+                {(macro.globalSignals.nifty.changePct || 0) >= 0 ? '▲' : '▼'} {Math.abs(macro.globalSignals.nifty.changePct || 0).toFixed(2)}%
+              </div>
+            </div>
+          )}
+        </div>
+        {inrWeak && (
+          <div style={{ fontSize:'var(--fs-xs)', color:'#ff884488', borderLeft:'2px solid #ff884433', paddingLeft:8, lineHeight:1.6 }}>
+            ⚠ Weak INR — watch FII outflows and import-heavy sectors
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+export default function DashboardPage({ user, market, onNavigate, onScan }) {
+  const [movers,    setMovers]    = useState(null);
+  const [accuracy,  setAccuracy]  = useState(null);
+  const [regime,    setRegime]    = useState(null);
+  const [indiaMacro, setIndiaMacro] = useState(null);
+  const [time,      setTime]      = useState(new Date());
+
+  const isIndia = market === 'INDIA';
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    fetch(`${BASE}/${isIndia ? 'india/movers' : 'movers'}`)
+      .then(r => r.json()).then(setMovers).catch(() => {});
+  }, [isIndia]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`${BASE}/signal-history/${user.id}?market=${market}`)
+      .then(r => r.json()).then(d => setAccuracy(d?.stats)).catch(() => {});
+  }, [user, market]);
+
+  useEffect(() => {
+    if (isIndia) {
+      fetch(`${BASE}/india/macro`).then(r => r.json()).then(setIndiaMacro).catch(() => {});
+    } else {
+      fetch(`${BASE}/regime`).then(r => r.json()).then(setRegime).catch(() => {});
+    }
+  }, [isIndia]);
+
+  const handleScan = useCallback((ticker) => {
+    onScan(ticker);
+    onNavigate('scanner');
+  }, [onScan, onNavigate]);
+
+  const gainers = movers?.gainers?.slice(0, 5) || [];
+  const losers  = movers?.losers?.slice(0, 5)  || [];
+
+  // Quick actions differ by market
+  const quickActions = isIndia ? [
+    { label:'📡 Run a Scan',       tab:'scanner',  color:'#ffaa00' },
+    { label:'📈 Invest / Analyse', tab:'invest',   color:'#00ff88' },
+    { label:'📊 Simulate Trade',   tab:'simulator',color:'#4488ff' },
+    { label:'👁 My Watchlist',     tab:'watchlist',color:'#aa44ff' },
+    { label:'🌐 India Markets',    tab:'markets',  color:'#ff8844' },
+  ] : [
+    { label:'📡 Run a Scan',       tab:'scanner',  color:'#ffaa00' },
+    { label:'⚡ Options Play',     tab:'options',  color:'#00ff88' },
+    { label:'📊 Simulate Trade',   tab:'simulator',color:'#4488ff' },
+    { label:'👁 My Watchlist',     tab:'watchlist',color:'#aa44ff' },
+    { label:'🌐 Markets Overview', tab:'markets',  color:'#ff8844' },
+  ];
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* ── Greeting + market flag ── */}
+      <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+        <div>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(20px,4vw,30px)', color:'#ffaa00', lineHeight:1 }}>
+            {greeting()}{user?.firstName ? `, ${user.firstName}` : ''}
+          </div>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginTop:3 }}>
+            {time.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' })}
+            {' · '}
+            <span style={{ color: isIndia ? '#ff9a00' : '#4488ff' }}>
+              {isIndia ? '🇮🇳 NSE India' : '🇺🇸 US Markets'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Regime card — different for US vs India ── */}
+      {!isIndia && <USRegimeCard regime={regime} />}
+      {isIndia  && <IndiaRegimeCard macro={indiaMacro} movers={movers} />}
+
+      {/* ── Quick stats ── */}
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+        <StatPill
+          label="YOUR WIN RATE"
+          value={accuracy?.winRate != null ? `${accuracy.winRate}%` : '—'}
+          color={accuracy?.winRate >= 50 ? '#00ff88' : '#ff4444'}
+          sub={accuracy?.total ? `${accuracy.total} resolved` : 'No data yet'} />
+        <StatPill
+          label="PENDING"
+          value={accuracy?.pending ?? '—'}
+          color="#ffaa00"
+          sub="awaiting outcome" />
+        <StatPill
+          label="HIGH CONF"
+          value={accuracy?.highConfWinRate != null ? `${accuracy.highConfWinRate}%` : '—'}
+          color="#aa44ff"
+          sub={accuracy?.highConfTotal ? `${accuracy.highConfTotal} signals` : '70%+ conf'} />
+        {!isIndia && (
+          <StatPill
+            label="OPTIONS"
+            value={accuracy?.options?.winRate != null ? `${accuracy.options.winRate}%` : '—'}
+            color="#00ccff"
+            sub={accuracy?.options?.total ? `${accuracy.options.total} plays` : 'No options yet'} />
+        )}
+        {isIndia && (
+          <StatPill
+            label="AVG RETURN"
+            value={accuracy?.avgOutcomePct != null ? `${accuracy.avgOutcomePct > 0 ? '+' : ''}${accuracy.avgOutcomePct}%` : '—'}
+            color="#00ccff"
+            sub="per resolved signal" />
+        )}
+      </div>
+
+      {/* ── Social Buzz — US only ── */}
+      {!isIndia && <SocialBubbleChart onScan={handleScan} />}
+
+      {/* ── India macro tiles — India only ── */}
+      {isIndia && <IndiaMacroBar macro={indiaMacro} />}
+
+      {/* ── Movers + actions ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+
+        {/* Gainers */}
+        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, overflow:'hidden' }}>
+          <div style={{ padding:'10px 12px', borderBottom:'1px solid #1a1a2e', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ fontSize:'var(--fs-xs)', color:'#00ff88', letterSpacing:'.1em', fontWeight:700 }}>
+              ▲ {isIndia ? 'NSE GAINERS' : 'TOP GAINERS'}
+            </div>
+            <button onClick={() => onNavigate('scanner')} style={{ background:'none', border:'none', fontSize:'var(--fs-xs)', color:'#334455', cursor:'pointer', fontFamily:'inherit' }}>all →</button>
+          </div>
+          {gainers.length === 0
+            ? <div style={{ padding:'20px 12px', fontSize:'var(--fs-xs)', color:'#334455', textAlign:'center' }}>Loading...</div>
+            : gainers.map(m => <MoverRow key={m.ticker} ticker={m.ticker} changePct={m.changePct} price={m.price} market={market} onClick={handleScan} />)
+          }
+        </div>
+
+        {/* Losers */}
+        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, overflow:'hidden' }}>
+          <div style={{ padding:'10px 12px', borderBottom:'1px solid #1a1a2e', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ fontSize:'var(--fs-xs)', color:'#ff4444', letterSpacing:'.1em', fontWeight:700 }}>
+              ▼ {isIndia ? 'NSE LOSERS' : 'TOP LOSERS'}
+            </div>
+            <button onClick={() => onNavigate('scanner')} style={{ background:'none', border:'none', fontSize:'var(--fs-xs)', color:'#334455', cursor:'pointer', fontFamily:'inherit' }}>all →</button>
+          </div>
+          {losers.length === 0
+            ? <div style={{ padding:'20px 12px', fontSize:'var(--fs-xs)', color:'#334455', textAlign:'center' }}>Loading...</div>
+            : losers.map(m => <MoverRow key={m.ticker} ticker={m.ticker} changePct={m.changePct} price={m.price} market={market} onClick={handleScan} />)
+          }
+        </div>
+      </div>
+
+      {/* ── Accuracy ring + quick actions ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, padding:'16px' }}>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:12 }}>YOUR ACCURACY</div>
+          <AccuracyRing winRate={accuracy?.winRate} total={accuracy?.total} />
+          <button onClick={() => onNavigate('accuracy')} style={{
+            width:'100%', marginTop:12, padding:'8px', borderRadius:4,
+            background:'transparent', border:'1px solid #2a2a3e',
+            color:'#8899bb', cursor:'pointer', fontFamily:'inherit',
+            fontSize:'var(--fs-xs)', letterSpacing:'.06em',
+          }}>VIEW FULL HISTORY →</button>
+        </div>
+
+        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, padding:'16px' }}>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:12 }}>QUICK ACTIONS</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+            {quickActions.map(a => (
+              <button key={a.tab} onClick={() => onNavigate(a.tab)} style={{
+                padding:'9px 12px', borderRadius:4, textAlign:'left',
+                background: a.color + '0a', border:`1px solid ${a.color}22`,
+                color: a.color, cursor:'pointer', fontFamily:'inherit',
+                fontSize:'var(--fs-sm)', fontWeight:700, letterSpacing:'.04em',
+                transition:'background .15s',
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = a.color + '18'}
+                onMouseLeave={e => e.currentTarget.style.background = a.color + '0a'}
+              >{a.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}

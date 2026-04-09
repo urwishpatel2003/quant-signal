@@ -17,6 +17,7 @@ import IndiaMarketsTab  from './tabs/IndiaMarketsTab';
 import SimulatorTab       from './tabs/SimulatorTab';
 import SignalHistoryTab    from './tabs/SignalHistoryTab';
 import PublicAccuracyTab  from './tabs/PublicAccuracyTab';
+import DashboardPage      from './tabs/DashboardPage';
 import SharePage      from './pages/SharePage';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
@@ -37,7 +38,7 @@ export default function App() {
   }
 
   const [enteredApp,    setEnteredApp]    = useState(false);
-  const [activeTab,     setActiveTab]     = useState('scanner');
+  const [activeTab,     setActiveTab]     = useState('home');
   const [optionsTicker, setOptionsTicker] = useState('');
   const [modal,         setModal]         = useState(null);
   const [logoClicks,    setLogoClicks]    = useState(0);
@@ -242,6 +243,16 @@ export default function App() {
           {activeTab === 'admin' && <BlogAdmin />}
 
           <SignedIn>
+            {/* ── Dashboard home ── */}
+            {activeTab === 'home' && (
+              <DashboardPage
+                user={user}
+                market={market}
+                onNavigate={setActiveTab}
+                onScan={ticker => { setActiveTab('scanner'); setTimeout(() => scan.runScan?.(ticker), 100); }}
+              />
+            )}
+
             <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
               <ScannerTab
                 scan={scan} macro={macro}
