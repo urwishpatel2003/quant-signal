@@ -38,18 +38,13 @@ function StrikeRow({ contract, type, recommended, onSimulate, simAdded, canSim }
   const [hovered, setHovered] = useState(false);
 
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background:   isRec ? (type === 'CALL' ? '#00ff8808' : '#ff444408') : '#0c0c18',
-        border:       `1px solid ${isRec ? (type === 'CALL' ? '#00ff8844' : '#ff444444') : hovered ? '#3a3a5e' : '#1a1a2e'}`,
-        borderLeft:   `3px solid ${mColor}`,
-        borderRadius: 6, padding: '14px 16px',
-        transition:   'all 0.15s',
-        position:     'relative',
-      }}
-    >
+    <div style={{
+      background:   isRec ? (type === 'CALL' ? '#00ff8808' : '#ff444408') : '#0c0c18',
+      border:       `1px solid ${isRec ? (type === 'CALL' ? '#00ff8844' : '#ff444444') : '#1a1a2e'}`,
+      borderLeft:   `3px solid ${mColor}`,
+      borderRadius: 6, padding: '14px 16px',
+      position:     'relative',
+    }}>
       {/* Recommended badge */}
       {isRec && (
         <div style={{
@@ -60,100 +55,92 @@ function StrikeRow({ contract, type, recommended, onSimulate, simAdded, canSim }
         }}>★ RECOMMENDED</div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr auto', gap: 12, alignItems: 'center' }}>
-        {/* Strike + moneyness */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#fff', lineHeight: 1 }}>
-              ${contract.strike}
-            </div>
-            <div style={{
-              fontSize: 'var(--fs-xs)', fontWeight: 700, color: mColor,
-              background: mColor + '18', border: `1px solid ${mColor}44`,
-              padding: '2px 7px', borderRadius: 3, letterSpacing: '.06em',
-            }}>{moneyness}</div>
+      {/* Row 1: Strike + moneyness + premium + sim button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24, color: '#fff', lineHeight: 1 }}>
+            ${contract.strike}
           </div>
+          <div style={{
+            fontSize: 'var(--fs-xs)', fontWeight: 700, color: mColor,
+            background: mColor + '18', border: `1px solid ${mColor}44`,
+            padding: '2px 7px', borderRadius: 3, letterSpacing: '.06em',
+          }}>{moneyness}</div>
+        </div>
+        <div style={{ flex: 1 }}>
           <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{MONEYNESS_DESC[moneyness].split(' — ')[0]}</div>
         </div>
-
-        {/* Premium */}
-        <div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>PREMIUM</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#c8d8f0' }}>${fmt(contract.mid)}</div>
+        <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 1 }}>PREMIUM</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#c8d8f0', lineHeight: 1 }}>${fmt(contract.mid)}</div>
           <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>${fmt(contract.bid)} / ${fmt(contract.ask)}</div>
         </div>
+      </div>
 
+      {/* Row 2: Greeks + Volume/OI + Cost — 3 even columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: onSimulate ? 10 : 0 }}>
         {/* Greeks */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Δ Delta</span>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', fontWeight: 600 }}>{fmt(contract.delta, 3)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>θ Theta</span>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#ff4444', fontWeight: 600 }}>{fmt(contract.theta, 3)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>IV</span>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#ffaa00', fontWeight: 600 }}>{contract.iv}%</span>
-          </div>
+        <div style={{ background: '#08080f', borderRadius: 4, padding: '8px 10px' }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 5, letterSpacing: '.06em' }}>GREEKS</div>
+          {[
+            ['Δ', fmt(contract.delta, 3), '#c8d8f0'],
+            ['θ', fmt(contract.theta, 3), '#ff4444'],
+            ['IV', `${contract.iv}%`, '#ffaa00'],
+          ].map(([l, v, c]) => (
+            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{l}</span>
+              <span style={{ fontSize: 'var(--fs-xs)', color: c, fontWeight: 600 }}>{v}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Volume / OI */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Volume</span>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', fontWeight: 600 }}>
-              {contract.volume?.toLocaleString()}
-              {contract.unusualVolume && <span style={{ color: '#ffaa00', marginLeft: 4 }}>🔥</span>}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>OI</span>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>{contract.oi?.toLocaleString()}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Spread</span>
-            <span style={{ fontSize: 'var(--fs-xs)', color: contract.wideSpread ? '#ff4444' : '#00ff88', fontWeight: 600 }}>
-              {contract.spreadPct}%{contract.wideSpread ? ' ⚠' : ''}
-            </span>
-          </div>
+        {/* Volume / OI / Spread */}
+        <div style={{ background: '#08080f', borderRadius: 4, padding: '8px 10px' }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 5, letterSpacing: '.06em' }}>FLOW</div>
+          {[
+            ['Vol', `${contract.volume?.toLocaleString()}${contract.unusualVolume ? ' 🔥' : ''}`, '#c8d8f0'],
+            ['OI',  contract.oi?.toLocaleString(), '#c8d8f0'],
+            ['Sprd', `${contract.spreadPct}%${contract.wideSpread ? ' ⚠' : ''}`, contract.wideSpread ? '#ff4444' : '#00ff88'],
+          ].map(([l, v, c]) => (
+            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{l}</span>
+              <span style={{ fontSize: 'var(--fs-xs)', color: c, fontWeight: 600 }}>{v}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Cost for 1 contract */}
-        <div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>1 CONTRACT</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffaa00' }}>
+        {/* 1 Contract cost */}
+        <div style={{ background: '#08080f', borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 5, letterSpacing: '.06em' }}>1 CONTRACT</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#ffaa00', lineHeight: 1, marginBottom: 3 }}>
             ${fmt(contract.mid * 100, 0)}
           </div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>= 100 shares × ${fmt(contract.mid)}</div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>100 × ${fmt(contract.mid)}</div>
         </div>
-
-        {/* Simulate button */}
-        {onSimulate && (
-          <button
-            onClick={() => !simAdded && canSim && onSimulate()}
-            disabled={simAdded || !canSim}
-            style={{
-              padding: '8px 14px', borderRadius: 4,
-              background: simAdded ? '#00ff8811' : type === 'CALL' ? '#00ff8811' : '#ff444411',
-              border: `1px solid ${simAdded ? '#00ff8844' : type === 'CALL' ? '#00ff8844' : '#ff444444'}`,
-              color: simAdded ? '#00ff88' : type === 'CALL' ? '#00ff88' : '#ff4444',
-              cursor: simAdded || !canSim ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit', fontSize: 'var(--fs-xs)', fontWeight: 700,
-              opacity: !canSim && !simAdded ? 0.5 : 1, letterSpacing: '.06em',
-              whiteSpace: 'nowrap',
-            }}
-          >{simAdded ? '✓ ADDED' : '📊 SIM'}</button>
-        )}
       </div>
+
+      {/* Simulate button — full width on mobile */}
+      {onSimulate && (
+        <button
+          onClick={() => !simAdded && canSim && onSimulate()}
+          disabled={simAdded || !canSim}
+          style={{
+            width: '100%', padding: '9px', borderRadius: 4,
+            background: simAdded ? '#00ff8811' : type === 'CALL' ? '#00ff8811' : '#ff444411',
+            border: `1px solid ${simAdded ? '#00ff8844' : type === 'CALL' ? '#00ff8844' : '#ff444444'}`,
+            color: simAdded ? '#00ff88' : type === 'CALL' ? '#00ff88' : '#ff4444',
+            cursor: simAdded || !canSim ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700,
+            opacity: !canSim && !simAdded ? 0.5 : 1, letterSpacing: '.06em',
+          }}
+        >{simAdded ? '✓ ADDED TO SIMULATOR' : '📊 SIMULATE THIS CONTRACT'}</button>
+      )}
 
       {/* Thesis if recommended */}
       {isRec && contract.thesis && (
         <div style={{
-          marginTop: 12, paddingTop: 12, borderTop: '1px solid #1a1a2e',
-          fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.7,
-          fontStyle: 'italic',
+          marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a1a2e',
+          fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.7, fontStyle: 'italic',
         }}>
           {contract.thesis}
         </div>
@@ -332,70 +319,56 @@ export default function OptionsResults({
         borderTop: `3px solid ${recColor}`, borderRadius: 8,
         padding: '20px 24px',
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}>
-          <div>
-            {/* Price summary inline */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#fff', lineHeight: 1 }}>
-                {ticker}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>
-                ${livePrice?.toFixed(2)}
-              </div>
-              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: changePct >= 0 ? '#00ff88' : '#ff4444' }}>
-                {changePct != null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : ''}
-              </div>
-            </div>
-
-            {/* Direction */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(28px,5vw,44px)', color: recColor, lineHeight: 1 }}>
-                {isNeutral ? 'STAY NEUTRAL' : `BUY ${recommendation}S`}
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--fs-xs)', color: recColor + '88', letterSpacing: '.1em', marginBottom: 2 }}>CONFIDENCE</div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: recColor, lineHeight: 1 }}>{optionsSignal.confidence}%</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--fs-xs)', color: ivColor + '88', letterSpacing: '.1em', marginBottom: 2 }}>IV ENV</div>
-                <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: ivColor }}>{optionsSignal.ivRank}</div>
-              </div>
-              {priceSignal && (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', letterSpacing: '.1em', marginBottom: 2 }}>STOCK SIGNAL</div>
-                  <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: SC[priceSignal.signal] }}>{priceSignal.signal} {priceSignal.confidence}%</div>
-                </div>
-              )}
-            </div>
-
-            {/* Reasoning */}
-            <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.75, marginTop: 12 }}>
-              {optionsSignal.reasoning}
+        {/* Price + chart row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#fff', lineHeight: 1 }}>{ticker}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
+            <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: changePct >= 0 ? '#00ff88' : '#ff4444' }}>
+              {changePct != null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : ''}
             </div>
           </div>
+          <div style={{ flexShrink: 0 }}><MiniChart data={ohlcv} /></div>
+        </div>
 
-          {/* Mini chart */}
-          <div style={{ flexShrink: 0 }}>
-            <MiniChart data={ohlcv} />
+        {/* Direction + stats row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(26px,6vw,42px)', color: recColor, lineHeight: 1 }}>
+            {isNeutral ? 'STAY NEUTRAL' : `BUY ${recommendation}S`}
           </div>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 'var(--fs-xs)', color: recColor + '88', letterSpacing: '.1em' }}>CONFIDENCE</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: recColor, lineHeight: 1 }}>{optionsSignal.confidence}%</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 'var(--fs-xs)', color: ivColor + '88', letterSpacing: '.1em' }}>IV ENV</div>
+              <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: ivColor }}>{optionsSignal.ivRank}</div>
+            </div>
+            {priceSignal && (
+              <div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', letterSpacing: '.1em' }}>STOCK</div>
+                <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: SC[priceSignal.signal] }}>{priceSignal.signal} {priceSignal.confidence}%</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Reasoning */}
+        <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.75, marginBottom: 2 }}>
+          {optionsSignal.reasoning}
         </div>
 
         {/* IV + sizing notes */}
         {(optionsSignal.ivComment || optionsSignal.positionSizing) && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
             {optionsSignal.ivComment && (
-              <div style={{
-                flex: 1, background: '#070710', padding: '10px 14px', borderRadius: 4,
-                fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.6,
-              }}>
+              <div style={{ background: '#070710', padding: '10px 14px', borderRadius: 4, fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.6 }}>
                 📊 {optionsSignal.ivComment}
               </div>
             )}
             {optionsSignal.positionSizing && (
-              <div style={{
-                flex: 1, background: '#070710', padding: '10px 14px', borderRadius: 4,
-                fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.6,
-              }}>
+              <div style={{ background: '#070710', padding: '10px 14px', borderRadius: 4, fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.6 }}>
                 💰 {optionsSignal.positionSizing}
               </div>
             )}
