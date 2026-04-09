@@ -207,7 +207,6 @@ function IndiaRegimeCard({ macro, movers }) {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function DashboardPage({ user, market, onNavigate, onScan }) {
   const [movers,    setMovers]    = useState(null);
-  const [accuracy,  setAccuracy]  = useState(null);
   const [regime,    setRegime]    = useState(null);
   const [indiaMacro, setIndiaMacro] = useState(null);
   const [time,      setTime]      = useState(new Date());
@@ -231,11 +230,6 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
       .then(r => r.json()).then(setMovers).catch(() => {});
   }, [isIndia]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    fetch(`${BASE}/signal-history/${user.id}?market=${market}`)
-      .then(r => r.json()).then(d => setAccuracy(d?.stats)).catch(() => {});
-  }, [user, market]);
 
   useEffect(() => {
     if (isIndia) {
@@ -253,20 +247,6 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
   const gainers = movers?.gainers?.slice(0, 5) || [];
   const losers  = movers?.losers?.slice(0, 5)  || [];
 
-  // Quick actions differ by market
-  const quickActions = isIndia ? [
-    { label:'📡 Run a Scan',       tab:'scanner',  color:'#ffaa00' },
-    { label:'📈 Invest / Analyse', tab:'invest',   color:'#00ff88' },
-    { label:'📊 Simulate Trade',   tab:'simulator',color:'#4488ff' },
-    { label:'👁 My Watchlist',     tab:'watchlist',color:'#aa44ff' },
-    { label:'🌐 India Markets',    tab:'markets',  color:'#ff8844' },
-  ] : [
-    { label:'📡 Run a Scan',       tab:'scanner',  color:'#ffaa00' },
-    { label:'⚡ Options Play',     tab:'options',  color:'#00ff88' },
-    { label:'📊 Simulate Trade',   tab:'simulator',color:'#4488ff' },
-    { label:'👁 My Watchlist',     tab:'watchlist',color:'#aa44ff' },
-    { label:'🌐 Markets Overview', tab:'markets',  color:'#ff8844' },
-  ];
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -362,37 +342,6 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
         </div>
       </div>
 
-      {/* ── Accuracy ring + quick actions ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, padding:'16px' }}>
-          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:12 }}>YOUR ACCURACY</div>
-          <AccuracyRing winRate={accuracy?.winRate} total={accuracy?.total} />
-          <button onClick={() => onNavigate('accuracy')} style={{
-            width:'100%', marginTop:12, padding:'8px', borderRadius:4,
-            background:'transparent', border:'1px solid #2a2a3e',
-            color:'#8899bb', cursor:'pointer', fontFamily:'inherit',
-            fontSize:'var(--fs-xs)', letterSpacing:'.06em',
-          }}>VIEW FULL HISTORY →</button>
-        </div>
-
-        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, padding:'16px' }}>
-          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:12 }}>QUICK ACTIONS</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-            {quickActions.map(a => (
-              <button key={a.tab} onClick={() => onNavigate(a.tab)} style={{
-                padding:'9px 12px', borderRadius:4, textAlign:'left',
-                background: a.color + '0a', border:`1px solid ${a.color}22`,
-                color: a.color, cursor:'pointer', fontFamily:'inherit',
-                fontSize:'var(--fs-sm)', fontWeight:700, letterSpacing:'.04em',
-                transition:'background .15s',
-              }}
-                onMouseEnter={e => e.currentTarget.style.background = a.color + '18'}
-                onMouseLeave={e => e.currentTarget.style.background = a.color + '0a'}
-              >{a.label}</button>
-            ))}
-          </div>
-        </div>
-      </div>
 
     </div>
   );
