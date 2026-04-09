@@ -137,7 +137,7 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
       {/* ── Main table ── */}
       <div style={{ background: '#0f0f1a', border: '1px solid #2a2a3e', borderRadius: 6, overflowX: 'auto' }}>
         {/* Header */}
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '0 -14px', padding: '0 14px' }}><div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid #2a2a3e', minWidth: 420 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid #2a2a3e', minWidth: 420 }}>
           <div style={HDR_LEFT}>PERIOD</div>
           <div style={HDR_STYLE}>REVENUE</div>
           <div style={HDR_STYLE}>NET INCOME</div>
@@ -162,7 +162,6 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
               borderBottom: i < rows.length - 1 ? '1px solid #1a1a2a' : 'none',
               background: i === 0 ? '#ff9a0008' : 'transparent',
               minWidth: 420,
-            // scroll wrapper handles overflow
             }}>
               <div>
                 <div style={{ ...PERIOD_STYLE, color: i === 0 ? '#ff9a00' : '#7788aa', fontWeight: i === 0 ? 700 : 400 }}>
