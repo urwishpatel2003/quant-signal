@@ -44,15 +44,21 @@ function sentimentLabel(s) {
   return 'NEUTRAL';
 }
 
-// Pack bubbles compactly — place each bubble at the top-leftmost valid position
+// Pack bubbles spiraling outward from center.
+// Bubble sizes scale with screen width so all bubbles fit without overflow.
 function packBubbles(items, width) {
   if (!items.length || !width) return [];
 
+  const count       = items.length;
   const maxMentions = Math.max(...items.map(t => t.mentions), 1);
-  const scale = Math.max(0.38, Math.min(1.0, width / 680));
-  const MIN_R = Math.round(16 * scale);
-  const MAX_R = Math.round(50 * scale);
-  const GAP   = Math.round(3  * scale);
+
+  // Estimate how large bubbles can be to fit `count` bubbles in a square canvas.
+  // Canvas height ≈ width. Total area = width². Each bubble needs π*r² area.
+  // Pack efficiency ~0.7 (typical circle packing). Solve for MAX_R:
+  //   count * π * MAX_R² / 0.7 ≤ width²  →  MAX_R ≤ width * sqrt(0.7 / (count * π))
+  const MAX_R = Math.max(14, Math.min(58, Math.floor(width * Math.sqrt(0.7 / (count * Math.PI)))));
+  const MIN_R = Math.max(10, Math.floor(MAX_R * 0.45));
+  const GAP   = Math.max(2, Math.floor(MAX_R * 0.08));
 
   const bubbles = items.map(t => ({
     ...t,
@@ -63,54 +69,47 @@ function packBubbles(items, width) {
   bubbles.sort((a, b) => b.r - a.r);
 
   const placed = [];
+  const cx = width / 2;
+  const cy = width / 2; // square canvas
 
   for (const b of bubbles) {
     if (placed.length === 0) {
-      b.x = b.r + GAP;
-      b.y = b.r + GAP;
+      b.x = cx;
+      b.y = cy;
       placed.push(b);
       continue;
     }
 
     let best = null;
-    let bestScore = Infinity;
+    let bestDist = Infinity;
 
-    // Generate candidate positions tangent to each placed bubble
-    const candidates = [];
-    for (const p of placed) {
-      const dist = p.r + b.r + GAP;
-      for (let angle = 0; angle < Math.PI * 2; angle += 0.15) {
-        candidates.push({
-          x: p.x + dist * Math.cos(angle),
-          y: p.y + dist * Math.sin(angle),
+    // Spiral outward from center, try all angles at each radius
+    for (let r = MIN_R; r < width * 1.5; r += 3) {
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.18) {
+        const tx = cx + r * Math.cos(angle);
+        const ty = cy + r * Math.sin(angle);
+
+        if (tx - b.r < GAP || tx + b.r > width - GAP) continue;
+        if (ty - b.r < GAP) continue;
+
+        const overlaps = placed.some(p => {
+          const dx = p.x - tx, dy = p.y - ty;
+          return Math.sqrt(dx * dx + dy * dy) < p.r + b.r + GAP;
         });
+
+        if (!overlaps) {
+          const dist = Math.sqrt((tx - cx) ** 2 + (ty - cy) ** 2);
+          if (dist < bestDist) { bestDist = dist; best = { x: tx, y: ty }; }
+          break;
+        }
       }
+      if (best) break;
     }
 
-    for (const c of candidates) {
-      const tx = c.x, ty = c.y;
-      if (tx - b.r < GAP || tx + b.r > width - GAP) continue;
-      if (ty - b.r < GAP) continue;
-
-      const overlaps = placed.some(p => {
-        const dx = p.x - tx, dy = p.y - ty;
-        return Math.sqrt(dx * dx + dy * dy) < p.r + b.r + GAP - 0.5;
-      });
-      if (overlaps) continue;
-
-      // Prefer positions close to top, then left
-      const score = ty * 4 + tx;
-      if (score < bestScore) { bestScore = score; best = { x: tx, y: ty }; }
-    }
-
-    if (best) {
-      b.x = best.x;
-      b.y = best.y;
-    } else {
-      // Fallback: stack below everything
-      const maxY = Math.max(...placed.map(p => p.y + p.r), 0);
-      b.x = b.r + GAP;
-      b.y = maxY + b.r + GAP;
+    if (best) { b.x = best.x; b.y = best.y; }
+    else {
+      const maxY = Math.max(...placed.map(p => p.y + p.r), cy);
+      b.x = cx; b.y = maxY + b.r + GAP;
     }
     placed.push(b);
   }
@@ -167,10 +166,10 @@ export default function SocialBubbleChart({ onScan }) {
     const packed = packBubbles(filtered, width);
     setBubbles(packed);
 
-    // Height = exact bounds of placed bubbles + small padding
+    // Height = actual bounds of placed bubbles (never more than width)
     if (packed.length > 0) {
       const maxY = Math.max(...packed.map(b => b.y + b.r));
-      setSvgHeight(maxY + 16);
+      setSvgHeight(Math.min(maxY + 12, width));
     } else {
       setSvgHeight(200);
     }
