@@ -6,26 +6,6 @@ const BASE = import.meta.env.VITE_API_BASE;
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 
-function MoverRow({ ticker, changePct, price, onClick, market }) {
-  const up = (changePct || 0) >= 0;
-  return (
-    <div onClick={() => onClick(ticker)}
-      style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-        padding:'8px 12px', cursor:'pointer', borderRadius:4, transition:'background .1s' }}
-      onMouseEnter={e => e.currentTarget.style.background = '#ffffff08'}
-      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-      <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, color:'#ffaa00' }}>{ticker}</span>
-      <div style={{ textAlign:'right' }}>
-        <div style={{ fontSize:'var(--fs-xs)', color:'#c8d8f0', fontWeight:600 }}>
-          {market === 'INDIA' ? '₹' : '$'}{price?.toFixed(2)}
-        </div>
-        <div style={{ fontSize:'var(--fs-xs)', fontWeight:700, color: up ? '#00ff88' : '#ff4444' }}>
-          {up ? '▲' : '▼'} {Math.abs(changePct || 0).toFixed(2)}%
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 
@@ -171,7 +151,6 @@ function IndiaRegimeCard({ macro, movers }) {
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function DashboardPage({ user, market, onNavigate, onScan }) {
-  const [movers,    setMovers]    = useState(null);
   const [regime,    setRegime]    = useState(null);
   const [indiaMacro, setIndiaMacro] = useState(null);
   const [time,      setTime]      = useState(new Date());
@@ -190,10 +169,6 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    fetch(`${BASE}/${isIndia ? 'india/movers' : 'movers'}`)
-      .then(r => r.json()).then(setMovers).catch(() => {});
-  }, [isIndia]);
 
 
   useEffect(() => {
@@ -209,8 +184,6 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
     onNavigate('scanner');
   }, [onScan, onNavigate]);
 
-  const gainers = movers?.gainers?.slice(0, 5) || [];
-  const losers  = movers?.losers?.slice(0, 5)  || [];
 
 
   return (
@@ -234,7 +207,7 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
 
       {/* ── Regime card — different for US vs India ── */}
       {!isIndia && <USRegimeCard regime={regime} />}
-      {isIndia  && <IndiaRegimeCard macro={indiaMacro} movers={movers} />}
+      {isIndia  && <IndiaRegimeCard macro={indiaMacro} movers={null} />}
 
 
 
@@ -243,39 +216,6 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
 
       {/* ── India macro tiles — India only ── */}
       {isIndia && <IndiaMacroBar macro={indiaMacro} />}
-
-      {/* ── Movers + actions ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-
-        {/* Gainers */}
-        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, overflow:'hidden' }}>
-          <div style={{ padding:'10px 12px', borderBottom:'1px solid #1a1a2e', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <div style={{ fontSize:'var(--fs-xs)', color:'#00ff88', letterSpacing:'.1em', fontWeight:700 }}>
-              ▲ {isIndia ? 'NSE GAINERS' : 'TOP GAINERS'}
-            </div>
-            <button onClick={() => onNavigate('scanner')} style={{ background:'none', border:'none', fontSize:'var(--fs-xs)', color:'#334455', cursor:'pointer', fontFamily:'inherit' }}>all →</button>
-          </div>
-          {gainers.length === 0
-            ? <div style={{ padding:'20px 12px', fontSize:'var(--fs-xs)', color:'#334455', textAlign:'center' }}>Loading...</div>
-            : gainers.map(m => <MoverRow key={m.ticker} ticker={m.ticker} changePct={m.changePct} price={m.price} market={market} onClick={handleScan} />)
-          }
-        </div>
-
-        {/* Losers */}
-        <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, overflow:'hidden' }}>
-          <div style={{ padding:'10px 12px', borderBottom:'1px solid #1a1a2e', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <div style={{ fontSize:'var(--fs-xs)', color:'#ff4444', letterSpacing:'.1em', fontWeight:700 }}>
-              ▼ {isIndia ? 'NSE LOSERS' : 'TOP LOSERS'}
-            </div>
-            <button onClick={() => onNavigate('scanner')} style={{ background:'none', border:'none', fontSize:'var(--fs-xs)', color:'#334455', cursor:'pointer', fontFamily:'inherit' }}>all →</button>
-          </div>
-          {losers.length === 0
-            ? <div style={{ padding:'20px 12px', fontSize:'var(--fs-xs)', color:'#334455', textAlign:'center' }}>Loading...</div>
-            : losers.map(m => <MoverRow key={m.ticker} ticker={m.ticker} changePct={m.changePct} price={m.price} market={market} onClick={handleScan} />)
-          }
-        </div>
-      </div>
-
 
     </div>
   );
