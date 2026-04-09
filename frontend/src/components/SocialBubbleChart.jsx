@@ -44,61 +44,44 @@ function sentimentLabel(s) {
   return 'NEUTRAL';
 }
 
-// Pack bubbles spiraling outward from center.
-// Bubble sizes scale with screen width so all bubbles fit without overflow.
+// Pack bubbles spiraling outward from origin, then translate to fit snugly
 function packBubbles(items, width) {
   if (!items.length || !width) return [];
 
   const count       = items.length;
   const maxMentions = Math.max(...items.map(t => t.mentions), 1);
 
-  // Estimate how large bubbles can be to fit `count` bubbles in a square canvas.
-  // Canvas height ≈ width. Total area = width². Each bubble needs π*r² area.
-  // Pack efficiency ~0.7 (typical circle packing). Solve for MAX_R:
-  //   count * π * MAX_R² / 0.7 ≤ width²  →  MAX_R ≤ width * sqrt(0.7 / (count * π))
+  // Scale MAX_R so all bubbles fit in a roughly square area
   const MAX_R = Math.max(14, Math.min(58, Math.floor(width * Math.sqrt(0.7 / (count * Math.PI)))));
   const MIN_R = Math.max(10, Math.floor(MAX_R * 0.45));
-  const GAP   = Math.max(2, Math.floor(MAX_R * 0.08));
+  const GAP   = Math.max(2,  Math.floor(MAX_R * 0.08));
 
   const bubbles = items.map(t => ({
     ...t,
     r: Math.round(MIN_R + Math.sqrt(t.mentions / maxMentions) * (MAX_R - MIN_R)),
     x: 0, y: 0,
   }));
-
   bubbles.sort((a, b) => b.r - a.r);
 
   const placed = [];
-  const cx = width / 2;
-  const cy = width / 2; // square canvas
 
+  // Pack around origin (0,0) — we'll translate everything after
   for (const b of bubbles) {
-    if (placed.length === 0) {
-      b.x = cx;
-      b.y = cy;
-      placed.push(b);
-      continue;
-    }
+    if (placed.length === 0) { b.x = 0; b.y = 0; placed.push(b); continue; }
 
     let best = null;
     let bestDist = Infinity;
 
-    // Spiral outward from center, try all angles at each radius
-    for (let r = MIN_R; r < width * 1.5; r += 3) {
+    for (let r = MIN_R; r < width * 2; r += 3) {
       for (let angle = 0; angle < Math.PI * 2; angle += 0.18) {
-        const tx = cx + r * Math.cos(angle);
-        const ty = cy + r * Math.sin(angle);
-
-        if (tx - b.r < GAP || tx + b.r > width - GAP) continue;
-        if (ty - b.r < GAP) continue;
-
+        const tx = r * Math.cos(angle);
+        const ty = r * Math.sin(angle);
         const overlaps = placed.some(p => {
           const dx = p.x - tx, dy = p.y - ty;
           return Math.sqrt(dx * dx + dy * dy) < p.r + b.r + GAP;
         });
-
         if (!overlaps) {
-          const dist = Math.sqrt((tx - cx) ** 2 + (ty - cy) ** 2);
+          const dist = Math.sqrt(tx * tx + ty * ty);
           if (dist < bestDist) { bestDist = dist; best = { x: tx, y: ty }; }
           break;
         }
@@ -106,15 +89,26 @@ function packBubbles(items, width) {
       if (best) break;
     }
 
-    if (best) { b.x = best.x; b.y = best.y; }
-    else {
-      const maxY = Math.max(...placed.map(p => p.y + p.r), cy);
-      b.x = cx; b.y = maxY + b.r + GAP;
-    }
+    b.x = best ? best.x : 0;
+    b.y = best ? best.y : Math.max(...placed.map(p => p.y + p.r)) + b.r + GAP;
     placed.push(b);
   }
 
-  return placed;
+  // Now find the bounding box of all placed bubbles
+  const minX = Math.min(...placed.map(b => b.x - b.r));
+  const maxX = Math.max(...placed.map(b => b.x + b.r));
+  const minY = Math.min(...placed.map(b => b.y - b.r));
+  const maxY = Math.max(...placed.map(b => b.y + b.r));
+  const bboxW = maxX - minX;
+  const bboxH = maxY - minY;
+
+  // Translate so the bubble cluster is centered horizontally
+  // and starts with just a small top padding
+  const pad    = GAP * 2;
+  const shiftX = (width - bboxW) / 2 - minX;
+  const shiftY = pad - minY;
+
+  return placed.map(b => ({ ...b, x: b.x + shiftX, y: b.y + shiftY, _h: bboxH + pad * 2 }));
 }
 
 export default function SocialBubbleChart({ onScan }) {
@@ -166,13 +160,9 @@ export default function SocialBubbleChart({ onScan }) {
     const packed = packBubbles(filtered, width);
     setBubbles(packed);
 
-    // Height = actual bounds of placed bubbles (never more than width)
-    if (packed.length > 0) {
-      const maxY = Math.max(...packed.map(b => b.y + b.r));
-      setSvgHeight(Math.min(maxY + 12, width));
-    } else {
-      setSvgHeight(200);
-    }
+    // SVG height = exact bounding box of packed bubbles (stored as _h on first bubble)
+    const h = packed.length > 0 ? (packed[0]._h || 300) : 200;
+    setSvgHeight(Math.round(h));
   }, [data, filter, width]);
 
   const hov = bubbles.find(b => b.symbol === hovered);

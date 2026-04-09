@@ -3158,6 +3158,53 @@ async function fetchIndiaMacroData() {
     } catch (e) { console.warn('[india/macro] Polygon fallback failed:', e.message); }
   }
 
+  // Last resort: Yahoo Finance direct fetch for gold and crude
+  if (!gold) {
+    try {
+      for (const host of YAHOO_HOSTS) {
+        try {
+          const d = await httpsGet(host, '/v8/finance/chart/GC%3DF?interval=1d&range=2d', YAHOO_HEADERS);
+          const meta = d?.chart?.result?.[0]?.meta;
+          if (meta?.regularMarketPrice) {
+            const inrRate = usdInr?.price || 84;
+            const priceUsd = meta.regularMarketPrice;
+            gold = {
+              priceUsd: parseFloat(priceUsd.toFixed(2)),
+              priceInr: Math.round(priceUsd * inrRate / 31.1035),
+              changePct: meta.previousClose ? parseFloat(((priceUsd - meta.previousClose) / meta.previousClose * 100).toFixed(2)) : null,
+              source: 'yahoo_direct',
+            };
+            console.log(`[india/macro] Gold via Yahoo direct: $${priceUsd.toFixed(0)}`);
+            break;
+          }
+        } catch { continue; }
+      }
+    } catch {}
+  }
+  if (!crude) {
+    try {
+      for (const host of YAHOO_HOSTS) {
+        try {
+          const d = await httpsGet(host, '/v8/finance/chart/CL%3DF?interval=1d&range=2d', YAHOO_HEADERS);
+          const meta = d?.chart?.result?.[0]?.meta;
+          if (meta?.regularMarketPrice) {
+            const price = meta.regularMarketPrice;
+            crude = {
+              price: parseFloat(price.toFixed(2)),
+              changePct: meta.previousClose ? parseFloat(((price - meta.previousClose) / meta.previousClose * 100).toFixed(2)) : null,
+              source: 'yahoo_direct',
+            };
+            console.log(`[india/macro] Crude via Yahoo direct: $${price.toFixed(1)}`);
+            break;
+          }
+        } catch { continue; }
+      }
+    } catch {}
+  }
+  // Absolute last resort fallbacks — static recent values
+  if (!gold)  gold  = { priceUsd: 3300, priceInr: Math.round(3300 * (usdInr?.price || 84) / 31.1035), changePct: null, source: 'fallback' };
+  if (!crude) crude = { price: 70, changePct: null, source: 'fallback' };
+
   // ── India 10Y bond yield ───────────────────────────────────────────────────
   // RBI publishes G-Sec yields. Use Yahoo as primary, fallback to last known.
   let india10Y = null;
@@ -4797,30 +4844,42 @@ async function fetchUnusualActivity(market = 'US') {
   let quotes = {};
   try {
     if (market === 'INDIA') {
-      // Use NSE quotes for India tickers
-      // NSE returns: price, pChange (%), totalTradedVolume, weekHigh52, weekLow52
-      // Avg volume not available — use delivery% and pChange as signals instead
+      // Fetch NSE quotes — getNSEQuote returns price, changePct, volume, high, low
+      // No avg volume or 52W data — use Yahoo Finance for extended data
       for (const ticker of uniqueTickers.slice(0, 30)) {
         try {
           const q = await getNSEQuote(ticker);
-          if (q?.price) {
-            // Estimate avg volume: NSE movers cache has recent volumes
-            // Use a heuristic: if volume is very high in absolute terms flag it
-            const vol    = q.totalTradedVolume || 0;
-            const avgVol = q.totalTradedVolume5d || q.totalTradedVolume || 1;
-            quotes[ticker] = {
-              symbol:              ticker,
-              last:                q.price,
-              change_percentage:   q.pChange || 0,
-              volume:              vol,
-              average_volume:      avgVol,
-              fifty_two_week_high: q.weekHigh52 || 0,
-              fifty_two_week_low:  q.weekLow52  || 0,
-              delivery_pct:        q.deliveryToTradedQuantity || null,
-            };
-          }
+          if (!q?.price) continue;
+
+          // Try Yahoo for 52W data
+          let high52 = 0, low52 = 0, avgVol = 0;
+          try {
+            for (const host of YAHOO_HOSTS) {
+              try {
+                const sym  = ticker + '.NS';
+                const d    = await httpsGet(host, `/v8/finance/chart/${sym}?interval=1d&range=1y`, YAHOO_HEADERS);
+                const meta = d?.chart?.result?.[0]?.meta;
+                if (meta) {
+                  high52 = meta.fiftyTwoWeekHigh || 0;
+                  low52  = meta.fiftyTwoWeekLow  || 0;
+                  avgVol = meta.regularMarketVolume || 0;
+                  break;
+                }
+              } catch { continue; }
+            }
+          } catch {}
+
+          quotes[ticker] = {
+            symbol:              ticker,
+            last:                q.price,
+            change_percentage:   q.changePct || 0,
+            volume:              q.volume  || 0,
+            average_volume:      avgVol    || q.volume || 1,
+            fifty_two_week_high: high52,
+            fifty_two_week_low:  low52,
+          };
         } catch {}
-        await sleep(100);
+        await sleep(150);
       }
     } else {
       const batches = [];
