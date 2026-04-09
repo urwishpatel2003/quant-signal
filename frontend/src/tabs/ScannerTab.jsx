@@ -294,14 +294,14 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
 
           {/* Flashing current stage label */}
           <div style={{
-            fontSize: 17, letterSpacing: '0.2em', fontWeight: 700,
+            fontSize: 'var(--fs-lg)', letterSpacing: '0.2em', fontWeight: 700,
             color: '#ffaa00', animation: 'pulse 1.2s ease-in-out infinite',
             minHeight: 18,
           }}>
             {STAGE_LABELS[scan.stage] || 'INITIALIZING...'}
           </div>
 
-          <div style={{ fontSize: 17, color: '#445', letterSpacing: '0.1em' }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: '#445', letterSpacing: '0.1em' }}>
             This may take 10–20 seconds
           </div>
         </div>
@@ -316,7 +316,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
               background: '#ff9a0011', border: '1px solid #ff9a0033',
               borderRadius: 4, padding: '8px 12px', marginBottom: 12,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 17, color: '#ff9a00',
+              fontSize: 'var(--fs-lg)', color: '#ff9a00',
             }}>
               🇮🇳 <span><strong>NSE India</strong> — prices in ₹ · Nifty 50 movers · Options coming soon</span>
             </div>
@@ -328,7 +328,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
               <div ref={dropdownRef} style={{ position: 'relative', flex: 1 }}>
                 <span style={{
                   position: 'absolute', left: 10, top: '50%',
-                  transform: 'translateY(-50%)', fontSize: 15, zIndex: 1,
+                  transform: 'translateY(-50%)', fontSize: 'var(--fs-md)', zIndex: 1,
                   color: '#ffaa00',
                 }}>
                   {isIndia ? '₹' : '$'}
@@ -339,7 +339,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                   onKeyDown={handleKeyDown}
                   placeholder={isIndia ? 'SEARCH NSE TICKER...' : 'SEARCH TICKER...'}
                   className="input"
-                  style={{ padding: '10px 12px 10px 26px', fontSize: 16, fontWeight: 600 }}
+                  style={{ padding: '10px 12px 10px 26px', fontSize: 'var(--fs-body)', fontWeight: 600 }}
                   autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck="false"
                 />
                 {showDropdown && suggestions.length > 0 && (
@@ -359,11 +359,11 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                           background: i === activeIdx ? '#ffaa0015' : 'transparent',
                           borderBottom: '1px solid #12121e', transition: 'background 0.08s',
                         }}>
-                        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17,
+                        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'var(--fs-lg)',
                           color: '#ffaa00', minWidth: 64 }}>{s.ticker}</span>
-                        <span style={{ fontSize: 17, color: '#c8d8f0', overflow: 'hidden',
+                        <span style={{ fontSize: 'var(--fs-lg)', color: '#c8d8f0', overflow: 'hidden',
                           textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{s.name}</span>
-                        <span style={{ fontSize: 15, color: '#b8c8e0', flexShrink: 0,
+                        <span style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', flexShrink: 0,
                           background: '#1a1a2e', padding: '1px 6px', borderRadius: 2 }}>
                           {isIndia ? 'NSE' : s.type}
                         </span>
@@ -394,7 +394,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     ← NEW SCAN
                   </button>
                 )}
-                {scan.error && <div style={{ fontSize: 17, color: '#ff4444' }}>{scan.error}</div>}
+                {scan.error && <div style={{ fontSize: 'var(--fs-lg)', color: '#ff4444' }}>{scan.error}</div>}
               </div>
               <UsageBadge used={usage.scans} limit={limits.scans} label="SCANS" plan={plan} />
             </div>
@@ -402,7 +402,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
 
           {/* ── Timeframe selector ── */}
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 17, color: '#c8d8f0', fontWeight: 700, marginBottom: 8, letterSpacing: '0.1em' }}>TIMEFRAME:</div>
+            <div style={{ fontSize: 'var(--fs-lg)', color: '#c8d8f0', fontWeight: 700, marginBottom: 8, letterSpacing: '0.1em' }}>TIMEFRAME:</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {TF_KEYS.map(key => {
                 const tf     = TIMEFRAMES[key];
@@ -418,8 +418,8 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                       display: 'flex', flexDirection: 'column', alignItems: 'center',
                       padding: '8px 12px', lineHeight: 1.3,
                     }}>
-                    <span style={{ fontSize: 15, fontWeight: active ? 700 : 500 }}>{tf.label}</span>
-                    <span style={{ fontSize: 16, color: active ? '#ffaa0088' : '#7788aa' }}>{tf.sublabel}</span>
+                    <span style={{ fontSize: 'var(--fs-md)', fontWeight: active ? 700 : 500 }}>{tf.label}</span>
+                    <span style={{ fontSize: 'var(--fs-body)', color: active ? '#ffaa0088' : '#7788aa' }}>{tf.sublabel}</span>
                   </button>
                 );
               })}
@@ -429,24 +429,21 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
           {/* ── Movers card ── */}
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{
-              fontSize: 16, fontWeight: 700, letterSpacing: '0.15em',
+              fontSize: 'var(--fs-body)', fontWeight: 700, letterSpacing: '0.15em',
               marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #1e1e30',
               color: isIndia ? '#ff9a00' : '#ffaa00',
             }}>
               {isIndia ? '🇮🇳 NIFTY 50 MOVERS' : '📈 STOCK MOVERS'}
             </div>
 
-            <div style={{
-              display: 'flex', gap: 0,
-              borderBottom: moversOpen ? '1px solid #1e1e30' : 'none',
-              marginBottom: moversOpen ? 12 : 0,
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: moversOpen ? '1px solid #1e1e30' : 'none', marginBottom: moversOpen ? 12 : 0 }}>
+              <div style={{ display: 'flex', gap: 0 }}>
               {MOVER_TABS.map(t => (
                 <button key={t.key}
                   onClick={() => { setMoversTab(t.key); setMoversOpen(true); }}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    padding: '8px 14px', fontSize: 15, letterSpacing: '0.1em',
+                    padding: '8px 14px', fontSize: 'var(--fs-md)', letterSpacing: '0.1em',
                     textTransform: 'uppercase', fontFamily: 'inherit', fontWeight: 700,
                     color:        moversTab === t.key ? t.color : '#b0c0dd',
                     borderBottom: moversTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
@@ -455,15 +452,16 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                   {t.label}
                 </button>
               ))}
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4 }}>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4 }}>
                 {scan.ticker && !moversOpen && (
-                  <span style={{ fontSize: 17, color: '#c8d8f0', fontWeight: 600 }}>
+                  <span style={{ fontSize: 'var(--fs-lg)', color: '#c8d8f0', fontWeight: 600 }}>
                     {scan.ticker} · {TIMEFRAMES[scan.timeframe]?.label}
                   </span>
                 )}
                 <button onClick={() => setMoversOpen(o => !o)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#c8d8f0', fontSize: 16, padding: '4px 8px', fontFamily: 'inherit' }}>
+                    color: '#c8d8f0', fontSize: 'var(--fs-body)', padding: '4px 8px', fontFamily: 'inherit' }}>
                   {moversOpen ? '▲' : '▼'}
                 </button>
               </div>
@@ -471,11 +469,11 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
 
             {moversOpen && (
               isLoading ? (
-                <div className="pulse" style={{ fontSize: 15, color: '#c8d8f0', textAlign: 'center', padding: '20px 0' }}>
+                <div className="pulse" style={{ fontSize: 'var(--fs-md)', color: '#c8d8f0', textAlign: 'center', padding: '20px 0' }}>
                   LOADING {isIndia ? 'NIFTY 50' : 'MARKET'} MOVERS...
                 </div>
               ) : list.length === 0 ? (
-                <div style={{ fontSize: 15, color: '#b8c8e0', textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', textAlign: 'center', padding: '20px 0' }}>
                   {isIndia
                     ? 'NSE data unavailable — market may be closed (IST 9:15 AM – 3:30 PM)'
                     : 'Market data unavailable — market may be closed'}
@@ -490,7 +488,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     return (
                       <div key={m.ticker} onClick={() => handleScan(m.ticker, 'longterm')}
                         style={{
-                          display: 'flex', alignItems: 'center', padding: '9px 10px',
+                          display: 'flex', alignItems: 'center', padding: '9px 12px 9px 10px',
                           cursor: 'pointer', borderRadius: 2, gap: 8,
                           background:   isActive ? '#4488ff08' : 'transparent',
                           borderLeft:   `2px solid ${isActive ? '#4488ff' : 'transparent'}`,
@@ -499,24 +497,24 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                         }}
                         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
-                        <div style={{ fontSize: 17, color: '#b8c8e0', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
-                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
-                        <div style={{ fontSize: 15, color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
+                        <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-body)', color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
+                        <div style={{ fontSize: 'var(--fs-md)', color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: '#4488ff', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: '#4488ff', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                             {fmtVol(m.volume)}
                             {isUnusual && (
-                              <span style={{ fontSize: 15, color: '#ffaa00', background: '#ffaa0011', border: '1px solid #ffaa0033', padding: '1px 5px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 'var(--fs-md)', color: '#ffaa00', background: '#ffaa0011', border: '1px solid #ffaa0033', padding: '1px 5px', borderRadius: 2, whiteSpace: 'nowrap' }}>
                                 {m.volVsAvg}x
                               </span>
                             )}
                           </div>
-                          {m.avgVolume > 0 && <div style={{ fontSize: 16, color: '#b8c8e0' }}>avg {fmtVol(m.avgVolume)}</div>}
+                          {m.avgVolume > 0 && <div style={{ fontSize: 'var(--fs-body)', color: '#b8c8e0' }}>avg {fmtVol(m.avgVolume)}</div>}
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: pctColor, flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
+                        <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: pctColor, flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
                           {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                         </div>
-                        <div style={{ fontSize: 16, color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
+                        <div style={{ fontSize: 'var(--fs-body)', color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
                       </div>
                     );
                   })}
@@ -530,7 +528,7 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                     return (
                       <div key={m.ticker} onClick={() => handleScan(m.ticker, 'longterm')}
                         style={{
-                          display: 'flex', alignItems: 'center', padding: '9px 10px',
+                          display: 'flex', alignItems: 'center', padding: '9px 12px 9px 10px',
                           cursor: 'pointer', borderRadius: 2, gap: 8,
                           background:   isActive ? '#ffaa0008' : 'transparent',
                           borderLeft:   `2px solid ${isActive ? '#ffaa00' : 'transparent'}`,
@@ -539,17 +537,17 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                         }}
                         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
-                        <div style={{ fontSize: 17, color: '#b8c8e0', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
-                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
-                        <div style={{ fontSize: 15, color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
+                        <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-body)', color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
+                        <div style={{ fontSize: 'var(--fs-md)', color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
                         <div style={{ flex: 1 }} />
-                        <div style={{ fontSize: 17, color: color + '99', flexShrink: 0, textAlign: 'right', minWidth: 52, fontWeight: 600 }}>
+                        <div style={{ fontSize: 'var(--fs-lg)', color: color + '99', flexShrink: 0, textAlign: 'right', minWidth: 52, fontWeight: 600 }}>
                           {isGainer ? '+' : ''}{currency}{m.change?.toFixed(2)}
                         </div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color, flexShrink: 0, textAlign: 'right', minWidth: 66 }}>
+                        <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color, flexShrink: 0, textAlign: 'right', minWidth: 66 }}>
                           {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                         </div>
-                        <div style={{ fontSize: 16, color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
+                        <div style={{ fontSize: 'var(--fs-body)', color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
                       </div>
                     );
                   })}

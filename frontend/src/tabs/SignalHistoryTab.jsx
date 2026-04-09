@@ -201,7 +201,9 @@ export default function SignalHistoryTab({ market = 'US' }) {
               </div>
               <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: sigColor(s.signal) }}>{s.signal} · {s.confidence}%</div>
               {s.signal_type === 'OPTION' && s.strike && (
-                <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb' }}>$${s.strike} · exp {s.expiry?.slice(5)} · entry $${s.entry_premium}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb' }}>
+                  {`$${s.strike} · exp ${s.expiry?.slice(5)} · entry $${s.entry_premium}`}
+                </div>
               )}
             </div>
 
