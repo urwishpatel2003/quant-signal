@@ -5429,7 +5429,12 @@ app.post('/sim/:userId/open', async (req, res) => {
 
   try {
     const account  = await getOrCreateSimAccount(req.params.userId, market);
-    const notional = parseFloat(entryPrice) * parseFloat(quantity);
+    // Options: notional = premium × 100 shares × contracts
+    // Stocks:  notional = price × quantity
+    const contracts = parseInt(req.body.contracts) || 1;
+    const notional  = isOption
+      ? parseFloat(entryPrice) * 100 * contracts
+      : parseFloat(entryPrice) * parseFloat(quantity);
 
     // LONG: deduct full notional from cash
     // SHORT: require 50% margin (industry standard for paper trading)
@@ -5451,7 +5456,7 @@ app.post('/sim/:userId/open', async (req, res) => {
       direction:     isOption ? 'LONG' : direction, // options are always long
       position_type: positionType,
       entry_price:   parseFloat(entryPrice),
-      quantity:      isOption ? (req.body.contracts || 1) : parseFloat(quantity),
+      quantity:      isOption ? contracts : parseFloat(quantity),
       notional,
       signal,
       confidence,

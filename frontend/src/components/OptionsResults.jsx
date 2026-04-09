@@ -171,7 +171,28 @@ function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, 
           <button onClick={onClose} className="btn-sm" style={{ flex: 1 }}>CANCEL</button>
           <button
             disabled={!canAfford || n < 1}
-            onClick={() => onConfirm({ ticker, side, contract, contracts: n, premium, totalCost: total, expiry: contract?.expiry, livePrice, position_type: 'OPTION', option_type: side, strike: contract?.strike })}
+            onClick={() => onConfirm({
+                  // Server-expected field names
+                  ticker,
+                  market:        'US',
+                  positionType:  'OPTION',
+                  optionType:    side,                   // 'CALL' | 'PUT'
+                  strike:        contract?.strike,
+                  expiry:        contract?.expiry,
+                  entryPrice:    premium,                // server uses entryPrice for premium
+                  contracts:     n,
+                  quantity:      n,                      // fallback
+                  signal:        side,
+                  confidence:    70,                     // default — sim requires 65%+
+                  delta:         contract?.delta,
+                  iv:            contract?.iv,
+                  optionSymbol:  contract?.symbol,
+                  thesis:        contract?.thesis || `${side} ${ticker} $${contract?.strike} @ $${premium}`,
+                  // Extra context
+                  livePrice,
+                  premium,
+                  totalCost:     total,
+                })}
             style={{
               flex: 2, padding: '10px', borderRadius: 4,
               background: side === 'CALL' ? '#00ff8818' : '#ff444418',
