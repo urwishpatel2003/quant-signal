@@ -1,3 +1,4 @@
+const BASE = import.meta.env.VITE_API_BASE;
 import { useState, useEffect } from 'react';
 import { fetchPrice, fetchFundamentals, fetchStockNews } from '../api/yahoo';
 import { fetchTradierQuote, fetchTradierExpirations, fetchTradierChain, isMarketClosed } from '../api/tradier';
@@ -30,6 +31,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
   const [priceLoaded,    setPriceLoaded]    = useState(false);
   const [expiryOpen,     setExpiryOpen]     = useState(true);
   const [showResults,    setShowResults]    = useState(false);
+  const [chain,          setChain]          = useState(null);
 
   const { usage, limits, plan, canOptions, trackOptions, refreshUsage } = useUsage();
 
@@ -105,7 +107,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
         fetchFundamentals(ticker),
         fetchStockNews(ticker),
       ]);
-      setFundamentals(f); setNews(n);
+      setFundamentals(f); setNews(n); setChain(c);
       setStage('options-signal');
       const { priceSignal: ps, optionsSignal: os } = await runCombinedAnalysis(
         ticker, livePrice, ohlcv, f, c, n,
@@ -119,6 +121,19 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
     finally { setLoading(false); }
   };
 
+  const [termStructure, setTermStructure] = useState(null);
+
+  const fetchTermStructure = async (nearExpiry, allExpiries) => {
+    if (!allExpiries || allExpiries.length < 2) return;
+    const farExpiry = allExpiries.find(e => e > nearExpiry);
+    if (!farExpiry) return;
+    try {
+      const res  = await fetch(`${BASE}/tradier/term-structure/${ticker}?near=${nearExpiry}&far=${farExpiry}`);
+      const data = await res.json();
+      setTermStructure(data);
+    } catch {}
+  };
+
   const switchExpiry = async expiry => {
     if (!ticker || reanalyzing) return;
     setSelectedExpiry(expiry);
@@ -127,6 +142,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
     try {
       const livePrice = quote?.last || ohlcv?.current;
       const c  = await fetchTradierChain(ticker, expiry, livePrice);
+      setChain(c);
       const os = await runOptionsAnalysis(
         ticker, livePrice, expiry, c, fundamentals, news, priceSignal,
         macro?.bonds, macro?.macroNews, macro?.intlMarkets, macro?.calendar, ta, quote
@@ -159,6 +175,8 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
           ohlcv={ohlcv}
           priceSignal={priceSignal}
           optionsSignal={optionsSignal}
+          chain={chain}
+          termStructure={termStructure}
           ta={ta}
           macro={macro}
           selectedExpiry={selectedExpiry}
@@ -184,7 +202,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
               color: '#ffaa00', letterSpacing: '0.15em', marginBottom: 8 }}>
               {reanalyzing ? 'RE-ANALYZING' : 'ANALYZING'}
             </div>
-            <div style={{ fontSize: 12, color: '#ffaa0066', letterSpacing: '0.2em' }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#ffaa0066', letterSpacing: '0.2em' }}>
               {reanalyzing ? `EXPIRY: ${selectedExpiry}` : (stageLabels[stage] || 'LOADING...')}
             </div>
           </div>
@@ -204,7 +222,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
               );
             })}
           </div>
-          <div style={{ fontSize: 11, color: '#7788aa' }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0' }}>
             {ticker && `${ticker} · `}This may take 10–20 seconds
           </div>
         </div>
@@ -217,13 +235,13 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, width: '100%' }}>
           <div style={{ position: 'relative', flex: 1 }}>
-            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 12 }}>$</span>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#ffaa00', fontSize: 'var(--fs-md)' }}>$</span>
             <input value={inputVal}
               onChange={e => setInputVal(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && handleTickerSubmit()}
               placeholder="ENTER TICKER..."
               className="input"
-              style={{ padding: '10px 12px 10px 26px', fontSize: 14, fontWeight: 600 }} />
+              style={{ padding: '10px 12px 10px 26px', fontSize: 'var(--fs-lg)', fontWeight: 600 }} />
           </div>
           <button className="btn-sm"
             onClick={handleTickerSubmit}
@@ -233,10 +251,10 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ fontSize: 10, color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
+            <div style={{ fontSize: 'var(--fs-body)', color: isMarketClosed() ? '#ff444488' : '#00ff8888' }}>
               {isMarketClosed() ? '🔴 MKT CLOSED' : '🟢 MKT OPEN'}
             </div>
-            {error && <div style={{ fontSize: 11, color: '#ff4444' }}>{error}</div>}
+            {error && <div style={{ fontSize: 'var(--fs-lg)', color: '#ff4444' }}>{error}</div>}
           </div>
           <UsageBadge used={usage.options} limit={limits.options} label="ANALYSES" plan={plan} />
         </div>
@@ -254,18 +272,18 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
               {ticker}
             </div>
             {companyName && (
-              <div style={{ fontSize: 12, color: '#c8d8f0', fontWeight: 500, marginTop: 2,
+              <div style={{ fontSize: 'var(--fs-md)', color: '#c8d8f0', fontWeight: 500, marginTop: 2,
                 maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {companyName}
               </div>
             )}
-            <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
               {isMarketClosed() ? 'MARKET CLOSED' : 'LIVE'}
             </div>
           </div>
           <div>
             <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
-            <div style={{ fontSize: 12, fontWeight: 600,
+            <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600,
               color: changePct !== null && changePct >= 0 ? '#00ff88' : '#ff4444' }}>
               {changePct !== null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : '—'}
             </div>
@@ -287,25 +305,25 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
             marginBottom: expiryOpen ? 12 : 0,
           }}>
             <div>
-              <div style={{ fontSize: 10, color: expiryOpen && !optionsSignal ? '#ffaa00' : '#8899bb', letterSpacing: '0.15em' }}>
+              <div style={{ fontSize: 'var(--fs-body)', color: expiryOpen && !optionsSignal ? '#ffaa00' : '#8899bb', letterSpacing: '0.15em' }}>
                 EXPIRY DATE
               </div>
               {!expiryOpen && (
-                <div style={{ fontSize: 12, color: '#ffaa00', fontWeight: 600, marginTop: 2 }}>
+                <div style={{ fontSize: 'var(--fs-md)', color: '#ffaa00', fontWeight: 600, marginTop: 2 }}>
                   {selectedExpiry} · {Math.round((new Date(selectedExpiry) - new Date()) / (1000 * 60 * 60 * 24))}d
                 </div>
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {expiryOpen && !optionsSignal && (
-                <span style={{ fontSize: 9, color: '#ffaa0066', background: '#ffaa0011',
+                <span style={{ fontSize: 'var(--fs-md)', color: '#ffaa0066', background: '#ffaa0011',
                   border: '1px solid #ffaa0033', padding: '2px 8px', borderRadius: 2 }}>
                   SELECT BEFORE SCANNING
                 </span>
               )}
               <button onClick={() => setExpiryOpen(o => !o)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#8899bb', fontSize: 12, padding: '2px 6px', fontFamily: 'inherit' }}>
+                  color: '#8899bb', fontSize: 'var(--fs-md)', padding: '2px 6px', fontFamily: 'inherit' }}>
                 {expiryOpen ? '▲' : '▼'}
               </button>
             </div>
@@ -328,8 +346,8 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
                       display:       'flex', flexDirection: 'column', alignItems: 'center',
                       gap: 2, transition: 'all 0.15s', fontFamily: 'inherit', minWidth: 70,
                     }}>
-                    <span style={{ fontSize: 11, fontWeight: isSelected ? 600 : 400 }}>{exp}</span>
-                    <span style={{ fontSize: 9, color: isSelected ? '#ffaa0088' : '#7788aa' }}>{daysOut}d</span>
+                    <span style={{ fontSize: 'var(--fs-lg)', fontWeight: isSelected ? 600 : 400 }}>{exp}</span>
+                    <span style={{ fontSize: 'var(--fs-md)', color: isSelected ? '#ffaa0088' : '#7788aa' }}>{daysOut}d</span>
                   </button>
                 );
               })}
@@ -342,7 +360,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
       {priceLoaded && !optionsSignal && !loading && (
         <button className="btn" onClick={run}
           disabled={!selectedExpiry || loading}
-          style={{ width: '100%', fontSize: 15, padding: '14px', marginBottom: 16,
+          style={{ width: '100%', fontSize: 'var(--fs-md)', padding: '14px', marginBottom: 16,
             opacity: selectedExpiry ? 1 : 0.4 }}>
           ⚡ FIND OPTIONS PLAYS — {ticker}{selectedExpiry && ` · ${selectedExpiry}`}
         </button>
@@ -352,10 +370,10 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
       {!priceLoaded && !error && (
         <div className="card" style={{ textAlign: 'center', padding: 48, color: '#333' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
-          <div style={{ fontSize: 14, color: '#99aacc', marginBottom: 8 }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', marginBottom: 8 }}>
             Enter a ticker above to get started
           </div>
-          <div style={{ fontSize: 11, color: '#7788aa', lineHeight: 1.8 }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', lineHeight: 1.8 }}>
             Step 1: Enter ticker &amp; press LOAD<br />
             Step 2: Select expiry date<br />
             Step 3: Click FIND OPTIONS PLAYS

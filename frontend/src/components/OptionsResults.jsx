@@ -1,490 +1,560 @@
 // src/components/OptionsResults.jsx
 import { useState } from 'react';
-import { SC, RC, MC, GC } from '../utils/constants';
-import MiniChart      from './MiniChart';
-import ContractCard   from './ContractCard';
-
-const BASE = import.meta.env.VITE_API_BASE;
-import TradeSetupCard  from './TradeSetupCard';
-import RiskRewardBar   from './RiskRewardBar';
-import PLSimulator     from './PLSimulator';
-import TradeChecklist  from './TradeChecklist';
+import { SC } from '../utils/constants';
+import MiniChart     from './MiniChart';
+import PLSimulator   from './PLSimulator';
+import TradeChecklist from './TradeChecklist';
 import EarningsWarning from './EarningsWarning';
-import TechnicalPanel from './TechnicalPanel';
 
-function AccordionCard({ id, activeId, setActiveId, label, preview, children }) {
-  const isOpen = activeId === id;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmt  = (n, d = 2) => n != null ? parseFloat(n).toFixed(d) : '—';
+const fmtP = (n) => n != null ? `$${fmt(n)}` : '—';
+
+function classifyStrike(delta, type) {
+  const d = Math.abs(parseFloat(delta) || 0);
+  if (type === 'CALL') {
+    if (d >= 0.60) return 'ITM';
+    if (d >= 0.40) return 'ATM';
+    return 'OTM';
+  } else {
+    if (d >= 0.60) return 'ITM';
+    if (d >= 0.40) return 'ATM';
+    return 'OTM';
+  }
+}
+
+const MONEYNESS_COLOR = { ITM: '#4488ff', ATM: '#ffaa00', OTM: '#00ff88' };
+const MONEYNESS_DESC  = {
+  ITM: 'In the Money — lower leverage, higher cost, more delta',
+  ATM: 'At the Money — balanced leverage and cost',
+  OTM: 'Out of the Money — higher leverage, lower cost, needs bigger move',
+};
+
+// ── Strike Row ────────────────────────────────────────────────────────────────
+function StrikeRow({ contract, type, recommended, onSimulate, simAdded, canSim }) {
+  const moneyness = classifyStrike(contract.delta, type);
+  const mColor    = MONEYNESS_COLOR[moneyness];
+  const isRec     = recommended;
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <div style={{
-      background: '#0f0f1a',
-      border: `1px solid ${isOpen ? '#ffaa0044' : '#2a2a40'}`,
-      borderRadius: 6, overflow: 'hidden', transition: 'border-color 0.15s',
-    }}>
-      <div
-        onClick={() => setActiveId(isOpen ? null : id)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 16px', cursor: 'pointer',
-          background: isOpen ? '#ffaa0008' : 'transparent',
-          transition: 'background 0.15s',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 'var(--fs-lg)', color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 4 }}>
-            {label}
-          </div>
-          {!isOpen && (
-            <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {preview}
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background:   isRec ? (type === 'CALL' ? '#00ff8808' : '#ff444408') : '#0c0c18',
+        border:       `1px solid ${isRec ? (type === 'CALL' ? '#00ff8844' : '#ff444444') : hovered ? '#3a3a5e' : '#1a1a2e'}`,
+        borderLeft:   `3px solid ${mColor}`,
+        borderRadius: 6, padding: '14px 16px',
+        transition:   'all 0.15s',
+        position:     'relative',
+      }}
+    >
+      {/* Recommended badge */}
+      {isRec && (
+        <div style={{
+          position: 'absolute', top: -1, right: 12,
+          background: type === 'CALL' ? '#00ff88' : '#ff4444',
+          color: '#08080f', fontSize: 'var(--fs-xs)', fontWeight: 700,
+          padding: '2px 8px', borderRadius: '0 0 4px 4px', letterSpacing: '.08em',
+        }}>★ RECOMMENDED</div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr auto', gap: 12, alignItems: 'center' }}>
+        {/* Strike + moneyness */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#fff', lineHeight: 1 }}>
+              ${contract.strike}
             </div>
-          )}
+            <div style={{
+              fontSize: 'var(--fs-xs)', fontWeight: 700, color: mColor,
+              background: mColor + '18', border: `1px solid ${mColor}44`,
+              padding: '2px 7px', borderRadius: 3, letterSpacing: '.06em',
+            }}>{moneyness}</div>
+          </div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{MONEYNESS_DESC[moneyness].split(' — ')[0]}</div>
         </div>
-        <div style={{ fontSize: 'var(--fs-lg)', color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 12, flexShrink: 0 }}>
-          {isOpen ? '▲' : '▼'}
+
+        {/* Premium */}
+        <div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>PREMIUM</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#c8d8f0' }}>${fmt(contract.mid)}</div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>${fmt(contract.bid)} / ${fmt(contract.ask)}</div>
         </div>
+
+        {/* Greeks */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Δ Delta</span>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', fontWeight: 600 }}>{fmt(contract.delta, 3)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>θ Theta</span>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#ff4444', fontWeight: 600 }}>{fmt(contract.theta, 3)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>IV</span>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#ffaa00', fontWeight: 600 }}>{contract.iv}%</span>
+          </div>
+        </div>
+
+        {/* Volume / OI */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Volume</span>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', fontWeight: 600 }}>
+              {contract.volume?.toLocaleString()}
+              {contract.unusualVolume && <span style={{ color: '#ffaa00', marginLeft: 4 }}>🔥</span>}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>OI</span>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>{contract.oi?.toLocaleString()}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Spread</span>
+            <span style={{ fontSize: 'var(--fs-xs)', color: contract.wideSpread ? '#ff4444' : '#00ff88', fontWeight: 600 }}>
+              {contract.spreadPct}%{contract.wideSpread ? ' ⚠' : ''}
+            </span>
+          </div>
+        </div>
+
+        {/* Cost for 1 contract */}
+        <div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>1 CONTRACT</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffaa00' }}>
+            ${fmt(contract.mid * 100, 0)}
+          </div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>= 100 shares × ${fmt(contract.mid)}</div>
+        </div>
+
+        {/* Simulate button */}
+        {onSimulate && (
+          <button
+            onClick={() => !simAdded && canSim && onSimulate()}
+            disabled={simAdded || !canSim}
+            style={{
+              padding: '8px 14px', borderRadius: 4,
+              background: simAdded ? '#00ff8811' : type === 'CALL' ? '#00ff8811' : '#ff444411',
+              border: `1px solid ${simAdded ? '#00ff8844' : type === 'CALL' ? '#00ff8844' : '#ff444444'}`,
+              color: simAdded ? '#00ff88' : type === 'CALL' ? '#00ff88' : '#ff4444',
+              cursor: simAdded || !canSim ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', fontSize: 'var(--fs-xs)', fontWeight: 700,
+              opacity: !canSim && !simAdded ? 0.5 : 1, letterSpacing: '.06em',
+              whiteSpace: 'nowrap',
+            }}
+          >{simAdded ? '✓ ADDED' : '📊 SIM'}</button>
+        )}
       </div>
-      {isOpen && (
-        <div style={{ padding: '0 16px 20px', borderTop: '1px solid #1e1e30' }}>
-          {children}
+
+      {/* Thesis if recommended */}
+      {isRec && contract.thesis && (
+        <div style={{
+          marginTop: 12, paddingTop: 12, borderTop: '1px solid #1a1a2e',
+          fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.7,
+          fontStyle: 'italic',
+        }}>
+          {contract.thesis}
         </div>
       )}
     </div>
   );
 }
 
-
-export default function OptionsResults({
-  ticker, livePrice, changePct, ohlcv,
-  priceSignal, optionsSignal,
-  ta, macro, selectedExpiry,
-  onBack, onAddToSim, getSimBalance,
-}) {
-  const [activeId,       setActiveId]       = useState('ai');
-  const [selectedSide,   setSelectedSide]   = useState(null);
-  const [showSimModal,   setShowSimModal]   = useState(null); // 'CALL' | 'PUT' | null
-  const [simBalance,     setSimBalance]     = useState(null);
-  const [simAdded,       setSimAdded]       = useState({ CALL: false, PUT: false });
-
-  const openOptionSimModal = async (side) => {
-    if (getSimBalance) {
-      const bal = await getSimBalance('US');
-      setSimBalance(bal);
-    }
-    setShowSimModal(side);
-  };
-
-  const recColor   = optionsSignal.recommendation === 'CALL' ? '#00ff88'
-    : optionsSignal.recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
-  const ivColor    = optionsSignal.ivRank === 'LOW' ? '#00ff88'
-    : optionsSignal.ivRank === 'HIGH' ? '#ff4444' : '#ffaa00';
-  const activeSide   = selectedSide || optionsSignal.recommendation || 'CALL';
-  const activeSignal = { ...optionsSignal, recommendation: activeSide };
+// ── Sim Modal ─────────────────────────────────────────────────────────────────
+function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, onConfirm, onClose }) {
+  const [contracts, setContracts] = useState('1');
+  const n       = parseInt(contracts) || 1;
+  const premium = contract?.mid || 0;
+  const total   = premium * 100 * n;
+  const canAfford = availableBalance == null || total <= availableBalance;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-      {/* ── Top bar ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: 12, flexWrap: 'wrap',
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#0f0f1a', border: '1px solid #2a2a40', borderRadius: 8,
+        padding: 28, width: '100%', maxWidth: 420,
       }}>
-        <button
-          onClick={onBack}
-          style={{
-            background: 'none', border: '1px solid #2a2a40',
-            color: '#c8d8f0', cursor: 'pointer', borderRadius: 4,
-            padding: '8px 14px', fontSize: 'var(--fs-md)', fontFamily: 'inherit',
-            letterSpacing: '0.1em', transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#ffaa0066'; e.currentTarget.style.color = '#ffaa00'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a40'; e.currentTarget.style.color = '#b0c0dd'; }}
-        >← BACK TO OPTIONS</button>
-
-        {onAddToSim && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            {['CALL', 'PUT'].map(side => {
-              const contract = side === 'CALL' ? optionsSignal.bestCall : optionsSignal.bestPut;
-              const added    = simAdded[side];
-              const canSim   = (optionsSignal.confidence || 0) >= 65 && contract?.mid;
-              return contract ? (
-                <button key={side} onClick={() => canSim && !added && openOptionSimModal(side)}
-                  disabled={added || !canSim}
-                  style={{
-                    height: 34, padding: '0 12px', borderRadius: 5, cursor: canSim && !added ? 'pointer' : 'not-allowed',
-                    border: `1px solid ${added ? '#00ff8844' : side === 'CALL' ? '#00ff8844' : '#ff444444'}`,
-                    background: added ? '#00ff8811' : side === 'CALL' ? '#00ff8811' : '#ff444411',
-                    color: added ? '#00ff88' : side === 'CALL' ? '#00ff88' : '#ff4444',
-                    fontFamily: 'inherit', fontSize: 'var(--fs-lg)', fontWeight: 700,
-                    letterSpacing: '0.08em', opacity: !canSim ? 0.5 : 1,
-                  }}>
-                  {added ? `✓ ${side}` : `📊 SIM ${side}`}
-                </button>
-              ) : null;
-            })}
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: side === 'CALL' ? '#00ff88' : '#ff4444', marginBottom: 4 }}>
+          SIMULATE {side}
+        </div>
+        <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', marginBottom: 20 }}>
+          {ticker} ${contract?.strike} {side} @ ${fmt(premium)}/contract
+        </div>
+        {availableBalance != null && (
+          <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', marginBottom: 12 }}>
+            Available: <span style={{ color: '#ffaa00', fontWeight: 700 }}>${availableBalance?.toLocaleString()}</span>
           </div>
         )}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', display: 'block', marginBottom: 6 }}>CONTRACTS</label>
+          <input
+            type="number" min="1" max="100" value={contracts}
+            onChange={e => setContracts(e.target.value)}
+            className="input" style={{ width: 100 }}
+          />
+        </div>
+        <div style={{ background: '#070710', padding: '12px 14px', borderRadius: 4, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontSize: 'var(--fs-sm)', color: '#8899bb' }}>Total cost</span>
+            <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: canAfford ? '#ffaa00' : '#ff4444' }}>
+              ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-sm)', color: '#8899bb' }}>Max loss</span>
+            <span style={{ fontSize: 'var(--fs-sm)', color: '#ff4444' }}>${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          </div>
+          {!canAfford && (
+            <div style={{ fontSize: 'var(--fs-sm)', color: '#ff4444', marginTop: 8 }}>⚠ Insufficient balance</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} className="btn-sm" style={{ flex: 1 }}>CANCEL</button>
+          <button
+            disabled={!canAfford || n < 1}
+            onClick={() => onConfirm({ ticker, side, contract, contracts: n, premium, totalCost: total, expiry: contract?.expiry, livePrice, position_type: 'OPTION', option_type: side, strike: contract?.strike })}
+            style={{
+              flex: 2, padding: '10px', borderRadius: 4,
+              background: side === 'CALL' ? '#00ff8818' : '#ff444418',
+              border: `1px solid ${side === 'CALL' ? '#00ff8866' : '#ff444466'}`,
+              color: side === 'CALL' ? '#00ff88' : '#ff4444',
+              cursor: canAfford && n >= 1 ? 'pointer' : 'not-allowed',
+              fontFamily: 'inherit', fontSize: 'var(--fs-body)', fontWeight: 700, letterSpacing: '.08em',
+              opacity: canAfford && n >= 1 ? 1 : 0.5,
+            }}
+          >OPEN POSITION →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+export default function OptionsResults({
+  ticker, livePrice, changePct, ohlcv,
+  priceSignal, optionsSignal, chain,
+  ta, macro, selectedExpiry, termStructure,
+  onBack, onAddToSim, getSimBalance,
+}) {
+  const [showSimModal,  setShowSimModal]  = useState(null);
+  const [simBalance,    setSimBalance]    = useState(null);
+  const [simAdded,      setSimAdded]      = useState({});
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [showPL,        setShowPL]        = useState(false);
+
+  const recommendation = optionsSignal.recommendation || 'CALL';
+  const isNeutral      = recommendation === 'NEUTRAL';
+  const recColor       = recommendation === 'CALL' ? '#00ff88' : recommendation === 'PUT' ? '#ff4444' : '#ffaa00';
+  const ivColor        = optionsSignal.ivRank === 'LOW' ? '#00ff88' : optionsSignal.ivRank === 'HIGH' ? '#ff4444' : '#ffaa00';
+
+  // Pick which side to show — single direction based on recommendation
+  const activeSide     = isNeutral ? null : recommendation;
+  const rawContracts   = activeSide === 'CALL'
+    ? (chain?.topCalls || [])
+    : activeSide === 'PUT'
+    ? (chain?.topPuts  || [])
+    : [];
+
+  // Build ATM/ITM/OTM trio — pick one of each moneyness
+  const findByMoneyness = (contracts, target) =>
+    contracts.find(c => classifyStrike(c.delta, activeSide) === target);
+
+  const atmContract = findByMoneyness(rawContracts, 'ATM');
+  const itmContract = findByMoneyness(rawContracts, 'ITM');
+  const otmContract = findByMoneyness(rawContracts, 'OTM');
+
+  // Recommended = the bestCall/bestPut from AI, matched by strike
+  const aiRec = activeSide === 'CALL' ? optionsSignal.bestCall : optionsSignal.bestPut;
+  const recommendedStrike = aiRec?.strike;
+
+  // Build display list: ITM, ATM, OTM — deduplicated, with AI rec merged
+  const displayContracts = [];
+  const seen = new Set();
+  [itmContract, atmContract, otmContract].forEach(c => {
+    if (c && !seen.has(c.strike)) {
+      seen.add(c.strike);
+      displayContracts.push(c);
+    }
+  });
+  // If AI recommended strike not in the trio, add it
+  if (aiRec && !seen.has(recommendedStrike)) {
+    const found = rawContracts.find(c => c.strike === recommendedStrike);
+    if (found) { seen.add(recommendedStrike); displayContracts.unshift(found); }
+  }
+
+  const openSim = async (contract) => {
+    if (getSimBalance) setSimBalance(await getSimBalance('US').catch(() => null));
+    setShowSimModal(contract.strike);
+  };
+
+  const canSim = (confidence) => (confidence || 0) >= 60;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* ── Sim Modal ── */}
+      {showSimModal != null && (() => {
+        const c = rawContracts.find(x => x.strike === showSimModal);
+        return c ? (
+          <OptionsSimModal
+            ticker={ticker} side={activeSide} contract={c}
+            livePrice={livePrice} availableBalance={simBalance}
+            onConfirm={async (pos) => {
+              await onAddToSim(pos);
+              setSimAdded(prev => ({ ...prev, [showSimModal]: true }));
+              setShowSimModal(null);
+            }}
+            onClose={() => setShowSimModal(null)}
+          />
+        ) : null;
+      })()}
+
+      {/* ── Top bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <button onClick={onBack} style={{
+          background: 'none', border: '1px solid #2a2a40', color: '#c8d8f0',
+          cursor: 'pointer', borderRadius: 4, padding: '8px 14px',
+          fontSize: 'var(--fs-sm)', fontFamily: 'inherit', letterSpacing: '0.1em',
+        }}>← BACK</button>
+        <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>
+          Expiry: <span style={{ color: '#ffaa00' }}>{selectedExpiry}</span>
+        </div>
       </div>
 
-      {/* ── Price summary bar ── */}
+      {/* ── Direction card — single, prominent ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        background: '#0f0f18', border: `1px solid ${recColor}33`,
-        padding: '14px 16px', borderRadius: 6,
+        background: recColor + '0a', border: `1px solid ${recColor}33`,
+        borderTop: `3px solid ${recColor}`, borderRadius: 8,
+        padding: '20px 24px',
       }}>
-        <div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, lineHeight: 1, color: '#fff' }}>
-            {ticker}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}>
+          <div>
+            {/* Price summary inline */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: '#fff', lineHeight: 1 }}>
+                {ticker}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>
+                ${livePrice?.toFixed(2)}
+              </div>
+              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: changePct >= 0 ? '#00ff88' : '#ff4444' }}>
+                {changePct != null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : ''}
+              </div>
+            </div>
+
+            {/* Direction */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(28px,5vw,44px)', color: recColor, lineHeight: 1 }}>
+                {isNeutral ? 'STAY NEUTRAL' : `BUY ${recommendation}S`}
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--fs-xs)', color: recColor + '88', letterSpacing: '.1em', marginBottom: 2 }}>CONFIDENCE</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: recColor, lineHeight: 1 }}>{optionsSignal.confidence}%</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--fs-xs)', color: ivColor + '88', letterSpacing: '.1em', marginBottom: 2 }}>IV ENV</div>
+                <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: ivColor }}>{optionsSignal.ivRank}</div>
+              </div>
+              {priceSignal && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', letterSpacing: '.1em', marginBottom: 2 }}>STOCK SIGNAL</div>
+                  <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: SC[priceSignal.signal] }}>{priceSignal.signal} {priceSignal.confidence}%</div>
+                </div>
+              )}
+            </div>
+
+            {/* Reasoning */}
+            <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.75, marginTop: 12 }}>
+              {optionsSignal.reasoning}
+            </div>
           </div>
-          <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
-            {selectedExpiry}
+
+          {/* Mini chart */}
+          <div style={{ flexShrink: 0 }}>
+            <MiniChart data={ohlcv} />
           </div>
         </div>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
-          <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600, color: changePct !== null && changePct >= 0 ? '#00ff88' : '#ff4444' }}>
-            {changePct !== null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : '—'}
+
+        {/* IV + sizing notes */}
+        {(optionsSignal.ivComment || optionsSignal.positionSizing) && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+            {optionsSignal.ivComment && (
+              <div style={{
+                flex: 1, background: '#070710', padding: '10px 14px', borderRadius: 4,
+                fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.6,
+              }}>
+                📊 {optionsSignal.ivComment}
+              </div>
+            )}
+            {optionsSignal.positionSizing && (
+              <div style={{
+                flex: 1, background: '#070710', padding: '10px 14px', borderRadius: 4,
+                fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.6,
+              }}>
+                💰 {optionsSignal.positionSizing}
+              </div>
+            )}
           </div>
-        </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <MiniChart data={ohlcv} />
-        </div>
+        )}
       </div>
 
       <EarningsWarning ticker={ticker} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
 
-      {/* ── Accordion 1: AI Recommendation ── */}
-      <AccordionCard
-        id="ai"
-        activeId={activeId}
-        setActiveId={setActiveId}
-        label="AI RECOMMENDATION"
-        preview={`${optionsSignal.recommendation === 'NEUTRAL' ? 'NEUTRAL' : `LONG ${optionsSignal.recommendation}S`} · ${optionsSignal.confidence}% · ${optionsSignal.ivRank} IV`}
-      >
-        <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Big recommendation */}
-          <div style={{
-            background: recColor + '0d', border: `1px solid ${recColor}33`,
-            borderRadius: 6, padding: '20px 16px', textAlign: 'center',
-          }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px,7vw,52px)', color: recColor, lineHeight: 1 }}>
-              {optionsSignal.recommendation === 'NEUTRAL' ? 'STAY NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
-            </div>
-            <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', marginTop: 10 }}>CONFIDENCE</div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: recColor }}>{optionsSignal.confidence}%</div>
-            <div style={{ background: '#1a1a2e', borderRadius: 2, height: 5, margin: '10px auto 0', maxWidth: 260, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${optionsSignal.confidence}%`, background: recColor, borderRadius: 2 }} />
-            </div>
-          </div>
-
-          {/* Reasoning */}
-          <div style={{ fontSize: 'var(--fs-body)', color: '#d0d8f0', lineHeight: 1.8 }}>
-            {optionsSignal.reasoning}
-          </div>
-          {optionsSignal.macroSetup && (
-            <div style={{ fontSize: 'var(--fs-md)', color: '#ffaa0099', borderLeft: '2px solid #ffaa0033', paddingLeft: 12, fontStyle: 'italic' }}>
-              📊 {optionsSignal.macroSetup}
-            </div>
-          )}
-          {optionsSignal.calendarWarning && (
-            <div style={{ fontSize: 'var(--fs-md)', color: '#ff884488', borderLeft: '2px solid #ff884433', paddingLeft: 12 }}>
-              📅 {optionsSignal.calendarWarning}
-            </div>
-          )}
-
-          {/* IV */}
-          <div style={{ background: '#070710', padding: '12px 14px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 'var(--fs-md)', color: '#8899bb', marginBottom: 4 }}>IV ENVIRONMENT</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: ivColor }}>{optionsSignal.ivRank} IV</div>
-            </div>
-            <div style={{ fontSize: 'var(--fs-md)', color: '#99aacc', flex: 1, lineHeight: 1.6 }}>{optionsSignal.ivComment}</div>
-          </div>
-
-          {optionsSignal.positionSizing && (
-            <div style={{ background: '#070710', padding: '12px 14px', fontSize: 'var(--fs-md)', color: '#99aacc', borderLeft: '3px solid #ffaa0044', borderRadius: 2 }}>
-              💰 {optionsSignal.positionSizing}
-            </div>
-          )}
-        </div>
-      </AccordionCard>
-
-      {/* ── Accordion 2: Contract Plays ── */}
-      <AccordionCard
-        id="contract"
-        activeId={activeId}
-        setActiveId={setActiveId}
-        label="CONTRACT PLAYS"
-        preview={`CALL $${optionsSignal.bestCall?.strike} ~$${optionsSignal.bestCall?.mid?.toFixed(2)} · PUT $${optionsSignal.bestPut?.strike} ~$${optionsSignal.bestPut?.mid?.toFixed(2)}`}
-      >
-        <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="options-contracts">
-            <ContractCard data={optionsSignal.bestCall} type="CALL" selected={activeSide === 'CALL'} onClick={() => setSelectedSide('CALL')} />
-            <ContractCard data={optionsSignal.bestPut}  type="PUT"  selected={activeSide === 'PUT'}  onClick={() => setSelectedSide('PUT')}  />
-          </div>
-          <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={activeSignal} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
-          <PLSimulator optionsSignal={{ ...activeSignal, ticker }} livePrice={livePrice} />
-          <TradeSetupCard optionsSignal={activeSignal} priceSignal={priceSignal} ticker={ticker} selectedExpiry={selectedExpiry} />
-          <RiskRewardBar optionsSignal={activeSignal} />
-        </div>
-      </AccordionCard>
-
-      {/* ── Accordion 3: Technical & Risk ── */}
-      <AccordionCard
-        id="technical"
-        activeId={activeId}
-        setActiveId={setActiveId}
-        label="TECHNICAL & RISK"
-        preview={ta ? `RSI ${ta.rsi14?.toFixed(1)} · ${ta.trendSignal} · Vol ${ta.volumeRatio}x · ${optionsSignal.catalysts?.length || 0} catalysts · ${optionsSignal.keyRisks?.length || 0} risks` : 'Technical indicators & risk factors'}
-      >
-        <div style={{ paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Technical + Underlying */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-            {ta && <TechnicalPanel ta={ta} />}
-            {priceSignal && (
-              <div className="card" style={{ borderColor: SC[priceSignal.signal] + '33' }}>
-                <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  {[
-                    ['SIGNAL',   priceSignal.signal,                        SC[priceSignal.signal]],
-                    ['CONF',     `${priceSignal.confidence}%`,              '#fff'],
-                    ['TARGET',   `$${priceSignal.priceTarget?.toFixed(2)}`, '#00ff88'],
-                    ['STOP',     `$${priceSignal.stopLoss?.toFixed(2)}`,    '#ff4444'],
-                    ['MACRO',    priceSignal.macroImpact,                   MC[priceSignal.macroImpact]],
-                    ['GEO RISK', priceSignal.geopoliticalRisk,              RC[priceSignal.geopoliticalRisk]],
-                  ].map(([l, v, c]) => (
-                    <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', marginBottom: 2 }}>{l}</div>
-                      <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 600, color: c }}>{v}</div>
-                    </div>
-                  ))}
+      {/* ── Quant Context Bar (Max Pain + Term Structure + Expected Move) ── */}
+      {(chain || termStructure) && (() => {
+        const maxPain = chain ? (() => {
+          const strikes = [...new Set([...(chain.topCalls||[]).map(c=>c.strike), ...(chain.topPuts||[]).map(p=>p.strike)])].sort((a,b)=>a-b);
+          let minPain=Infinity, mpStrike=null;
+          for (const es of strikes) {
+            let pain=0;
+            for (const c of (chain.topCalls||[])) if (es>c.strike) pain+=(es-c.strike)*(c.oi||0)*100;
+            for (const p of (chain.topPuts||[]))  if (es<p.strike) pain+=(p.strike-es)*(p.oi||0)*100;
+            if (pain<minPain){minPain=pain;mpStrike=es;}
+          }
+          return mpStrike;
+        })() : null;
+        const spot       = livePrice;
+        const mpDist     = maxPain && spot ? ((maxPain - spot) / spot * 100).toFixed(1) : null;
+        const atMaxPain  = mpDist && Math.abs(parseFloat(mpDist)) < 1;
+        const annualVol  = chain?.avgCallIV ? parseFloat(chain.avgCallIV) / 100 : null;
+        const dte        = selectedExpiry ? Math.max(1, Math.ceil((new Date(selectedExpiry) - new Date()) / (1000*60*60*24))) : 30;
+        const expMove    = annualVol && spot ? (spot * annualVol * Math.sqrt(dte/252)).toFixed(2) : null;
+        const ts         = termStructure;
+        return (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10 }}>
+            {maxPain && (
+              <div style={{ background:'#0f0f1a', border:`1px solid ${atMaxPain?'#ffaa0044':'#1a1a2e'}`, borderRadius:6, padding:'12px 14px' }}>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:4 }}>MAX PAIN</div>
+                <div style={{ fontSize:18, fontWeight:700, color: atMaxPain ? '#ffaa00' : '#c8d8f0' }}>${maxPain}</div>
+                <div style={{ fontSize:'var(--fs-xs)', color: atMaxPain ? '#ffaa00' : '#556677', marginTop:2 }}>
+                  {mpDist > 0 ? '+' : ''}{mpDist}% from spot{atMaxPain ? ' ⚠ PINNING RISK' : ''}
                 </div>
-                {ta && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
-                    {[
-                      ['RSI 14', ta.rsi14,            ta.rsi14 > 70 ? '#ff4444' : ta.rsi14 < 30 ? '#00ff88' : '#ffaa00'],
-                      ['TREND',  ta.trendSignal,       ta.trendSignal === 'BULLISH' ? '#00ff88' : '#ff4444'],
-                      ['VOLUME', `${ta.volumeRatio}x`, ta.volumeSignal === 'HIGH' ? '#ffaa00' : '#c8c8d0'],
-                      ['GLOBAL', priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
-                    ].map(([l, v, c]) => (
-                      <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 600, color: c }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ fontSize: 'var(--fs-body)', color: '#99aacc', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
-                  {priceSignal.thesis}
+              </div>
+            )}
+            {expMove && (
+              <div style={{ background:'#0f0f1a', border:'1px solid #1a1a2e', borderRadius:6, padding:'12px 14px' }}>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:4 }}>1σ EXPECTED MOVE</div>
+                <div style={{ fontSize:18, fontWeight:700, color:'#4488ff' }}>±${expMove}</div>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginTop:2 }}>{dte}d · {chain?.avgCallIV}% IV</div>
+              </div>
+            )}
+            {chain && (
+              <div style={{ background:'#0f0f1a', border:'1px solid #1a1a2e', borderRadius:6, padding:'12px 14px' }}>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:4 }}>IV ENVIRONMENT</div>
+                <div style={{ fontSize:18, fontWeight:700, color: chain.ivPercentile>=80?'#ff4444':chain.ivPercentile<=20?'#00ff88':'#ffaa00' }}>
+                  {chain.ivPercentile}th %ile
                 </div>
-                {priceSignal.bondSignal && (
-                  <div style={{ fontSize: 'var(--fs-body)', color: '#ffaa0077', marginTop: 6, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>
-                    📊 {priceSignal.bondSignal}
-                  </div>
-                )}
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginTop:2 }}>
+                  {chain.ivPercentile>=80 ? 'EXPENSIVE — prefer ITM' : chain.ivPercentile<=20 ? 'CHEAP — OTM ok' : 'FAIR VALUE'}
+                </div>
+              </div>
+            )}
+            {ts && (
+              <div style={{ background:'#0f0f1a', border:`1px solid ${ts.structure==='BACKWARDATION'?'#ff444433':'#1a1a2e'}`, borderRadius:6, padding:'12px 14px' }}>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:4 }}>TERM STRUCTURE</div>
+                <div style={{ fontSize:'var(--fs-body)', fontWeight:700, color: ts.structure==='BACKWARDATION'?'#ff4444':ts.structure==='CONTANGO'?'#00ff88':'#ffaa00' }}>
+                  {ts.structure}
+                </div>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginTop:2 }}>
+                  {ts.near?.avgIV}% near · {ts.far?.avgIV}% far
+                </div>
+              </div>
+            )}
+            {chain && (
+              <div style={{ background:'#0f0f1a', border:'1px solid #1a1a2e', borderRadius:6, padding:'12px 14px' }}>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:4 }}>IV SKEW</div>
+                <div style={{ fontSize:'var(--fs-body)', fontWeight:700, color: chain.ivSkewLabel==='PUT_SKEW'?'#ff4444':chain.ivSkewLabel==='CALL_SKEW'?'#00ff88':'#ffaa00' }}>
+                  {chain.ivSkewLabel?.replace('_',' ')}
+                </div>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginTop:2 }}>
+                  Put IV: {chain.avgPutIV}% · Call IV: {chain.avgCallIV}%
+                </div>
               </div>
             )}
           </div>
+        );
+      })()}
 
-          {/* Catalysts / Risks / Macro */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+      {/* ── Strike selection — ITM / ATM / OTM ── */}
+      {!isNeutral && displayContracts.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', letterSpacing: '.2em', marginBottom: 10 }}>
+            {recommendation} CONTRACTS — {selectedExpiry}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {displayContracts.map(contract => (
+              <StrikeRow
+                key={contract.strike}
+                contract={contract}
+                type={recommendation}
+                recommended={contract.strike === recommendedStrike}
+                onSimulate={onAddToSim ? () => openSim(contract) : null}
+                simAdded={simAdded[contract.strike]}
+                canSim={canSim(optionsSignal.confidence)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isNeutral && (
+        <div style={{
+          background: '#ffaa0008', border: '1px solid #ffaa0022', borderRadius: 6,
+          padding: '20px 24px', fontSize: 'var(--fs-body)', color: '#99aacc', lineHeight: 1.8,
+        }}>
+          ⚠ Neutral signal — no directional options play recommended. Consider waiting for a clearer setup or using a non-directional strategy (iron condor, straddle).
+        </div>
+      )}
+
+      {/* ── Risks & Catalysts ── */}
+      {(optionsSignal.catalysts?.length > 0 || optionsSignal.keyRisks?.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          {optionsSignal.catalysts?.length > 0 && (
             <div className="card">
-              <div style={{ fontSize: 'var(--fs-body)', color: '#ffaa0066', marginBottom: 8, fontWeight: 700 }}>⚡ CATALYSTS</div>
-              {optionsSignal.catalysts?.map((c, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', borderBottom: i < optionsSignal.catalysts.length - 1 ? '1px solid #1a1a26' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'var(--fs-sm)', color: '#ffaa0099', marginBottom: 10, fontWeight: 700, letterSpacing: '.08em' }}>⚡ CATALYSTS</div>
+              {optionsSignal.catalysts.map((c, i) => (
+                <div key={i} style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', padding: '5px 0', borderBottom: i < optionsSignal.catalysts.length - 1 ? '1px solid #1a1a26' : 'none', display: 'flex', gap: 8, lineHeight: 1.5 }}>
                   <span style={{ color: '#ffaa00', flexShrink: 0 }}>→</span>{c}
                 </div>
               ))}
             </div>
+          )}
+          {optionsSignal.keyRisks?.length > 0 && (
             <div className="card">
-              <div style={{ fontSize: 'var(--fs-body)', color: '#ff444466', marginBottom: 8, fontWeight: 700 }}>⚠ KEY RISKS</div>
-              {optionsSignal.keyRisks?.map((r, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', borderBottom: i < optionsSignal.keyRisks.length - 1 ? '1px solid #1a0f0f' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'var(--fs-sm)', color: '#ff444499', marginBottom: 10, fontWeight: 700, letterSpacing: '.08em' }}>⚠ KEY RISKS</div>
+              {optionsSignal.keyRisks.map((r, i) => (
+                <div key={i} style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', padding: '5px 0', borderBottom: i < optionsSignal.keyRisks.length - 1 ? '1px solid #1a0f0f' : 'none', display: 'flex', gap: 8, lineHeight: 1.5 }}>
                   <span style={{ color: '#ff4444', flexShrink: 0 }}>!</span>{r}
                 </div>
               ))}
             </div>
-            <div className="card">
-              <div style={{ fontSize: 'var(--fs-body)', color: '#ff884466', marginBottom: 8, fontWeight: 700 }}>🌍 MACRO RISKS</div>
-              {optionsSignal.macroRisks?.map((r, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', borderBottom: i < optionsSignal.macroRisks.length - 1 ? '1px solid #1a1008' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
-                  <span style={{ color: '#ff8844', flexShrink: 0 }}>⊕</span>{r}
-                </div>
-              ))}
-              {optionsSignal.globalMarketRisk && (
-                <div style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', display: 'flex', gap: 6 }}>
-                  <span style={{ color: '#ff8844', flexShrink: 0 }}>🌍</span>{optionsSignal.globalMarketRisk}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ fontSize: 'var(--fs-lg)', color: '#333', textAlign: 'center' }}>
-            ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.
-          </div>
+          )}
         </div>
-      </AccordionCard>
-
-      {/* Options Sim Modal */}
-      {showSimModal && (
-        <OptionsSimModal
-          ticker={ticker}
-          side={showSimModal}
-          contract={showSimModal === 'CALL' ? optionsSignal.bestCall : optionsSignal.bestPut}
-          livePrice={livePrice}
-          availableBalance={simBalance}
-          onConfirm={async (pos) => {
-            await onAddToSim(pos);
-            setSimAdded(prev => ({ ...prev, [showSimModal]: true }));
-            setShowSimModal(null);
-          }}
-          onClose={() => setShowSimModal(null)}
-        />
       )}
-    </div>
-  );
 
-}
+      {/* ── Expandable tools ── */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => setShowChecklist(v => !v)} className="btn-sm" style={{ color: showChecklist ? '#ffaa00' : '#b0c0dd', borderColor: showChecklist ? '#ffaa0044' : '#3a3a5e' }}>
+          {showChecklist ? '▲' : '▼'} TRADE CHECKLIST
+        </button>
+        <button onClick={() => setShowPL(v => !v)} className="btn-sm" style={{ color: showPL ? '#00ff88' : '#b0c0dd', borderColor: showPL ? '#00ff8844' : '#3a3a5e' }}>
+          {showPL ? '▲' : '▼'} P&L SIMULATOR
+        </button>
+      </div>
+      {showChecklist && (
+        <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={{ ...optionsSignal, recommendation: activeSide || 'CALL' }} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
+      )}
+      {showPL && aiRec && (
+        <PLSimulator optionsSignal={{ ...optionsSignal, ticker, recommendation: activeSide || 'CALL' }} livePrice={livePrice} />
+      )}
 
-// ── Options Sim Modal ─────────────────────────────────────────────────────────
-function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, onConfirm, onClose }) {
-  const [contracts, setContracts] = useState('1');
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState('');
-
-  const isCall       = side === 'CALL';
-  const color        = isCall ? '#00ff88' : '#ff4444';
-  const premium      = contract?.mid || contract?.estimatedPremium || 0;
-  const strike       = contract?.strike || 0;
-  const expiry       = contract?.expiry || '';
-  const delta        = contract?.delta || '';
-  const iv           = contract?.iv || '';
-  const numContracts = parseInt(contracts) || 1;
-  const totalCost    = premium * numContracts * 100;
-  const balance      = availableBalance ?? 10000;
-  const exceedsBalance = totalCost > balance;
-  const maxContracts = premium > 0 ? Math.floor(balance / (premium * 100)) : 0;
-
-  const confirm = async () => {
-    if (numContracts <= 0) { setError('Enter valid number of contracts'); return; }
-    if (exceedsBalance) { setError(`Insufficient balance. Need $${totalCost.toFixed(2)}`); return; }
-    setLoading(true); setError('');
-    try {
-      await onConfirm({
-        ticker,
-        market:       'US',
-        direction:    'LONG',
-        positionType: 'OPTION',
-        optionType:   side,
-        strike,
-        expiry,
-        contracts:    numContracts,
-        entryPrice:   premium,
-        quantity:     numContracts,
-        notional:     totalCost,
-        delta:        String(delta),
-        iv:           String(iv),
-        thesis:       contract?.thesis || '',
-      });
-    } catch (e) {
-      setError(e.message);
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)',
-      zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-    }} onClick={onClose}>
-      <div style={{
-        background: '#0f0f1a', border: `1px solid ${color}44`,
-        borderRadius: 10, padding: 24, width: '100%', maxWidth: 360,
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color, marginBottom: 4 }}>
-          SIMULATE {side} OPTION
-        </div>
-        <div style={{ fontSize: 'var(--fs-md)', color: '#8899bb', marginBottom: 20 }}>
-          Virtual paper trade · Long {side.toLowerCase()} on {ticker}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-          {[
-            { label: 'STRIKE',  value: `$${strike}`,              color: '#e8e8f0' },
-            { label: 'EXPIRY',  value: expiry,                    color: '#e8e8f0' },
-            { label: 'PREMIUM', value: `$${premium.toFixed(2)}/sh`, color },
-            { label: 'TYPE',    value: `${isCall ? '↑' : '↓'} ${side}`, color },
-            { label: 'DELTA',   value: delta || '—',              color: '#b8c8e0' },
-            { label: 'IV',      value: iv ? `${iv}%` : '—',      color: '#ffaa00' },
-          ].map(({ label, value, color: c }) => (
-            <div key={label} style={{ background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 6, padding: '8px 10px' }}>
-              <div style={{ fontSize: 'var(--fs-md)', color: '#445', marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: c }}>{value}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 'var(--fs-body)', color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>NUMBER OF CONTRACTS</div>
-          <input type="number" min="1" step="1" value={contracts}
-            onChange={e => setContracts(e.target.value)}
-            style={{
-              width: '100%', boxSizing: 'border-box',
-              background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6,
-              color: '#e8e8f0', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
-              padding: '10px 14px', textAlign: 'right',
-            }} />
-          <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', marginTop: 4 }}>1 contract = 100 shares</div>
-        </div>
-
-        <div style={{ background: '#0a0a14', borderRadius: 6, padding: '12px 14px', marginBottom: 16 }}>
-          {[
-            { label: 'Premium per share',      value: `$${premium.toFixed(2)}` },
-            { label: `× ${numContracts} contracts × 100`, value: '' },
-            { label: 'Total cost',             value: `$${totalCost.toFixed(2)}`, bold: true, color: exceedsBalance ? '#ff4444' : '#e8e8f0' },
-            { label: 'Max loss',               value: `$${totalCost.toFixed(2)}`, bold: true, color: '#ff444488' },
-            { label: 'Available balance',      value: `$${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
-          ].map(({ label, value, bold, color: c }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 'var(--fs-lg)', color: '#8899bb' }}>{label}</span>
-              {value && <span style={{ fontSize: bold ? 13 : 11, fontWeight: bold ? 700 : 400, color: c || '#7788aa' }}>{value}</span>}
-            </div>
-          ))}
-        </div>
-
-        {exceedsBalance && (
-          <div style={{ fontSize: 'var(--fs-lg)', color: '#ff4444', background: '#ff444411',
-            border: '1px solid #ff444433', borderRadius: 5, padding: '6px 10px', marginBottom: 12 }}>
-            ⚠ Exceeds balance — max {maxContracts} contract{maxContracts !== 1 ? 's' : ''}
-            <button onClick={() => setContracts(String(maxContracts))} style={{
-              marginLeft: 8, fontSize: 'var(--fs-body)', cursor: 'pointer', background: 'none',
-              border: '1px solid #ff444466', color: '#ff4444', borderRadius: 3,
-              padding: '1px 6px', fontFamily: 'inherit',
-            }}>USE MAX</button>
-          </div>
-        )}
-
-        {error && (
-          <div style={{ fontSize: 'var(--fs-md)', color: '#ff4444', background: '#ff444411',
-            border: '1px solid #ff444433', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
-            {error}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{
-            flex: 1, padding: '12px', borderRadius: 6, cursor: 'pointer',
-            background: 'none', border: '1px solid #2a2a3e', color: '#8899bb',
-            fontFamily: 'inherit', fontSize: 'var(--fs-body)',
-          }}>CANCEL</button>
-          <button onClick={confirm} disabled={loading || exceedsBalance || numContracts < 1} style={{
-            flex: 2, padding: '12px', borderRadius: 6, cursor: 'pointer',
-            background: `${color}22`, border: `1px solid ${color}`,
-            color, fontFamily: 'inherit', fontSize: 'var(--fs-body)', fontWeight: 700,
-            letterSpacing: '0.08em', opacity: loading ? 0.6 : 1,
-          }}>
-            {loading ? 'ADDING...' : `BUY ${numContracts} ${side} CONTRACT${numContracts > 1 ? 'S' : ''}`}
-          </button>
-        </div>
+      <div style={{ fontSize: 'var(--fs-xs)', color: '#334455', textAlign: 'center', paddingTop: 4 }}>
+        ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK OF LOSS.
       </div>
     </div>
   );

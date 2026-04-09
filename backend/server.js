@@ -929,6 +929,39 @@ app.get('/tradier/chain/:ticker', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Term structure endpoint — fetch near + far expiry IV for backwardation/contango ──
+app.get('/tradier/term-structure/:ticker', async (req, res) => {
+  try {
+    const { near, far } = req.query; // two expiry dates
+    if (!near || !far) return res.status(400).json({ error: 'near and far required' });
+    const [nearData, farData] = await Promise.all([
+      tradierGet(`/v1/markets/options/chains?symbol=${req.params.ticker}&expiration=${near}&greeks=true`),
+      tradierGet(`/v1/markets/options/chains?symbol=${req.params.ticker}&expiration=${far}&greeks=true`),
+    ]);
+    const avgIV = (opts) => {
+      const atm = (opts?.options?.option || []).filter(o => o.greeks?.mid_iv > 0);
+      return atm.length ? atm.reduce((s, o) => s + o.greeks.mid_iv, 0) / atm.length * 100 : null;
+    };
+    const nearIV = avgIV(nearData);
+    const farIV  = avgIV(farData);
+    const structure = nearIV && farIV
+      ? nearIV > farIV * 1.05 ? 'BACKWARDATION'  // near > far = event risk / fear
+      : nearIV < farIV * 0.95 ? 'CONTANGO'       // normal term structure
+      : 'FLAT'
+      : 'UNKNOWN';
+    res.json({
+      near: { expiry: near, avgIV: nearIV?.toFixed(1) },
+      far:  { expiry: far,  avgIV: farIV?.toFixed(1)  },
+      structure,
+      interpretation: structure === 'BACKWARDATION'
+        ? 'Near-term event risk elevated — IV crush risk after expiry. Consider longer-dated options.'
+        : structure === 'CONTANGO'
+        ? 'Normal term structure — near options cheaper. Short-term plays have good risk/reward.'
+        : 'Flat term structure — no strong term signal.',
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/tradier/quote/:ticker', async (req, res) => {
   try {
     const data = await tradierGet(`/v1/markets/quotes?symbols=${req.params.ticker}&greeks=false`);
@@ -1135,19 +1168,127 @@ function buildTAContext(ta, ticker = '', calendar = null, selectedExpiry = null)
   return ctx;
 }
 
-function buildChainContext(chain) {
+// ── Max pain calculation ─────────────────────────────────────────────────────
+// Max pain = strike where total dollar value of expiring options is minimized
+// Market makers are least exposed here — price gravitates toward this strike near expiry
+function calcMaxPain(chain) {
+  if (!chain?.topCalls?.length || !chain?.topPuts?.length) return null;
+  const strikes = [...new Set([
+    ...(chain.topCalls || []).map(c => c.strike),
+    ...(chain.topPuts  || []).map(p => p.strike),
+  ])].sort((a, b) => a - b);
+
+  let minPain = Infinity, maxPainStrike = null;
+  for (const expStrike of strikes) {
+    let totalPain = 0;
+    // Pain for call holders: calls ITM at expStrike lose value as price rises above their strike
+    for (const c of (chain.topCalls || [])) {
+      if (expStrike > c.strike) totalPain += (expStrike - c.strike) * (c.oi || 0) * 100;
+    }
+    // Pain for put holders: puts ITM at expStrike lose value as price falls below their strike
+    for (const p of (chain.topPuts || [])) {
+      if (expStrike < p.strike) totalPain += (p.strike - expStrike) * (p.oi || 0) * 100;
+    }
+    if (totalPain < minPain) { minPain = totalPain; maxPainStrike = expStrike; }
+  }
+  return maxPainStrike;
+}
+
+// ── Delta-adjusted expected return for each moneyness ─────────────────────────
+// Paper §3.5 basis: given signal confidence and ATR, what probability does each
+// moneyness level have of being profitable at expiry?
+// Expected move = 1-standard-deviation move based on ATR × sqrt(DTE/252)
+function calcExpectedReturn(chain, spot, ta, dte) {
+  if (!spot || !chain) return null;
+  const results = {};
+  const annualVol = parseFloat(chain.avgCallIV) / 100 || 0.30;
+  const dteFrac   = (dte || 30) / 252;
+  const oneSigma  = spot * annualVol * Math.sqrt(dteFrac); // 1-std expected move
+
+  // For each moneyness level, calculate probability of profit
+  const classify = (delta) => {
+    const d = Math.abs(parseFloat(delta) || 0);
+    if (d >= 0.60) return 'ITM';
+    if (d >= 0.40) return 'ATM';
+    return 'OTM';
+  };
+
+  for (const type of ['CALL', 'PUT']) {
+    const contracts = type === 'CALL' ? (chain.topCalls || []) : (chain.topPuts || []);
+    for (const c of contracts) {
+      const moneyness = classify(c.delta);
+      if (results[`${type}_${moneyness}`]) continue; // already have one
+
+      const strike      = parseFloat(c.strike);
+      const premium     = parseFloat(c.mid) || 0;
+      const breakeven   = type === 'CALL' ? strike + premium : strike - premium;
+      const moveNeeded  = Math.abs(breakeven - spot);
+      const sigmasNeeded = oneSigma > 0 ? moveNeeded / oneSigma : 999;
+
+      // Approximate probability using delta as proxy (paper §3.5)
+      // delta ≈ probability of expiring ITM (risk-neutral)
+      const probITM = Math.abs(parseFloat(c.delta) || 0);
+      // But we need to reach breakeven, not just ITM
+      // Adjust: prob(breakeven) ≈ probITM × (1 - premium/oneSigma × 0.3)
+      const probProfit = Math.max(0, Math.min(1, probITM * (1 - sigmasNeeded * 0.15)));
+
+      results[`${type}_${moneyness}`] = {
+        strike, premium, breakeven: parseFloat(breakeven.toFixed(2)),
+        moveNeeded: parseFloat(moveNeeded.toFixed(2)),
+        sigmasNeeded: parseFloat(sigmasNeeded.toFixed(2)),
+        probProfit:   Math.round(probProfit * 100),
+        probITM:      Math.round(probITM * 100),
+      };
+    }
+  }
+  return results;
+}
+
+function buildChainContext(chain, spot = null, ta = null, dte = 30) {
   if (!chain) return '';
   let ctx = '\n=== OPTIONS INTELLIGENCE ===\n';
-  ctx += `IV SKEW: ${chain.ivSkewPct}% (${chain.ivSkewLabel})\n`;
+
+  // IV environment (§3.5 — high IV = expensive options, prefer selling; low IV = buy)
+  ctx += `IV SKEW: ${chain.ivSkewPct}% (${chain.ivSkewLabel}) — ${chain.ivSkewLabel === 'PUT_SKEW' ? 'crash fear present' : chain.ivSkewLabel === 'CALL_SKEW' ? 'melt-up fear/retail buying' : 'balanced sentiment'}\n`;
   ctx += `IV PERCENTILE: ${chain.ivPercentile}% — ${chain.ivPctLabel}\n`;
-  ctx += `VOL/OI: Calls=${chain.callVolOIRatio} | Puts=${chain.putVolOIRatio} | P/C Vol=${parseFloat(chain.putCallVolRatio)?.toFixed(2)}\n`;
+  ctx += `ATM Call IV: ${chain.avgCallIV}% | ATM Put IV: ${chain.avgPutIV}%\n`;
+
+  // VOL/OI
+  ctx += `VOL/OI: Calls=${chain.callVolOIRatio} | Puts=${chain.putVolOIRatio} | P/C Vol=${parseFloat(chain.putCallVolRatio)?.toFixed(2)} | P/C OI=${parseFloat(chain.putCallRatio)?.toFixed(2)}\n`;
+
+  // Max pain (market maker neutral strike)
+  const maxPain = calcMaxPain(chain);
+  if (maxPain) {
+    const painDist = spot ? ((maxPain - spot) / spot * 100).toFixed(1) : null;
+    ctx += `MAX PAIN: $${maxPain}${painDist ? ` (${painDist > 0 ? '+' : ''}${painDist}% from spot)` : ''} — market makers least exposed here, price gravitates toward this near expiry\n`;
+    if (spot && Math.abs(maxPain - spot) / spot < 0.01) ctx += `⚠ SPOT AT MAX PAIN — pinning risk high\n`;
+  }
+
+  // Expected move (1-sigma)
+  if (chain.avgCallIV && spot) {
+    const annualVol = parseFloat(chain.avgCallIV) / 100;
+    const expectedMove = (spot * annualVol * Math.sqrt(dte / 252)).toFixed(2);
+    ctx += `EXPECTED MOVE (1σ, ${dte}d): ±$${expectedMove} (${(parseFloat(chain.avgCallIV)).toFixed(1)}% IV)\n`;
+  }
+
+  // Delta-adjusted expected returns by moneyness (§3.5 implementation)
+  if (spot && ta) {
+    const er = calcExpectedReturn(chain, spot, ta, dte);
+    if (er) {
+      ctx += `\nEXPECTED RETURN BY MONEYNESS (paper §3.5 — delta-adjusted prob of profit):\n`;
+      for (const [key, v] of Object.entries(er)) {
+        ctx += `  ${key}: strike=$${v.strike} premium=$${v.premium} breakeven=$${v.breakeven} needs ${v.sigmasNeeded}σ move | ProbProfit≈${v.probProfit}% | DeltaProb≈${v.probITM}%\n`;
+      }
+    }
+  }
+
   if (chain.unusualCalls?.length) ctx += `🔥 UNUSUAL CALL VOL: ${chain.unusualCalls.join(', ')}\n`;
   if (chain.unusualPuts?.length)  ctx += `🔥 UNUSUAL PUT VOL: ${chain.unusualPuts.join(', ')}\n`;
-  if (chain.highGammaStrike) ctx += `GAMMA PIN: $${chain.highGammaStrike}\n`;
+  if (chain.highGammaStrike) ctx += `GAMMA PIN: $${chain.highGammaStrike} — highest gamma concentration, acts as magnet\n`;
   const wideCalls = (chain.topCalls || []).filter(c => c.wideSpread).map(c => `$${c.strike}`);
   const widePuts  = (chain.topPuts  || []).filter(p => p.wideSpread).map(p => `$${p.strike}`);
-  if (wideCalls.length) ctx += `⚠ WIDE SPREAD CALLS: ${wideCalls.join(', ')}\n`;
-  if (widePuts.length)  ctx += `⚠ WIDE SPREAD PUTS: ${widePuts.join(', ')}\n`;
+  if (wideCalls.length) ctx += `⚠ WIDE SPREAD CALLS (avoid): ${wideCalls.join(', ')}\n`;
+  if (widePuts.length)  ctx += `⚠ WIDE SPREAD PUTS (avoid): ${widePuts.join(', ')}\n`;
   return ctx;
 }
 
@@ -1232,7 +1373,11 @@ app.post('/api/analyze/combined', async (req, res) => {
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const intradayCtx = buildIntradayContext(ohlcv, quote);
     const taCtx       = buildTAContext(ta, ticker, calendar, expiry);
-    const chainCtx    = buildChainContext(chain);
+    // DTE calculation for expected move and prob estimates
+    const expiryDate  = new Date(expiry);
+    const today       = new Date();
+    const dte         = Math.max(1, Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24)));
+    const chainCtx    = buildChainContext(chain, price, ta, dte);
     const categorized = categorizeNews(news).slice(0, 8);
     const calls       = chain?.topCalls?.slice(0, 5) || [];
     const puts        = chain?.topPuts?.slice(0, 5)  || [];
@@ -2173,7 +2318,11 @@ app.post('/api/analyze/options', async (req, res) => {
     const macroCtx    = buildMacroContext(bonds, macroNews, intlMarkets, calendar);
     const intradayCtx = buildIntradayContext(null, quote);
     const taCtx       = buildTAContext(ta, ticker, calendar, expiry);
-    const chainCtx    = buildChainContext(chain);
+    // DTE calculation for expected move and prob estimates
+    const expiryDate  = new Date(expiry);
+    const today       = new Date();
+    const dte         = Math.max(1, Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24)));
+    const chainCtx    = buildChainContext(chain, price, ta, dte);
     const categorized = categorizeNews(news).slice(0, 8);
     const calls       = chain?.topCalls?.slice(0, 5) || [];
     const puts        = chain?.topPuts?.slice(0, 5)  || [];
@@ -2196,9 +2345,32 @@ app.post('/api/analyze/options', async (req, res) => {
     const ep = calcEarningsProximity(calendar, ticker, expiry);
     const result = await callClaudeAPI({
       model: 'claude-sonnet-4-20250514', max_tokens: 1500, temperature: 0,
-      system: `You are an expert options trader.
-HARD RULES: 1.RSI>70+CALL=overbought 2.RSI<30+PUT=oversold 3.Earnings BEFORE expiry+HIGH/CRITICAL=IV crush 4.Down>2%+PUT=assess 5.Up>2%+CALL=assess 6.Wide spread=avoid
-Do NOT default to NEUTRAL. Return ONLY JSON.`,
+      system: `You are an expert quantitative options trader using academic strategies.
+
+STRATEGY BASIS (151 Trading Strategies, Kakushadze & Serur SSRN-3247865):
+§3.5 IV MOMENTUM: Rising call IV → bullish options signal. Rising put IV → bearish. Use IV skew and percentile.
+§3.4 LOW VOL ANOMALY: Low historical vol stocks = better risk-adjusted returns. Prefer buying options when ATR is low.
+MAX PAIN: Price gravitates toward max pain strike near expiry. Factor into strike selection.
+EXPECTED RETURN: Use delta-adjusted probability of profit to rank ITM/ATM/OTM. Higher probProfit = safer play.
+TERM STRUCTURE: Backwardation = near-term risk elevated. Contango = normal, near options fair value.
+
+HARD RULES:
+1. RSI>70 + CALL = overbought, reduce confidence or avoid
+2. RSI<30 + PUT = oversold, reduce confidence or avoid
+3. Earnings BEFORE expiry + HIGH risk = IV crush warning
+4. Wide spread (>15%) = avoid that strike
+5. ProbProfit < 25% = OTM only if high conviction
+6. MAX PAIN within 1% of recommended strike = pinning risk, note it
+7. Do NOT default to NEUTRAL — take a position.
+
+STRIKE SELECTION LOGIC:
+- HIGH confidence (>75%): ATM is optimal (best delta/cost ratio)
+- MEDIUM confidence (55-75%): ATM or slight OTM  
+- LOW confidence (<55%): ITM only (buy delta, not hope)
+- IV EXPENSIVE (>80th percentile): prefer ITM (less time value at risk)
+- IV CHEAP (<20th percentile): OTM acceptable (cheap lottery)
+
+Return ONLY JSON.`,
       messages: [{ role: 'user', content: `OPTIONS: ${ticker} @ $${price?.toFixed(2)} | Expiry: ${expiry} | ${isMarketClosed()?'CLOSED':'OPEN'}
 ${intradayCtx}${taCtx}${chainCtx}${sizingCtx}
 ${callContradiction?`RSI WARNING: ${callContradiction}`:''}${putContradiction?`RSI WARNING: ${putContradiction}`:''}
