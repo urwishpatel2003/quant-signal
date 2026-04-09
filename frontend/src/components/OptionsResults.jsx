@@ -42,114 +42,73 @@ function StrikeRow({ contract, type, recommended, selected, onSimulate, simAdded
       background:   isRec ? (type === 'CALL' ? '#00ff8808' : '#ff444408') : '#0c0c18',
       border:       `1px solid ${selected ? '#ffaa0066' : isRec ? (type === 'CALL' ? '#00ff8844' : '#ff444444') : '#1a1a2e'}`,
       borderLeft:   `3px solid ${mColor}`,
-      borderRadius: 6, padding: '14px 16px',
+      borderRadius: 6, padding: '12px 14px',
       position:     'relative',
     }}>
-      {/* Selected / Recommended badge */}
-      {selected && !isRec && (
-        <div style={{
-          position: 'absolute', top: -1, right: 12,
-          background: '#ffaa00', color: '#08080f',
-          fontSize: 'var(--fs-xs)', fontWeight: 700,
-          padding: '2px 8px', borderRadius: '0 0 4px 4px', letterSpacing: '.08em',
-        }}>SELECTED</div>
+      {/* Badge */}
+      {(selected && !isRec) && (
+        <div style={{ position:'absolute', top:-1, right:10, background:'#ffaa00', color:'#08080f', fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:'0 0 3px 3px' }}>SELECTED</div>
       )}
       {isRec && (
-        <div style={{
-          position: 'absolute', top: -1, right: 12,
-          background: type === 'CALL' ? '#00ff88' : '#ff4444',
-          color: '#08080f', fontSize: 'var(--fs-xs)', fontWeight: 700,
-          padding: '2px 8px', borderRadius: '0 0 4px 4px', letterSpacing: '.08em',
-        }}>★ RECOMMENDED</div>
+        <div style={{ position:'absolute', top:-1, right:10, background: type==='CALL'?'#00ff88':'#ff4444', color:'#08080f', fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:'0 0 3px 3px' }}>★ RECOMMENDED</div>
       )}
 
-      {/* Row 1: Strike + moneyness + premium + sim button */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24, color: '#fff', lineHeight: 1 }}>
-            ${contract.strike}
-          </div>
-          <div style={{
-            fontSize: 'var(--fs-xs)', fontWeight: 700, color: mColor,
-            background: mColor + '18', border: `1px solid ${mColor}44`,
-            padding: '2px 7px', borderRadius: 3, letterSpacing: '.06em',
-          }}>{moneyness}</div>
+      {/* Top row: strike + badge + premium + cost */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+        {/* Strike + moneyness */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, flex:'0 0 auto' }}>
+          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, color:'#fff', lineHeight:1 }}>${contract.strike}</span>
+          <span style={{ fontSize:10, fontWeight:700, color:mColor, background:mColor+'18', border:`1px solid ${mColor}44`, padding:'1px 6px', borderRadius:3 }}>{moneyness}</span>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{MONEYNESS_DESC[moneyness].split(' — ')[0]}</div>
+        {/* Premium — center */}
+        <div style={{ flex:1, textAlign:'center' }}>
+          <div style={{ fontSize:10, color:'#556677', marginBottom:1 }}>PREMIUM</div>
+          <div style={{ fontSize:18, fontWeight:700, color:'#c8d8f0', lineHeight:1 }}>${fmt(contract.mid)}</div>
+          <div style={{ fontSize:10, color:'#445566' }}>${fmt(contract.bid)}/${fmt(contract.ask)}</div>
         </div>
-        <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 1 }}>PREMIUM</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#c8d8f0', lineHeight: 1 }}>${fmt(contract.mid)}</div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>${fmt(contract.bid)} / ${fmt(contract.ask)}</div>
+        {/* 1 contract cost — right */}
+        <div style={{ flex:'0 0 auto', textAlign:'right' }}>
+          <div style={{ fontSize:10, color:'#556677', marginBottom:1 }}>1 CONTRACT</div>
+          <div style={{ fontSize:18, fontWeight:700, color:'#ffaa00', lineHeight:1 }}>${fmt(contract.mid*100,0)}</div>
         </div>
       </div>
 
-      {/* Row 2: Greeks + Volume/OI + Cost — 3 even columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: onSimulate ? 10 : 0 }}>
-        {/* Greeks */}
-        <div style={{ background: '#08080f', borderRadius: 4, padding: '8px 10px' }}>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 5, letterSpacing: '.06em' }}>GREEKS</div>
-          {[
-            ['Δ', fmt(contract.delta, 3), '#c8d8f0'],
-            ['θ', fmt(contract.theta, 3), '#ff4444'],
-            ['IV', `${contract.iv}%`, '#ffaa00'],
-          ].map(([l, v, c]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{l}</span>
-              <span style={{ fontSize: 'var(--fs-xs)', color: c, fontWeight: 600 }}>{v}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Volume / OI / Spread */}
-        <div style={{ background: '#08080f', borderRadius: 4, padding: '8px 10px' }}>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 5, letterSpacing: '.06em' }}>FLOW</div>
-          {[
-            ['Vol', `${contract.volume?.toLocaleString()}${contract.unusualVolume ? ' 🔥' : ''}`, '#c8d8f0'],
-            ['OI',  contract.oi?.toLocaleString(), '#c8d8f0'],
-            ['Sprd', `${contract.spreadPct}%${contract.wideSpread ? ' ⚠' : ''}`, contract.wideSpread ? '#ff4444' : '#00ff88'],
-          ].map(([l, v, c]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{l}</span>
-              <span style={{ fontSize: 'var(--fs-xs)', color: c, fontWeight: 600 }}>{v}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* 1 Contract cost */}
-        <div style={{ background: '#08080f', borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 5, letterSpacing: '.06em' }}>1 CONTRACT</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#ffaa00', lineHeight: 1, marginBottom: 3 }}>
-            ${fmt(contract.mid * 100, 0)}
+      {/* Stats row: all inline, no sub-cards */}
+      <div style={{ display:'flex', gap:16, flexWrap:'wrap', paddingTop:8, borderTop:'1px solid #1a1a2e', marginBottom: onSimulate ? 10 : 0 }}>
+        {[
+          ['Δ',    fmt(contract.delta,3),  '#c8d8f0'],
+          ['θ',    fmt(contract.theta,3),  '#ff4444'],
+          ['IV',   `${contract.iv}%`,      '#ffaa00'],
+          ['Vol',  `${(contract.volume||0).toLocaleString()}${contract.unusualVolume?' 🔥':''}`, '#c8d8f0'],
+          ['OI',   (contract.oi||0).toLocaleString(), '#8899bb'],
+          ['Sprd', `${contract.spreadPct}%`, contract.wideSpread?'#ff4444':'#00ff88'],
+        ].map(([l,v,c]) => (
+          <div key={l} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+            <span style={{ fontSize:10, color:'#556677', letterSpacing:'.04em' }}>{l}</span>
+            <span style={{ fontSize:12, fontWeight:700, color:c }}>{v}</span>
           </div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>100 × ${fmt(contract.mid)}</div>
-        </div>
+        ))}
       </div>
 
-      {/* Simulate button — full width on mobile */}
+      {/* Simulate button */}
       {onSimulate && (
-        <button
-          onClick={() => !simAdded && canSim && onSimulate()}
-          disabled={simAdded || !canSim}
+        <button onClick={() => !simAdded && canSim && onSimulate()} disabled={simAdded||!canSim}
           style={{
-            width: '100%', padding: '9px', borderRadius: 4,
-            background: simAdded ? '#00ff8811' : type === 'CALL' ? '#00ff8811' : '#ff444411',
-            border: `1px solid ${simAdded ? '#00ff8844' : type === 'CALL' ? '#00ff8844' : '#ff444444'}`,
-            color: simAdded ? '#00ff88' : type === 'CALL' ? '#00ff88' : '#ff4444',
-            cursor: simAdded || !canSim ? 'not-allowed' : 'pointer',
-            fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700,
-            opacity: !canSim && !simAdded ? 0.5 : 1, letterSpacing: '.06em',
-          }}
-        >{simAdded ? '✓ ADDED TO SIMULATOR' : '📊 SIMULATE THIS CONTRACT'}</button>
+            width:'100%', padding:'8px', borderRadius:4,
+            background: simAdded?'#00ff8811': type==='CALL'?'#00ff8811':'#ff444411',
+            border:`1px solid ${simAdded?'#00ff8844': type==='CALL'?'#00ff8844':'#ff444444'}`,
+            color: simAdded?'#00ff88': type==='CALL'?'#00ff88':'#ff4444',
+            cursor: simAdded||!canSim?'not-allowed':'pointer',
+            fontFamily:'inherit', fontSize:'var(--fs-sm)', fontWeight:700,
+            opacity:!canSim&&!simAdded?0.5:1, letterSpacing:'.06em',
+          }}>
+          {simAdded ? '✓ ADDED' : '📊 SIMULATE'}
+        </button>
       )}
 
-      {/* Thesis if recommended */}
+      {/* Thesis */}
       {isRec && contract.thesis && (
-        <div style={{
-          marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a1a2e',
-          fontSize: 'var(--fs-sm)', color: '#99aacc', lineHeight: 1.7, fontStyle: 'italic',
-        }}>
+        <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid #1a1a2e', fontSize:'var(--fs-sm)', color:'#99aacc', lineHeight:1.7, fontStyle:'italic' }}>
           {contract.thesis}
         </div>
       )}
