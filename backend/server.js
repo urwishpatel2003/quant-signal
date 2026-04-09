@@ -849,14 +849,16 @@ async function refreshNSEQuote(symbol) {
       const p       = details?.priceInfo;
       if (p?.lastPrice) {
         result = {
-          price:     p.lastPrice,
-          prevClose: p.previousClose || p.close,
-          change:    p.change  ? parseFloat(p.change.toFixed(2))  : null,
-          changePct: p.pChange ? parseFloat(p.pChange.toFixed(2)) : null,
-          volume:    details?.preOpenMarket?.totalTradedVolume || details?.securityInfo?.tradedVolume || 0,
-          open:      p.open                   || null,
-          high:      p.intraDayHighLow?.max   || null,
-          low:       p.intraDayHighLow?.min   || null,
+          price:      p.lastPrice,
+          prevClose:  p.previousClose || p.close,
+          change:     p.change  ? parseFloat(p.change.toFixed(2))  : null,
+          changePct:  p.pChange ? parseFloat(p.pChange.toFixed(2)) : null,
+          volume:     details?.preOpenMarket?.totalTradedVolume || details?.securityInfo?.tradedVolume || 0,
+          open:       p.open                   || null,
+          high:       p.intraDayHighLow?.max   || null,
+          low:        p.intraDayHighLow?.min   || null,
+          weekHigh52: p.weekHighLow?.max        || null,
+          weekLow52:  p.weekHighLow?.min        || null,
           source:    'nse_india',
         };
       }
@@ -4844,43 +4846,25 @@ async function fetchUnusualActivity(market = 'US') {
   let quotes = {};
   try {
     if (market === 'INDIA') {
-      // Fetch NSE quotes — getNSEQuote returns price, changePct, volume, high, low
-      // No avg volume or 52W data — use Yahoo Finance for extended data
-      for (const ticker of uniqueTickers.slice(0, 30)) {
-        try {
-          const q = await getNSEQuote(ticker);
-          if (!q?.price) continue;
-
-          // Try Yahoo for 52W data
-          let high52 = 0, low52 = 0, avgVol = 0;
-          try {
-            for (const host of YAHOO_HOSTS) {
-              try {
-                const sym  = ticker + '.NS';
-                const d    = await httpsGet(host, `/v8/finance/chart/${sym}?interval=1d&range=1y`, YAHOO_HEADERS);
-                const meta = d?.chart?.result?.[0]?.meta;
-                if (meta) {
-                  high52 = meta.fiftyTwoWeekHigh || 0;
-                  low52  = meta.fiftyTwoWeekLow  || 0;
-                  avgVol = meta.regularMarketVolume || 0;
-                  break;
-                }
-              } catch { continue; }
-            }
-          } catch {}
-
-          quotes[ticker] = {
-            symbol:              ticker,
-            last:                q.price,
-            change_percentage:   q.changePct || 0,
-            volume:              q.volume  || 0,
-            average_volume:      avgVol    || q.volume || 1,
-            fifty_two_week_high: high52,
-            fifty_two_week_low:  low52,
-          };
-        } catch {}
-        await sleep(150);
+      // NSE quotes via getNSEQuote — returns price, changePct, volume, high, low, weekHigh52, weekLow52
+      // Batch all fetches in parallel for speed
+      const nseResults = await Promise.allSettled(
+        uniqueTickers.slice(0, 30).map(ticker => getNSEQuote(ticker).then(q => ({ ticker, q })))
+      );
+      for (const r of nseResults) {
+        if (r.status !== 'fulfilled' || !r.value?.q?.price) continue;
+        const { ticker, q } = r.value;
+        quotes[ticker] = {
+          symbol:              ticker,
+          last:                q.price,
+          change_percentage:   q.changePct || 0,
+          volume:              q.volume    || 0,
+          average_volume:      q.volume    || 1, // NSE doesn't give avg vol - volRatio not used for India
+          fifty_two_week_high: q.weekHigh52  || q.high  || 0,
+          fifty_two_week_low:  q.weekLow52   || q.low   || 0,
+        };
       }
+      console.log(`[unusual/india] fetched ${Object.keys(quotes).length} NSE quotes`);
     } else {
       const batches = [];
       for (let i = 0; i < uniqueTickers.length; i += 20) batches.push(uniqueTickers.slice(i, i + 20));
@@ -4893,14 +4877,16 @@ async function fetchUnusualActivity(market = 'US') {
     }
   } catch (e) { console.warn('[unusual] quotes failed:', e.message); }
 
-  // Fetch news counts from Finnhub for each ticker
+  // Fetch news counts from Finnhub — US only (Finnhub doesn't support NSE symbols)
   const newsCount = {};
-  for (const ticker of uniqueTickers.slice(0, 40)) { // limit to 40 for API rate
-    try {
-      const news = await finnhubGet(`/company-news?symbol=${ticker}&from=${from}&to=${to}`);
-      newsCount[ticker] = Array.isArray(news) ? news.length : 0;
-    } catch {}
-    await sleep(60);
+  if (market !== 'INDIA') {
+    for (const ticker of uniqueTickers.slice(0, 40)) {
+      try {
+        const news = await finnhubGet(`/company-news?symbol=${ticker}&from=${from}&to=${to}`);
+        newsCount[ticker] = Array.isArray(news) ? news.length : 0;
+      } catch {}
+      await sleep(60);
+    }
   }
 
   // Score each ticker
@@ -4930,10 +4916,11 @@ async function fetchUnusualActivity(market = 'US') {
     if (Math.abs(pct) >= priceThreshold && volRatio >= volThreshold) {
       signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% on volume`, severity: Math.abs(pct) >= 8 ? 'high' : 'medium' });
       score += Math.abs(pct) >= 8 ? 3 : 2;
-    } else if (market === 'INDIA' && Math.abs(pct) >= 4) {
-      // For India: big % move alone is a signal even without vol confirmation
-      signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% move`, severity: 'medium' });
-      score += 2;
+    } else if (market === 'INDIA' && Math.abs(pct) >= 2) {
+      // For India: any notable % move is a signal — pChange is the most reliable NSE data
+      const sev = Math.abs(pct) >= 5 ? 'high' : 'medium';
+      signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% move`, severity: sev });
+      score += Math.abs(pct) >= 5 ? 3 : 2;
     }
 
     // 3. News velocity
