@@ -157,10 +157,8 @@ export default function SocialBubbleChart({ onScan }) {
   useEffect(() => {
     if (!data?.tickers?.length || width < 100) return;
 
-    // Always show all 30 bubbles — scale sizes to fit the canvas
-    // Height scales with width so bubbles have room on any screen
-    const h = Math.round(width * 0.95);  // roughly square canvas
-    setSvgHeight(h);
+    // Pack into a generous canvas then trim height to actual bubble bounds
+    const h = Math.round(width * 1.1); // generous initial height
     setCanvasWidth(width);
 
     const filtered = data.tickers
@@ -173,6 +171,14 @@ export default function SocialBubbleChart({ onScan }) {
 
     const packed = packBubbles(filtered, width, h);
     setBubbles(packed);
+
+    // Trim SVG height to actual content + small padding
+    if (packed.length > 0) {
+      const maxY = Math.max(...packed.map(b => b.y + b.r));
+      setSvgHeight(maxY + 12);
+    } else {
+      setSvgHeight(200);
+    }
   }, [data, filter, width]);
 
   const hov = bubbles.find(b => b.symbol === hovered);

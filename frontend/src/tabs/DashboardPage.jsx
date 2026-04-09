@@ -217,7 +217,7 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
       {!isIndia && <SocialBubbleChart onScan={handleScan} />}
 
       {/* ── Unusual Activity ── */}
-      <UnusualActivityPanel onScan={handleScan} />
+      <UnusualActivityPanel onScan={handleScan} market={market} />
 
       {/* ── Sector Rotation ── */}
       {!isIndia && <SectorRotationPanel onScan={handleScan} />}

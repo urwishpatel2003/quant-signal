@@ -4757,48 +4757,70 @@ setTimeout(() => {
 // Scans 80 tickers for volume spikes, options flow anomalies, news velocity
 // Cached 30 minutes — runs in background
 
-const unusualCache = { data: null, ts: 0 };
+const unusualCache = { US: { data: null, ts: 0 }, INDIA: { data: null, ts: 0 } };
 const UNUSUAL_TTL  = 30 * 60 * 1000;
 
-const SCREEN_TICKERS = [
-  // Mega cap
+const SCREEN_TICKERS_US = [
   'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','AMD','AVGO','LLY',
-  // High momentum / retail favorites
   'PLTR','COIN','MSTR','MARA','RIOT','HOOD','SOFI','GME','AMC','RDDT',
-  // Mid-cap growth
   'DDOG','NET','CRWD','SNOW','MNDY','GTLB','BILL','RKLB','ASTS','LUNR',
-  // Sector leaders
-  'JPM','GS','BAC','XOM','CVX','OXY','LLY','ABBV','PFE','MRNA',
-  // Semis / AI
+  'JPM','GS','BAC','XOM','CVX','OXY','ABBV','PFE','MRNA','NFLX',
   'INTC','MU','QCOM','ARM','AMAT','LRCX','KLAC','SMCI','IONQ','RGTI',
-  // EV / space / emerging
-  'RIVN','LCID','NIO','JOBY','ACHR','OKLO','SMR','NNE','RKLB','ASTS',
-  // ETFs / macro
+  'RIVN','LCID','NIO','JOBY','ACHR','OKLO','SMR','NNE',
   'SPY','QQQ','IWM','GLD','TLT','SOXL','TQQQ','ARKK','XLK','XLE',
-  // Large / misc
-  'NFLX','DIS','SHOP','UBER','ABNB','SNAP','PINS','RBLX','U','SQ',
+  'DIS','SHOP','UBER','ABNB','SNAP','PINS','RBLX','U','SQ','PYPL',
 ];
 
-async function fetchUnusualActivity() {
+const SCREEN_TICKERS_INDIA = [
+  // Nifty 50 large cap
+  'RELIANCE','TCS','HDFCBANK','ICICIBANK','INFOSYS','BHARTIARTL','SBIN','LT',
+  'HINDUNILVR','ITC','KOTAKBANK','AXISBANK','BAJFINANCE','WIPRO','HCLTECH',
+  // High-beta / momentum
+  'ADANIPORTS','ADANIENT','TATAMOTORS','BAJAJFINSV','ZOMATO','PAYTM',
+  'NYKAA','IRCTC','DELHIVERY','POLICYBZR',
+  // Mid-cap quality
+  'PERSISTENT','COFORGE','KPITTECH','DIXON','POLYCAB','TIINDIA','APARINDS',
+  'ANGELONE','MFSL','CDSL',
+  // Sector leaders
+  'SUNPHARMA','DRREDDY','TITAN','ASIANPAINT','MARUTI','ULTRACEMCO',
+  'POWERGRID','NTPC','ONGC','COALINDIA',
+];
+
+async function fetchUnusualActivity(market = 'US') {
   const results = [];
   const from = new Date(Date.now() - 2*24*3600*1000).toISOString().split('T')[0];
   const to   = new Date().toISOString().split('T')[0];
 
   // Batch fetch quotes from Tradier (volume data)
-  const uniqueTickers = [...new Set(SCREEN_TICKERS)].filter(t => !t.includes('='));
+  const tickerList    = market === 'INDIA' ? SCREEN_TICKERS_INDIA : SCREEN_TICKERS_US;
+  const uniqueTickers = [...new Set(tickerList)].filter(t => !t.includes('='));
   let quotes = {};
   try {
-    const batches = [];
-    for (let i = 0; i < uniqueTickers.length; i += 20) {
-      batches.push(uniqueTickers.slice(i, i + 20));
-    }
-    for (const batch of batches) {
-      const q = await tradierGet(`/v1/markets/quotes?symbols=${batch.join(',')}&greeks=false`);
-      const raw = q?.quotes?.quote || [];
-      (Array.isArray(raw) ? raw : [raw]).forEach(q => {
-        if (q?.symbol) quotes[q.symbol] = q;
-      });
-      await sleep(100);
+    if (market === 'INDIA') {
+      // Use NSE quotes for India tickers
+      for (const ticker of uniqueTickers.slice(0, 30)) {
+        try {
+          const q = await getNSEQuote(ticker);
+          if (q?.price) quotes[ticker] = {
+            symbol: ticker, last: q.price,
+            change_percentage: q.pChange || 0,
+            volume: q.totalTradedVolume || 0,
+            average_volume: q.totalTradedVolume || 0, // NSE doesn't give avg vol easily
+            fifty_two_week_high: q.weekHigh52 || 0,
+            fifty_two_week_low:  q.weekLow52  || 0,
+          };
+        } catch {}
+        await sleep(120);
+      }
+    } else {
+      const batches = [];
+      for (let i = 0; i < uniqueTickers.length; i += 20) batches.push(uniqueTickers.slice(i, i + 20));
+      for (const batch of batches) {
+        const q = await tradierGet(`/v1/markets/quotes?symbols=${batch.join(',')}&greeks=false`);
+        const raw = q?.quotes?.quote || [];
+        (Array.isArray(raw) ? raw : [raw]).forEach(q => { if (q?.symbol) quotes[q.symbol] = q; });
+        await sleep(100);
+      }
     }
   } catch (e) { console.warn('[unusual] quotes failed:', e.message); }
 
@@ -4874,17 +4896,18 @@ async function fetchUnusualActivity() {
 }
 
 app.get('/unusual/activity', async (req, res) => {
+  const market = (req.query.market || 'US').toUpperCase();
+  const cache  = unusualCache[market] || unusualCache.US;
   try {
-    if (unusualCache.data && Date.now() - unusualCache.ts < UNUSUAL_TTL) {
-      return res.json({ tickers: unusualCache.data, cached: true, cachedAt: unusualCache.ts });
+    if (cache.data && Date.now() - cache.ts < UNUSUAL_TTL) {
+      return res.json({ tickers: cache.data, cached: true, cachedAt: cache.ts });
     }
-    const data = await fetchUnusualActivity();
-    unusualCache.data = data;
-    unusualCache.ts   = Date.now();
+    const data = await fetchUnusualActivity(market);
+    cache.data = data; cache.ts = Date.now();
     res.json({ tickers: data, cached: false });
   } catch (e) {
     console.error('[unusual/activity]', e.message);
-    if (unusualCache.data) return res.json({ tickers: unusualCache.data, cached: true, stale: true });
+    if (cache.data) return res.json({ tickers: cache.data, cached: true, stale: true });
     res.status(500).json({ error: e.message });
   }
 });
@@ -4952,9 +4975,9 @@ app.get('/sector/rotation', async (req, res) => {
 
 // Warm caches on startup
 setTimeout(() => {
-  fetchUnusualActivity()
-    .then(d => { unusualCache.data = d; unusualCache.ts = Date.now(); console.log(`[unusual] warmed: ${d.length}`); })
-    .catch(e => console.warn('[unusual] warm failed:', e.message));
+  fetchUnusualActivity('US')
+    .then(d => { unusualCache.US.data = d; unusualCache.US.ts = Date.now(); console.log(`[unusual] US warmed: ${d.length}`); })
+    .catch(e => console.warn('[unusual] US warm failed:', e.message));
   fetchSectorRotation()
     .then(d => { sectorCache.data = d; sectorCache.ts = Date.now(); console.log(`[sector] warmed: ${d.length}`); })
     .catch(e => console.warn('[sector] warm failed:', e.message));
