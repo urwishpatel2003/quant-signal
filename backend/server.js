@@ -4554,7 +4554,17 @@ app.get('/backtest/results', async (req, res) => {
 // ─── Signal History ──────────────────────────────────────────────────────────
 
 app.post('/signal-history', async (req, res) => {
-  const { userId, ticker, market, signal, confidence, priceAtSignal, priceTarget, stopLoss, timeframe, thesis } = req.body;
+  const {
+    userId, ticker, market, signal, confidence,
+    priceAtSignal, priceTarget, stopLoss, timeframe, thesis,
+    // Options-specific fields
+    signalType,      // 'STOCK' | 'OPTION'
+    optionType,      // 'CALL' | 'PUT'
+    strike,          // strike price
+    expiry,          // expiry date string YYYY-MM-DD
+    entryPremium,    // premium paid per share (mid price)
+    optionSymbol,    // OCC symbol if available
+  } = req.body;
   if (!userId || !ticker || !signal) return res.status(400).json({ error: 'userId, ticker, signal required' });
   try {
     const { data, error } = await supabase.from('signal_history').insert({
@@ -4569,9 +4579,19 @@ app.post('/signal-history', async (req, res) => {
       timeframe:       timeframe    || null,
       thesis:          thesis       || null,
       outcome_result:  'PENDING',
+      // Options fields
+      signal_type:     signalType   || 'STOCK',
+      option_type:     optionType   || null,
+      strike:          strike       || null,
+      expiry:          expiry       || null,
+      entry_premium:   entryPremium || null,
+      option_symbol:   optionSymbol || null,
     }).select('id').single();
     if (error) throw error;
-    console.log('[signal-history] saved:', ticker, signal, confidence + '%');
+    const logLabel = signalType === 'OPTION'
+      ? `${ticker} ${optionType} $${strike} exp:${expiry} @$${entryPremium}`
+      : ticker;
+    console.log('[signal-history] saved:', logLabel, signal, confidence + '%');
     res.json({ id: data.id });
   } catch (e) {
     console.error('[signal-history POST]', e.message);
@@ -4606,6 +4626,27 @@ app.get('/signal-history/:userId', async (req, res) => {
     const highConf     = resolved.filter(s => s.confidence >= 70);
     const highConfWins = highConf.filter(s => s.outcome_result === 'WIN').length;
 
+    // Separate stock vs options stats
+    const stockResolved  = resolved.filter(s => !s.signal_type || s.signal_type === 'STOCK');
+    const optionResolved = resolved.filter(s => s.signal_type === 'OPTION');
+    const optionWins     = optionResolved.filter(s => s.outcome_result === 'WIN').length;
+    const optionAvgPnl   = optionResolved.length
+      ? parseFloat((optionResolved.reduce((s,x) => s + (x.outcome_pct||0), 0) / optionResolved.length).toFixed(1))
+      : null;
+    const optionByType   = { CALL: { wins:0, losses:0, total:0, avgPnl:0 }, PUT: { wins:0, losses:0, total:0, avgPnl:0 } };
+    optionResolved.forEach(s => {
+      const t = s.option_type;
+      if (t && optionByType[t]) {
+        optionByType[t].total++;
+        optionByType[t].avgPnl += (s.outcome_pct || 0);
+        if (s.outcome_result === 'WIN')  optionByType[t].wins++;
+        if (s.outcome_result === 'LOSS') optionByType[t].losses++;
+      }
+    });
+    Object.values(optionByType).forEach(t => {
+      if (t.total) t.avgPnl = parseFloat((t.avgPnl / t.total).toFixed(1));
+    });
+
     res.json({
       signals: data || [],
       stats: {
@@ -4617,6 +4658,21 @@ app.get('/signal-history/:userId', async (req, res) => {
         highConfWinRate: highConf.length ? Math.round(highConfWins/highConf.length*100) : null,
         highConfTotal:   highConf.length,
         pending:         (data||[]).filter(s=>s.outcome_result==='PENDING').length,
+        // Stock-specific
+        stock: {
+          total:   stockResolved.length,
+          wins:    stockResolved.filter(s=>s.outcome_result==='WIN').length,
+          winRate: stockResolved.length ? Math.round(stockResolved.filter(s=>s.outcome_result==='WIN').length/stockResolved.length*100) : null,
+        },
+        // Options-specific
+        options: {
+          total:   optionResolved.length,
+          wins:    optionWins,
+          winRate: optionResolved.length ? Math.round(optionWins/optionResolved.length*100) : null,
+          avgPnl:  optionAvgPnl,
+          byType:  optionByType,
+          pending: (data||[]).filter(s=>s.signal_type==='OPTION'&&s.outcome_result==='PENDING').length,
+        },
       }
     });
   } catch (e) {
@@ -4658,11 +4714,32 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
     for (const sig of toCheck) {
       const cur = prices[sig.ticker];
       if (!cur) continue;
-      const pct = (cur - sig.price_at_signal) / sig.price_at_signal * 100;
-      let result;
-      if (sig.signal==='BUY')  result = pct>2?'WIN':pct<-2?'LOSS':'SCRATCH';
-      if (sig.signal==='SELL') result = pct<-2?'WIN':pct>2?'LOSS':'SCRATCH';
-      if (sig.signal==='HOLD') result = Math.abs(pct)<5?'WIN':'LOSS';
+
+      let pct, result;
+
+      if (sig.signal_type === 'OPTION' && sig.entry_premium && sig.strike && sig.option_type) {
+        // ── Options outcome: calculate actual P&L using intrinsic value ──────
+        // At expiry: intrinsic value = max(0, spot - strike) for CALL
+        //                            = max(0, strike - spot) for PUT
+        // P&L % = (intrinsic_value - entry_premium) / entry_premium * 100
+        const intrinsic = sig.option_type === 'CALL'
+          ? Math.max(0, cur - sig.strike)
+          : Math.max(0, sig.strike - cur);
+        const pnl = intrinsic - sig.entry_premium;
+        pct    = parseFloat((pnl / sig.entry_premium * 100).toFixed(2));
+        // WIN = option profitable (intrinsic > premium paid)
+        // LOSS = option expired worthless or below breakeven
+        // SCRATCH = within 10% of breakeven
+        result = pct > 10 ? 'WIN' : pct < -10 ? 'LOSS' : 'SCRATCH';
+        console.log(`[options outcome] ${sig.ticker} ${sig.option_type} $${sig.strike}: spot=$${cur} intrinsic=$${intrinsic.toFixed(2)} entry=$${sig.entry_premium} pnl=${pct}% → ${result}`);
+      } else {
+        // ── Stock outcome: original logic ─────────────────────────────────────
+        pct = (cur - sig.price_at_signal) / sig.price_at_signal * 100;
+        if (sig.signal==='BUY')  result = pct>2?'WIN':pct<-2?'LOSS':'SCRATCH';
+        if (sig.signal==='SELL') result = pct<-2?'WIN':pct>2?'LOSS':'SCRATCH';
+        if (sig.signal==='HOLD') result = Math.abs(pct)<5?'WIN':'LOSS';
+      }
+
       await supabase.from('signal_history').update({
         outcome_price:      cur,
         outcome_checked_at: new Date().toISOString(),
@@ -4678,6 +4755,58 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
   }
 });
 
+
+
+// ─── Save Options Signal (called from frontend after options analysis) ─────────
+app.post('/signal-history/options', async (req, res) => {
+  const {
+    userId, ticker, recommendation, confidence,
+    livePrice, selectedExpiry,
+    bestCall, bestPut,
+  } = req.body;
+  if (!userId || !ticker || !recommendation) return res.status(400).json({ error: 'missing required fields' });
+
+  const saved = [];
+  try {
+    // Save the recommended direction only (CALL or PUT — not NEUTRAL)
+    const sides = recommendation === 'NEUTRAL' ? [] : [recommendation];
+
+    for (const side of sides) {
+      const contract = side === 'CALL' ? bestCall : bestPut;
+      if (!contract?.strike || !contract?.mid) continue;
+
+      const { data, error } = await supabase.from('signal_history').insert({
+        user_id:         userId,
+        ticker:          ticker.toUpperCase(),
+        market:          'US',
+        signal:          recommendation, // CALL or PUT
+        confidence:      confidence || 0,
+        price_at_signal: livePrice,
+        timeframe:       selectedExpiry, // expiry date as timeframe
+        thesis:          contract.thesis || `${side} on ${ticker} — entry $${contract.mid}`,
+        outcome_result:  'PENDING',
+        // Options fields
+        signal_type:     'OPTION',
+        option_type:     side,
+        strike:          contract.strike,
+        expiry:          selectedExpiry,
+        entry_premium:   contract.mid,
+        option_symbol:   contract.symbol || null,
+        price_target:    contract.mid * 2, // 2x premium as target
+        stop_loss:       contract.mid * 0.5, // 50% stop
+      }).select('id').single();
+
+      if (error) throw error;
+      saved.push({ side, id: data.id, strike: contract.strike, premium: contract.mid });
+      console.log(`[options-history] saved ${ticker} ${side} $${contract.strike} exp:${selectedExpiry} @$${contract.mid}`);
+    }
+
+    res.json({ saved });
+  } catch (e) {
+    console.error('[options-history POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ─── Automated Batch Signal Engine ───────────────────────────────────────────
 // Runs every Sunday night for US, Monday morning IST for India

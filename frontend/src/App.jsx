@@ -160,7 +160,7 @@ export default function App() {
             <span style={{ color: '#00ff88' }}>AI</span>
             <span style={{ color: '#ffaa00' }}>nt Signal</span>
           </div>
-          <div style={{ fontSize: 9, color: '#445566', letterSpacing: '0.15em', fontWeight: 600, flexShrink: 0 }}>
+          <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', letterSpacing: '0.15em', fontWeight: 600, flexShrink: 0 }}>
             AI-POWERED MARKET INTELLIGENCE
           </div>
         </div>
@@ -192,7 +192,7 @@ export default function App() {
             <SignedOut>
               <SignInButton mode="modal">
                 <button className="btn-sm"
-                  style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap', fontSize: 10, padding: '3px 8px' }}>
+                  style={{ color: '#ffaa00', borderColor: '#ffaa0044', whiteSpace: 'nowrap', fontSize: 'var(--fs-body)', padding: '3px 8px' }}>
                   SIGN IN
                 </button>
               </SignInButton>
@@ -200,7 +200,7 @@ export default function App() {
             <SignedIn>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {user?.firstName && (
-                  <span style={{ fontSize: 10, color: '#b0c0dd', fontWeight: 600, letterSpacing: '0.05em' }}>
+                  <span style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', fontWeight: 600, letterSpacing: '0.05em' }}>
                     {user.firstName.toUpperCase()}
                   </span>
                 )}
@@ -256,7 +256,7 @@ export default function App() {
             {/* Options tab — US only */}
             {market === 'US' && (
               <div style={{ display: activeTab === 'options' ? 'block' : 'none' }}>
-                <OptionsTab macro={macro} initialTicker={optionsTicker} onAddToSim={handleAddToSim} getSimBalance={getSimBalance} />
+                <OptionsTab macro={macro} initialTicker={optionsTicker} onAddToSim={handleAddToSim} getSimBalance={getSimBalance} userId={user?.id} />
               </div>
             )}
 
@@ -315,11 +315,11 @@ export default function App() {
                 <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: '#ffaa00' }}>
                   SIGN IN TO ACCESS
                 </div>
-                <div style={{ fontSize: 14, color: '#b0c0dd', marginBottom: 8 }}>
+                <div style={{ fontSize: 'var(--fs-lg)', color: '#c8d8f0', marginBottom: 8 }}>
                   Create a free account to use QuAInt Signal
                 </div>
                 <SignInButton mode="modal">
-                  <button className="btn" style={{ fontSize: 14, padding: '14px 40px' }}>
+                  <button className="btn" style={{ fontSize: 'var(--fs-lg)', padding: '14px 40px' }}>
                     SIGN IN / CREATE ACCOUNT
                   </button>
                 </SignInButton>
@@ -337,7 +337,7 @@ export default function App() {
         justifyContent: 'space-between',
         flexWrap: 'wrap', gap: 12,
       }}>
-        <div style={{ fontSize: 11, color: '#7788aa' }}>
+        <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0' }}>
           © {new Date().getFullYear()} QuAInt Signal · Built with Claude AI
         </div>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -353,7 +353,7 @@ export default function App() {
               onClick={() => item.key === 'blog' ? setActiveTab('blog') : setModal(item.key)}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                color: '#7788aa', fontSize: 11, fontFamily: 'inherit',
+                color: '#b8c8e0', fontSize: 'var(--fs-lg)', fontFamily: 'inherit',
                 padding: 0, letterSpacing: '0.05em', transition: 'color 0.15s',
               }}
               onMouseEnter={e => e.currentTarget.style.color = '#ffaa00'}
@@ -362,7 +362,7 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div style={{ fontSize: 10, color: '#445' }}>
+        <div style={{ fontSize: 'var(--fs-body)', color: '#445' }}>
           ⚠ Not financial advice · Trading involves risk
         </div>
       </div>

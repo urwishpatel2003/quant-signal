@@ -1,5 +1,5 @@
 // src/components/OptionsResults.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SC } from '../utils/constants';
 import MiniChart     from './MiniChart';
 import PLSimulator   from './PLSimulator';
@@ -234,7 +234,7 @@ export default function OptionsResults({
   ticker, livePrice, changePct, ohlcv,
   priceSignal, optionsSignal, chain,
   ta, macro, selectedExpiry, termStructure,
-  onBack, onAddToSim, getSimBalance,
+  onBack, onAddToSim, getSimBalance, userId,
 }) {
   const [showSimModal,      setShowSimModal]      = useState(null);
   const [simBalance,        setSimBalance]        = useState(null);
@@ -242,6 +242,28 @@ export default function OptionsResults({
   const [showChecklist,     setShowChecklist]     = useState(false);
   const [showPL,            setShowPL]            = useState(false);
   const [selectedContract,  setSelectedContract]  = useState(null); // user-selected strike
+  const [optionSaved,       setOptionSaved]       = useState(false);
+
+  // Auto-save options signal when results load
+  useEffect(() => {
+    if (!userId || !optionsSignal || !ticker || !livePrice || optionSaved) return;
+    if (optionsSignal.recommendation === 'NEUTRAL') return;
+    const BASE = import.meta.env.VITE_API_BASE;
+    fetch(`${BASE}/signal-history/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId, ticker, livePrice, selectedExpiry,
+        recommendation: optionsSignal.recommendation,
+        confidence:     optionsSignal.confidence,
+        bestCall:       optionsSignal.bestCall,
+        bestPut:        optionsSignal.bestPut,
+      }),
+    })
+    .then(r => r.json())
+    .then(d => { if (d.saved?.length) { setOptionSaved(true); console.log('[options] signal saved:', d.saved); } })
+    .catch(() => {});
+  }, [userId, optionsSignal, ticker, livePrice, selectedExpiry, optionSaved]);
 
   const recommendation = optionsSignal.recommendation || 'CALL';
   const isNeutral      = recommendation === 'NEUTRAL';

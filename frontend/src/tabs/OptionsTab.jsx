@@ -10,7 +10,7 @@ import UsageBadge     from '../components/UsageBadge';
 import UpgradeModal   from '../components/UpgradeModal';
 import OptionsResults from '../components/OptionsResults';
 
-export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBalance }) {
+export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBalance, userId }) {
   const [inputVal,       setInputVal]       = useState(initialTicker || '');
   const [ticker,         setTicker]         = useState('');
   const [companyName,    setCompanyName]    = useState('');
@@ -177,6 +177,7 @@ export default function OptionsTab({ macro, initialTicker, onAddToSim, getSimBal
           optionsSignal={optionsSignal}
           chain={chain}
           termStructure={termStructure}
+          userId={userId}
           ta={ta}
           macro={macro}
           selectedExpiry={selectedExpiry}
