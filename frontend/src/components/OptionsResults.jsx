@@ -30,16 +30,16 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 4 }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 4 }}>
             {label}
           </div>
           {!isOpen && (
-            <div style={{ fontSize: 11, color: '#7788aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {preview}
             </div>
           )}
         </div>
-        <div style={{ fontSize: 14, color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 12, flexShrink: 0 }}>
+        <div style={{ fontSize: 'var(--fs-lg)', color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 12, flexShrink: 0 }}>
           {isOpen ? '▲' : '▼'}
         </div>
       </div>
@@ -47,22 +47,6 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
         <div style={{ padding: '0 16px 20px', borderTop: '1px solid #1e1e30' }}>
           {children}
         </div>
-      )}
-      {/* Options Sim Modal */}
-      {showSimModal && (
-        <OptionsSimModal
-          ticker={ticker}
-          side={showSimModal}
-          contract={showSimModal === 'CALL' ? optionsSignal.bestCall : optionsSignal.bestPut}
-          livePrice={livePrice}
-          availableBalance={simBalance}
-          onConfirm={async (pos) => {
-            await onAddToSim(pos);
-            setSimAdded(prev => ({ ...prev, [showSimModal]: true }));
-            setShowSimModal(null);
-          }}
-          onClose={() => setShowSimModal(null)}
-        />
       )}
     </div>
   );
@@ -108,8 +92,8 @@ export default function OptionsResults({
           onClick={onBack}
           style={{
             background: 'none', border: '1px solid #2a2a40',
-            color: '#b0c0dd', cursor: 'pointer', borderRadius: 4,
-            padding: '8px 14px', fontSize: 12, fontFamily: 'inherit',
+            color: '#c8d8f0', cursor: 'pointer', borderRadius: 4,
+            padding: '8px 14px', fontSize: 'var(--fs-md)', fontFamily: 'inherit',
             letterSpacing: '0.1em', transition: 'all 0.15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = '#ffaa0066'; e.currentTarget.style.color = '#ffaa00'; }}
@@ -130,7 +114,7 @@ export default function OptionsResults({
                     border: `1px solid ${added ? '#00ff8844' : side === 'CALL' ? '#00ff8844' : '#ff444444'}`,
                     background: added ? '#00ff8811' : side === 'CALL' ? '#00ff8811' : '#ff444411',
                     color: added ? '#00ff88' : side === 'CALL' ? '#00ff88' : '#ff4444',
-                    fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                    fontFamily: 'inherit', fontSize: 'var(--fs-lg)', fontWeight: 700,
                     letterSpacing: '0.08em', opacity: !canSim ? 0.5 : 1,
                   }}>
                   {added ? `✓ ${side}` : `📊 SIM ${side}`}
@@ -151,13 +135,13 @@ export default function OptionsResults({
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, lineHeight: 1, color: '#fff' }}>
             {ticker}
           </div>
-          <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', letterSpacing: '0.1em', marginTop: 2 }}>
             {selectedExpiry}
           </div>
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 600, color: '#fff' }}>${livePrice?.toFixed(2)}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: changePct !== null && changePct >= 0 ? '#00ff88' : '#ff4444' }}>
+          <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600, color: changePct !== null && changePct >= 0 ? '#00ff88' : '#ff4444' }}>
             {changePct !== null ? `${changePct >= 0 ? '▲' : '▼'} ${Math.abs(changePct).toFixed(2)}%` : '—'}
           </div>
         </div>
@@ -185,7 +169,7 @@ export default function OptionsResults({
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(32px,7vw,52px)', color: recColor, lineHeight: 1 }}>
               {optionsSignal.recommendation === 'NEUTRAL' ? 'STAY NEUTRAL' : `LONG ${optionsSignal.recommendation}S`}
             </div>
-            <div style={{ fontSize: 13, color: '#b0c0dd', marginTop: 10 }}>CONFIDENCE</div>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', marginTop: 10 }}>CONFIDENCE</div>
             <div style={{ fontSize: 32, fontWeight: 700, color: recColor }}>{optionsSignal.confidence}%</div>
             <div style={{ background: '#1a1a2e', borderRadius: 2, height: 5, margin: '10px auto 0', maxWidth: 260, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${optionsSignal.confidence}%`, background: recColor, borderRadius: 2 }} />
@@ -193,16 +177,16 @@ export default function OptionsResults({
           </div>
 
           {/* Reasoning */}
-          <div style={{ fontSize: 13, color: '#d0d8f0', lineHeight: 1.8 }}>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#d0d8f0', lineHeight: 1.8 }}>
             {optionsSignal.reasoning}
           </div>
           {optionsSignal.macroSetup && (
-            <div style={{ fontSize: 12, color: '#ffaa0099', borderLeft: '2px solid #ffaa0033', paddingLeft: 12, fontStyle: 'italic' }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#ffaa0099', borderLeft: '2px solid #ffaa0033', paddingLeft: 12, fontStyle: 'italic' }}>
               📊 {optionsSignal.macroSetup}
             </div>
           )}
           {optionsSignal.calendarWarning && (
-            <div style={{ fontSize: 12, color: '#ff884488', borderLeft: '2px solid #ff884433', paddingLeft: 12 }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#ff884488', borderLeft: '2px solid #ff884433', paddingLeft: 12 }}>
               📅 {optionsSignal.calendarWarning}
             </div>
           )}
@@ -210,14 +194,14 @@ export default function OptionsResults({
           {/* IV */}
           <div style={{ background: '#070710', padding: '12px 14px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 14 }}>
             <div>
-              <div style={{ fontSize: 9, color: '#8899bb', marginBottom: 4 }}>IV ENVIRONMENT</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: ivColor }}>{optionsSignal.ivRank} IV</div>
+              <div style={{ fontSize: 'var(--fs-md)', color: '#8899bb', marginBottom: 4 }}>IV ENVIRONMENT</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: ivColor }}>{optionsSignal.ivRank} IV</div>
             </div>
-            <div style={{ fontSize: 12, color: '#aabbcc', flex: 1, lineHeight: 1.6 }}>{optionsSignal.ivComment}</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#99aacc', flex: 1, lineHeight: 1.6 }}>{optionsSignal.ivComment}</div>
           </div>
 
           {optionsSignal.positionSizing && (
-            <div style={{ background: '#070710', padding: '12px 14px', fontSize: 12, color: '#8899aa', borderLeft: '3px solid #ffaa0044', borderRadius: 2 }}>
+            <div style={{ background: '#070710', padding: '12px 14px', fontSize: 'var(--fs-md)', color: '#99aacc', borderLeft: '3px solid #ffaa0044', borderRadius: 2 }}>
               💰 {optionsSignal.positionSizing}
             </div>
           )}
@@ -258,7 +242,7 @@ export default function OptionsResults({
             {ta && <TechnicalPanel ta={ta} />}
             {priceSignal && (
               <div className="card" style={{ borderColor: SC[priceSignal.signal] + '33' }}>
-                <div style={{ fontSize: 10, color: '#8899bb', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
+                <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', letterSpacing: '0.15em', marginBottom: 10 }}>UNDERLYING SIGNAL</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   {[
                     ['SIGNAL',   priceSignal.signal,                        SC[priceSignal.signal]],
@@ -269,8 +253,8 @@ export default function OptionsResults({
                     ['GEO RISK', priceSignal.geopoliticalRisk,              RC[priceSignal.geopoliticalRisk]],
                   ].map(([l, v, c]) => (
                     <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 8, color: '#8899bb', marginBottom: 2 }}>{l}</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
+                      <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', marginBottom: 2 }}>{l}</div>
+                      <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 600, color: c }}>{v}</div>
                     </div>
                   ))}
                 </div>
@@ -283,17 +267,17 @@ export default function OptionsResults({
                       ['GLOBAL', priceSignal.globalMarketTrend, GC[priceSignal.globalMarketTrend]],
                     ].map(([l, v, c]) => (
                       <div key={l} style={{ background: '#070710', padding: '6px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 8, color: '#8899bb', marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{v}</div>
+                        <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', marginBottom: 2 }}>{l}</div>
+                        <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 600, color: c }}>{v}</div>
                       </div>
                     ))}
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: '#aabbcc', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 'var(--fs-body)', color: '#99aacc', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
                   {priceSignal.thesis}
                 </div>
                 {priceSignal.bondSignal && (
-                  <div style={{ fontSize: 10, color: '#ffaa0077', marginTop: 6, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>
+                  <div style={{ fontSize: 'var(--fs-body)', color: '#ffaa0077', marginTop: 6, borderLeft: '2px solid #ffaa0033', paddingLeft: 8 }}>
                     📊 {priceSignal.bondSignal}
                   </div>
                 )}
@@ -304,37 +288,37 @@ export default function OptionsResults({
           {/* Catalysts / Risks / Macro */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
             <div className="card">
-              <div style={{ fontSize: 10, color: '#ffaa0066', marginBottom: 8, fontWeight: 700 }}>⚡ CATALYSTS</div>
+              <div style={{ fontSize: 'var(--fs-body)', color: '#ffaa0066', marginBottom: 8, fontWeight: 700 }}>⚡ CATALYSTS</div>
               {optionsSignal.catalysts?.map((c, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: i < optionsSignal.catalysts.length - 1 ? '1px solid #1a1a26' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
+                <div key={i} style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', borderBottom: i < optionsSignal.catalysts.length - 1 ? '1px solid #1a1a26' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
                   <span style={{ color: '#ffaa00', flexShrink: 0 }}>→</span>{c}
                 </div>
               ))}
             </div>
             <div className="card">
-              <div style={{ fontSize: 10, color: '#ff444466', marginBottom: 8, fontWeight: 700 }}>⚠ KEY RISKS</div>
+              <div style={{ fontSize: 'var(--fs-body)', color: '#ff444466', marginBottom: 8, fontWeight: 700 }}>⚠ KEY RISKS</div>
               {optionsSignal.keyRisks?.map((r, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: i < optionsSignal.keyRisks.length - 1 ? '1px solid #1a0f0f' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
+                <div key={i} style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', borderBottom: i < optionsSignal.keyRisks.length - 1 ? '1px solid #1a0f0f' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
                   <span style={{ color: '#ff4444', flexShrink: 0 }}>!</span>{r}
                 </div>
               ))}
             </div>
             <div className="card">
-              <div style={{ fontSize: 10, color: '#ff884466', marginBottom: 8, fontWeight: 700 }}>🌍 MACRO RISKS</div>
+              <div style={{ fontSize: 'var(--fs-body)', color: '#ff884466', marginBottom: 8, fontWeight: 700 }}>🌍 MACRO RISKS</div>
               {optionsSignal.macroRisks?.map((r, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', borderBottom: i < optionsSignal.macroRisks.length - 1 ? '1px solid #1a1008' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
+                <div key={i} style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', borderBottom: i < optionsSignal.macroRisks.length - 1 ? '1px solid #1a1008' : 'none', display: 'flex', gap: 6, lineHeight: 1.5 }}>
                   <span style={{ color: '#ff8844', flexShrink: 0 }}>⊕</span>{r}
                 </div>
               ))}
               {optionsSignal.globalMarketRisk && (
-                <div style={{ fontSize: 12, color: '#8899aa', padding: '5px 0', display: 'flex', gap: 6 }}>
+                <div style={{ fontSize: 'var(--fs-md)', color: '#99aacc', padding: '5px 0', display: 'flex', gap: 6 }}>
                   <span style={{ color: '#ff8844', flexShrink: 0 }}>🌍</span>{optionsSignal.globalMarketRisk}
                 </div>
               )}
             </div>
           </div>
 
-          <div style={{ fontSize: 11, color: '#333', textAlign: 'center' }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: '#333', textAlign: 'center' }}>
             ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK.
           </div>
         </div>
@@ -419,7 +403,7 @@ function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, 
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color, marginBottom: 4 }}>
           SIMULATE {side} OPTION
         </div>
-        <div style={{ fontSize: 12, color: '#556677', marginBottom: 20 }}>
+        <div style={{ fontSize: 'var(--fs-md)', color: '#8899bb', marginBottom: 20 }}>
           Virtual paper trade · Long {side.toLowerCase()} on {ticker}
         </div>
 
@@ -429,27 +413,27 @@ function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, 
             { label: 'EXPIRY',  value: expiry,                    color: '#e8e8f0' },
             { label: 'PREMIUM', value: `$${premium.toFixed(2)}/sh`, color },
             { label: 'TYPE',    value: `${isCall ? '↑' : '↓'} ${side}`, color },
-            { label: 'DELTA',   value: delta || '—',              color: '#7788aa' },
+            { label: 'DELTA',   value: delta || '—',              color: '#b8c8e0' },
             { label: 'IV',      value: iv ? `${iv}%` : '—',      color: '#ffaa00' },
           ].map(({ label, value, color: c }) => (
             <div key={label} style={{ background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 6, padding: '8px 10px' }}>
-              <div style={{ fontSize: 9, color: '#445', marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{value}</div>
+              <div style={{ fontSize: 'var(--fs-md)', color: '#445', marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: c }}>{value}</div>
             </div>
           ))}
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>NUMBER OF CONTRACTS</div>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>NUMBER OF CONTRACTS</div>
           <input type="number" min="1" step="1" value={contracts}
             onChange={e => setContracts(e.target.value)}
             style={{
               width: '100%', boxSizing: 'border-box',
               background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6,
-              color: '#e8e8f0', fontSize: 18, fontWeight: 700, fontFamily: 'inherit',
+              color: '#e8e8f0', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
               padding: '10px 14px', textAlign: 'right',
             }} />
-          <div style={{ fontSize: 10, color: '#556677', marginTop: 4 }}>1 contract = 100 shares</div>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', marginTop: 4 }}>1 contract = 100 shares</div>
         </div>
 
         <div style={{ background: '#0a0a14', borderRadius: 6, padding: '12px 14px', marginBottom: 16 }}>
@@ -461,18 +445,18 @@ function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, 
             { label: 'Available balance',      value: `$${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
           ].map(({ label, value, bold, color: c }) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 11, color: '#556677' }}>{label}</span>
+              <span style={{ fontSize: 'var(--fs-lg)', color: '#8899bb' }}>{label}</span>
               {value && <span style={{ fontSize: bold ? 13 : 11, fontWeight: bold ? 700 : 400, color: c || '#7788aa' }}>{value}</span>}
             </div>
           ))}
         </div>
 
         {exceedsBalance && (
-          <div style={{ fontSize: 11, color: '#ff4444', background: '#ff444411',
+          <div style={{ fontSize: 'var(--fs-lg)', color: '#ff4444', background: '#ff444411',
             border: '1px solid #ff444433', borderRadius: 5, padding: '6px 10px', marginBottom: 12 }}>
             ⚠ Exceeds balance — max {maxContracts} contract{maxContracts !== 1 ? 's' : ''}
             <button onClick={() => setContracts(String(maxContracts))} style={{
-              marginLeft: 8, fontSize: 10, cursor: 'pointer', background: 'none',
+              marginLeft: 8, fontSize: 'var(--fs-body)', cursor: 'pointer', background: 'none',
               border: '1px solid #ff444466', color: '#ff4444', borderRadius: 3,
               padding: '1px 6px', fontFamily: 'inherit',
             }}>USE MAX</button>
@@ -480,7 +464,7 @@ function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, 
         )}
 
         {error && (
-          <div style={{ fontSize: 12, color: '#ff4444', background: '#ff444411',
+          <div style={{ fontSize: 'var(--fs-md)', color: '#ff4444', background: '#ff444411',
             border: '1px solid #ff444433', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
             {error}
           </div>
@@ -489,13 +473,13 @@ function OptionsSimModal({ ticker, side, contract, livePrice, availableBalance, 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{
             flex: 1, padding: '12px', borderRadius: 6, cursor: 'pointer',
-            background: 'none', border: '1px solid #2a2a3e', color: '#556677',
-            fontFamily: 'inherit', fontSize: 13,
+            background: 'none', border: '1px solid #2a2a3e', color: '#8899bb',
+            fontFamily: 'inherit', fontSize: 'var(--fs-body)',
           }}>CANCEL</button>
           <button onClick={confirm} disabled={loading || exceedsBalance || numContracts < 1} style={{
             flex: 2, padding: '12px', borderRadius: 6, cursor: 'pointer',
             background: `${color}22`, border: `1px solid ${color}`,
-            color, fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+            color, fontFamily: 'inherit', fontSize: 'var(--fs-body)', fontWeight: 700,
             letterSpacing: '0.08em', opacity: loading ? 0.6 : 1,
           }}>
             {loading ? 'ADDING...' : `BUY ${numContracts} ${side} CONTRACT${numContracts > 1 ? 'S' : ''}`}
