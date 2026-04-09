@@ -31,7 +31,7 @@ const MONEYNESS_DESC  = {
 };
 
 // ── Strike Row ────────────────────────────────────────────────────────────────
-function StrikeRow({ contract, type, recommended, onSimulate, simAdded, canSim }) {
+function StrikeRow({ contract, type, recommended, selected, onSimulate, simAdded, canSim }) {
   const moneyness = classifyStrike(contract.delta, type);
   const mColor    = MONEYNESS_COLOR[moneyness];
   const isRec     = recommended;
@@ -40,12 +40,20 @@ function StrikeRow({ contract, type, recommended, onSimulate, simAdded, canSim }
   return (
     <div style={{
       background:   isRec ? (type === 'CALL' ? '#00ff8808' : '#ff444408') : '#0c0c18',
-      border:       `1px solid ${isRec ? (type === 'CALL' ? '#00ff8844' : '#ff444444') : '#1a1a2e'}`,
+      border:       `1px solid ${selected ? '#ffaa0066' : isRec ? (type === 'CALL' ? '#00ff8844' : '#ff444444') : '#1a1a2e'}`,
       borderLeft:   `3px solid ${mColor}`,
       borderRadius: 6, padding: '14px 16px',
       position:     'relative',
     }}>
-      {/* Recommended badge */}
+      {/* Selected / Recommended badge */}
+      {selected && !isRec && (
+        <div style={{
+          position: 'absolute', top: -1, right: 12,
+          background: '#ffaa00', color: '#08080f',
+          fontSize: 'var(--fs-xs)', fontWeight: 700,
+          padding: '2px 8px', borderRadius: '0 0 4px 4px', letterSpacing: '.08em',
+        }}>SELECTED</div>
+      )}
       {isRec && (
         <div style={{
           position: 'absolute', top: -1, right: 12,
@@ -228,11 +236,12 @@ export default function OptionsResults({
   ta, macro, selectedExpiry, termStructure,
   onBack, onAddToSim, getSimBalance,
 }) {
-  const [showSimModal,  setShowSimModal]  = useState(null);
-  const [simBalance,    setSimBalance]    = useState(null);
-  const [simAdded,      setSimAdded]      = useState({});
-  const [showChecklist, setShowChecklist] = useState(false);
-  const [showPL,        setShowPL]        = useState(false);
+  const [showSimModal,      setShowSimModal]      = useState(null);
+  const [simBalance,        setSimBalance]        = useState(null);
+  const [simAdded,          setSimAdded]          = useState({});
+  const [showChecklist,     setShowChecklist]     = useState(false);
+  const [showPL,            setShowPL]            = useState(false);
+  const [selectedContract,  setSelectedContract]  = useState(null); // user-selected strike
 
   const recommendation = optionsSignal.recommendation || 'CALL';
   const isNeutral      = recommendation === 'NEUTRAL';
@@ -461,16 +470,25 @@ export default function OptionsResults({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {displayContracts.map(contract => (
-              <StrikeRow
-                key={contract.strike}
-                contract={contract}
-                type={recommendation}
-                recommended={contract.strike === recommendedStrike}
-                onSimulate={onAddToSim ? () => openSim(contract) : null}
-                simAdded={simAdded[contract.strike]}
-                canSim={canSim(optionsSignal.confidence)}
-              />
+              <div key={contract.strike}
+                onClick={() => setSelectedContract(contract)}
+                style={{ cursor: 'pointer' }}>
+                <StrikeRow
+                  contract={contract}
+                  type={recommendation}
+                  recommended={contract.strike === recommendedStrike}
+                  selected={selectedContract?.strike === contract.strike}
+                  onSimulate={onAddToSim ? () => openSim(contract) : null}
+                  simAdded={simAdded[contract.strike]}
+                  canSim={canSim(optionsSignal.confidence)}
+                />
+              </div>
             ))}
+            {selectedContract && (
+              <div style={{ fontSize: 'var(--fs-xs)', color: '#ffaa0099', textAlign: 'center', paddingTop: 4 }}>
+                ★ ${selectedContract.strike} selected — P&L simulator and checklist will use this contract
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -519,12 +537,24 @@ export default function OptionsResults({
           {showPL ? '▲' : '▼'} P&L SIMULATOR
         </button>
       </div>
-      {showChecklist && (
-        <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={{ ...optionsSignal, recommendation: activeSide || 'CALL' }} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />
-      )}
-      {showPL && aiRec && (
-        <PLSimulator optionsSignal={{ ...optionsSignal, ticker, recommendation: activeSide || 'CALL' }} livePrice={livePrice} />
-      )}
+      {showChecklist && (() => {
+        const sig = { ...optionsSignal, recommendation: activeSide || 'CALL' };
+        return <TradeChecklist ta={ta} priceSignal={priceSignal} optionsSignal={sig} calendar={macro?.calendar} selectedExpiry={selectedExpiry} />;
+      })()}
+      {showPL && (() => {
+        const activeContract = selectedContract || aiRec;
+        // Override bestCall/bestPut with the selected contract so PLSimulator uses correct strike/premium
+        const simSignal = {
+          ...optionsSignal,
+          ticker,
+          recommendation: activeSide || 'CALL',
+          ...(activeSide === 'CALL' || activeSide == null
+            ? { bestCall: activeContract ? { ...optionsSignal.bestCall, ...activeContract, expiry: selectedExpiry } : optionsSignal.bestCall }
+            : { bestPut:  activeContract ? { ...optionsSignal.bestPut,  ...activeContract, expiry: selectedExpiry } : optionsSignal.bestPut  }
+          ),
+        };
+        return <PLSimulator optionsSignal={simSignal} livePrice={livePrice} />;
+      })()}
 
       <div style={{ fontSize: 'var(--fs-xs)', color: '#334455', textAlign: 'center', paddingTop: 4 }}>
         ⚠ NOT FINANCIAL ADVICE. OPTIONS INVOLVE SIGNIFICANT RISK OF LOSS.
