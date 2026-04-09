@@ -39,14 +39,14 @@ export function SignalCard({ data, compact = false }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: compact ? 10 : 11, color: '#556677', letterSpacing: '0.15em', marginBottom: 4 }}>
+          <div style={{ fontSize: compact ? 10 : 11, color: '#8899bb', letterSpacing: '0.15em', marginBottom: 4 }}>
             QUAINT SIGNAL · AI ANALYSIS
           </div>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: compact ? 28 : 36, color: '#fff', lineHeight: 1, letterSpacing: '0.04em' }}>
             {ticker}
           </div>
           {companyName && (
-            <div style={{ fontSize: compact ? 10 : 11, color: '#7788aa', marginTop: 3 }}>{companyName}</div>
+            <div style={{ fontSize: compact ? 10 : 11, color: '#b8c8e0', marginTop: 3 }}>{companyName}</div>
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -82,7 +82,7 @@ export function SignalCard({ data, compact = false }) {
             flex: 1, background: '#0a0a14', border: '1px solid #2a2a3e',
             borderRadius: 6, padding: compact ? '7px 8px' : '10px 12px', textAlign: 'center',
           }}>
-            <div style={{ fontSize: 8, color: '#445', letterSpacing: '0.12em', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 'var(--fs-xs)', color: '#445', letterSpacing: '0.12em', marginBottom: 4 }}>{label}</div>
             <div style={{ fontSize: compact ? 12 : 14, fontWeight: 700, color }}>{value}</div>
           </div>
         ))}
@@ -93,7 +93,7 @@ export function SignalCard({ data, compact = false }) {
         <div style={{
           background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 6,
           padding: compact ? '10px 12px' : '14px 16px', marginBottom: 14,
-          fontSize: compact ? 11 : 12, color: '#b0c0dd', lineHeight: 1.6,
+          fontSize: compact ? 11 : 12, color: '#c8d8f0', lineHeight: 1.6,
           fontFamily: 'system-ui, sans-serif',
         }}>
           "{thesis.slice(0, 160)}{thesis.length > 160 ? '...' : ''}"
@@ -106,10 +106,10 @@ export function SignalCard({ data, compact = false }) {
           { label: tfLabel,                  color: '#4488ff' },
           { label: riskLevel ? `${riskLevel} RISK` : null, color: riskColor },
           { label: macroImpact,              color: macroImpact === 'BULLISH' ? '#00ff88' : macroImpact === 'BEARISH' ? '#ff4444' : '#ffaa00' },
-          { label: market === 'INDIA' ? '🇮🇳 NSE' : '🇺🇸 NYSE', color: '#7788aa' },
+          { label: market === 'INDIA' ? '🇮🇳 NSE' : '🇺🇸 NYSE', color: '#b8c8e0' },
         ].filter(t => t.label).map(({ label, color }) => (
           <span key={label} style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+            fontSize: 'var(--fs-md)', fontWeight: 700, letterSpacing: '0.1em',
             padding: '3px 8px', borderRadius: 3,
             background: `${color}15`, border: `1px solid ${color}33`, color,
           }}>{label}</span>
@@ -121,8 +121,8 @@ export function SignalCard({ data, compact = false }) {
         <div style={{ marginBottom: 16 }}>
           {bullFactors.slice(0, 2).map((f, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 4 }}>
-              <span style={{ color: '#00ff8866', fontSize: 11, flexShrink: 0 }}>▲</span>
-              <span style={{ fontSize: 10, color: '#7788aa', fontFamily: 'system-ui, sans-serif', lineHeight: 1.4 }}>{f}</span>
+              <span style={{ color: '#00ff8866', fontSize: 'var(--fs-lg)', flexShrink: 0 }}>▲</span>
+              <span style={{ fontSize: 'var(--fs-body)', color: '#b8c8e0', fontFamily: 'system-ui, sans-serif', lineHeight: 1.4 }}>{f}</span>
             </div>
           ))}
         </div>
@@ -133,10 +133,10 @@ export function SignalCard({ data, compact = false }) {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         borderTop: '1px solid #1a1a2e', paddingTop: 12, marginTop: 4,
       }}>
-        <div style={{ fontSize: 9, color: '#2a2a3e', letterSpacing: '0.1em' }}>
+        <div style={{ fontSize: 'var(--fs-md)', color: '#2a2a3e', letterSpacing: '0.1em' }}>
           quaint-signal.tech · {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </div>
-        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: '#ff9a0055', letterSpacing: '0.1em' }}>
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'var(--fs-lg)', color: '#ff9a0055', letterSpacing: '0.1em' }}>
           QUAINT SIGNAL
         </div>
       </div>
@@ -190,12 +190,12 @@ export function SimulatorCard({ data, compact = false }) {
 
       {/* Header */}
       <div style={{ marginBottom: 6 }}>
-        <div style={{ fontSize: compact ? 10 : 11, color: '#556677', letterSpacing: '0.15em', marginBottom: 6 }}>
+        <div style={{ fontSize: compact ? 10 : 11, color: '#8899bb', letterSpacing: '0.15em', marginBottom: 6 }}>
           QUAINT SIGNAL · PAPER TRADING SIMULATOR
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: compact ? 18 : 22, color: '#7788aa', letterSpacing: '0.08em' }}>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: compact ? 18 : 22, color: '#b8c8e0', letterSpacing: '0.08em' }}>
               {fmtAmt(startingBalance)} → {fmtAmt(currentEquity)}
             </div>
           </div>
@@ -218,7 +218,7 @@ export function SimulatorCard({ data, compact = false }) {
       <div style={{ height: 1, background: '#1a1a2e', margin: '16px 0' }} />
 
       {/* Stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'WIN RATE',    value: winRate != null ? `${winRate}%` : '—', color: winRate >= 50 ? '#00ff88' : '#ff4444' },
           { label: 'TOTAL TRADES', value: totalTrades || 0,   color: '#e8e8f0' },
@@ -229,7 +229,7 @@ export function SimulatorCard({ data, compact = false }) {
             background: '#0a0a14', border: '1px solid #2a2a3e',
             borderRadius: 6, padding: compact ? '8px' : '10px 12px', textAlign: 'center',
           }}>
-            <div style={{ fontSize: 8, color: '#445', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 'var(--fs-xs)', color: '#445', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
             <div style={{ fontSize: compact ? 16 : 20, fontWeight: 700, color, fontFamily: "'Bebas Neue', sans-serif" }}>{value}</div>
           </div>
         ))}
@@ -243,8 +243,8 @@ export function SimulatorCard({ data, compact = false }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <div>
-            <div style={{ fontSize: 9, color: '#ffaa0077', letterSpacing: '0.1em' }}>75%+ CONFIDENCE SIGNALS</div>
-            <div style={{ fontSize: 10, color: '#7788aa', marginTop: 2 }}>{highConfCount} trades tracked</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#ffaa0077', letterSpacing: '0.1em' }}>75%+ CONFIDENCE SIGNALS</div>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#b8c8e0', marginTop: 2 }}>{highConfCount} trades tracked</div>
           </div>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: compact ? 26 : 32, color: '#ffaa00' }}>
             {highConfRate}% WIN
@@ -255,17 +255,17 @@ export function SimulatorCard({ data, compact = false }) {
       {/* Top trades */}
       {topTrades.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>TOP TRADES</div>
+          <div style={{ fontSize: 'var(--fs-md)', color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>TOP TRADES</div>
           {topTrades.slice(0, 3).map((t, i) => (
             <div key={i} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '5px 0', borderBottom: i < 2 ? '1px solid #1a1a2e' : 'none',
             }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: '#e8e8f0' }}>{t.ticker}</span>
-                <span style={{ fontSize: 9, color: t.direction === 'LONG' ? '#00ff8866' : '#ff444466' }}>{t.direction}</span>
+                <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'var(--fs-lg)', color: '#e8e8f0' }}>{t.ticker}</span>
+                <span style={{ fontSize: 'var(--fs-md)', color: t.direction === 'LONG' ? '#00ff8866' : '#ff444466' }}>{t.direction}</span>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: t.realized_pct >= 0 ? '#00ff88' : '#ff4444' }}>
+              <span style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: t.realized_pct >= 0 ? '#00ff88' : '#ff4444' }}>
                 {t.realized_pct >= 0 ? '+' : ''}{t.realized_pct?.toFixed(1)}%
               </span>
             </div>
@@ -278,10 +278,10 @@ export function SimulatorCard({ data, compact = false }) {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         borderTop: '1px solid #1a1a2e', paddingTop: 12, marginTop: 4,
       }}>
-        <div style={{ fontSize: 9, color: '#2a2a3e', letterSpacing: '0.1em' }}>
+        <div style={{ fontSize: 'var(--fs-md)', color: '#2a2a3e', letterSpacing: '0.1em' }}>
           quaint-signal.tech · {isInr ? '🇮🇳 NSE' : '🇺🇸 NYSE'} · {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </div>
-        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: '#ff9a0055', letterSpacing: '0.1em' }}>
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'var(--fs-lg)', color: '#ff9a0055', letterSpacing: '0.1em' }}>
           QUAINT SIGNAL
         </div>
       </div>

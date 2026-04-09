@@ -1,11 +1,55 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
+/* ── Design Tokens — font size scale ────────────────────────────────────────
+   All body/label text uses these variables.
+   Change the values per breakpoint — everything updates automatically.
+   
+   Usage in JSX:  style={{ fontSize: 'var(--fs-sm)' }}
+   
+   Scale:
+     --fs-xs   tiny labels, badges           8px  → 11px desktop
+     --fs-sm   secondary labels              10px → 13px desktop  
+     --fs-md   body text, table rows         12px → 15px desktop
+     --fs-body primary readable text         13px → 16px desktop
+     --fs-lg   emphasized / card titles      14px → 17px desktop
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --fs-xs:   9px;
+  --fs-sm:   11px;
+  --fs-md:   12px;
+  --fs-body: 13px;
+  --fs-lg:   14px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --fs-xs:   11px;
+    --fs-sm:   13px;
+    --fs-md:   15px;
+    --fs-body: 16px;
+    --fs-lg:   17px;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --fs-xs:   12px;
+    --fs-sm:   14px;
+    --fs-md:   16px;
+    --fs-body: 17px;
+    --fs-lg:   18px;
+  }
+}
+
+
 /* ── Base ── */
-html { font-size: 16px; }
+html { font-size: 16px; overflow-x: hidden; }
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
+  overflow-x: hidden; /* prevent horizontal scroll causing zoom-out effect */
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   color: #e8e8f0;
@@ -326,6 +370,32 @@ input, select, textarea {
   font-style: italic;
 }
 
+
+/* ── Mobile-responsive inline grid overrides ─────────────────────────────────
+   Add class="mob-stack" to any grid div to make it single column on mobile.
+   Add class="mob-2col" for 2-col on mobile.
+   These work even when the element has inline style gridTemplateColumns.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .mob-stack { grid-template-columns: 1fr !important; }
+  .mob-2col  { grid-template-columns: 1fr 1fr !important; }
+  .mob-scroll { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .mob-hide   { display: none !important; }
+
+  /* Fix the 9-col accuracy table — scroll on mobile */
+  .acc-table  { overflow-x: auto; }
+  .acc-table > div { min-width: 640px; }
+
+  /* Financials panel — scroll on mobile */
+  .fin-table  { overflow-x: auto; }
+  .fin-table > div { min-width: 480px; }
+
+  /* Watchlist item — collapse to 2 cols */
+  .wl-item { grid-template-columns: 1fr 1fr !important; }
+
+  /* Sector rotation bar — tighter on mobile */
+  .sector-row { grid-template-columns: 90px 1fr 60px 70px !important; }
+}
 /* ── DESKTOP ENHANCEMENTS (min-width: 769px) ─────────────────────────────────
    Mobile styles above are completely untouched.
    These rules only activate on laptop and desktop screens.

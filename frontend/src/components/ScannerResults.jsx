@@ -25,16 +25,16 @@ function AccordionCard({ id, activeId, setActiveId, label, preview, children }) 
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 4 }}>
+          <div style={{ fontSize: 'var(--fs-lg)', color: isOpen ? '#ffaa00' : '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 4 }}>
             {label}
           </div>
           {!isOpen && (
-            <div style={{ fontSize: 11, color: '#7788aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {preview}
             </div>
           )}
         </div>
-        <div style={{ fontSize: 14, color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 12, flexShrink: 0 }}>
+        <div style={{ fontSize: 'var(--fs-lg)', color: isOpen ? '#ffaa00' : '#7788aa', marginLeft: 12, flexShrink: 0 }}>
           {isOpen ? '▲' : '▼'}
         </div>
       </div>
@@ -63,7 +63,7 @@ function ActionBtn({ onClick, disabled, color = '#b0c0dd', children, title }) {
         background:    `${color}11`,
         color:         color,
         fontFamily:    'inherit',
-        fontSize:      11,
+        fontSize: 'var(--fs-sm)',
         fontWeight:    700,
         letterSpacing: '0.08em',
         cursor:        disabled ? 'not-allowed' : 'pointer',
@@ -143,7 +143,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             }}>
               ADDED TO SIMULATOR
             </div>
-            <div style={{ fontSize: 13, color: '#7788aa' }}>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#b8c8e0' }}>
               {simToast}
             </div>
           </div>
@@ -156,8 +156,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           onClick={onBack}
           style={{
             background: 'none', border: '1px solid #2a2a40',
-            color: '#b0c0dd', cursor: 'pointer', borderRadius: 4,
-            padding: '8px 14px', fontSize: 12, fontFamily: 'inherit',
+            color: '#c8d8f0', cursor: 'pointer', borderRadius: 4,
+            padding: '8px 14px', fontSize: 'var(--fs-md)', fontFamily: 'inherit',
             letterSpacing: '0.1em', transition: 'all 0.15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = '#ffaa0066'; e.currentTarget.style.color = '#ffaa00'; }}
@@ -261,18 +261,18 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             {scan.ticker}
           </div>
           {companyName && (
-            <div style={{ fontSize: 12, color: '#c8d8f0', fontWeight: 500, marginTop: 2, maxWidth: 220,
+            <div style={{ fontSize: 'var(--fs-md)', color: '#c8d8f0', fontWeight: 500, marginTop: 2, maxWidth: 220,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {companyName}
             </div>
           )}
-          <div style={{ fontSize: 10, color: '#6677aa', letterSpacing: '0.15em', marginTop: 2 }}>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', letterSpacing: '0.15em', marginTop: 2 }}>
             {TIMEFRAMES[scan.timeframe]?.label?.toUpperCase()}
           </div>
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{fmt(livePrice)}</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
+          <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: pct !== null && pct >= 0 ? '#00ff88' : '#ff4444' }}>
             {pct !== null ? `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%` : '—'}
           </div>
         </div>
@@ -295,7 +295,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               ['STOP',   fmt(scan.analysis.stopLoss),    '#ff4444'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ textAlign: 'center', flex: 1, minWidth: 80 }}>
-                <div style={{ fontSize: 10, color: '#b0c0dd', letterSpacing: '0.15em', marginBottom: 6 }}>{l}</div>
+                <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', letterSpacing: '0.15em', marginBottom: 6 }}>{l}</div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: c }}>{v}</div>
               </div>
             ))}
@@ -305,7 +305,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 40, color: sigColor, lineHeight: 1 }}>
               {scan.analysis.signal}
             </div>
-            <div style={{ fontSize: 13, color: '#b0c0dd', marginTop: 6 }}>CONFIDENCE</div>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', marginTop: 6 }}>CONFIDENCE</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: sigColor }}>{scan.analysis.confidence}%</div>
             <div style={{ background: '#1a1a2e', borderRadius: 2, height: 5, margin: '10px auto 0', maxWidth: 260, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${scan.analysis.confidence}%`, background: sigColor, borderRadius: 2 }} />
@@ -320,8 +320,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               ['GEO RISK', scan.analysis.geopoliticalRisk,  scan.analysis.geopoliticalRisk === 'LOW' ? '#00ff88' : scan.analysis.geopoliticalRisk === 'HIGH' ? '#ff4444' : '#ffaa00'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#070710', padding: '8px 10px', textAlign: 'center', borderRadius: 4 }}>
-                <div style={{ fontSize: 9, color: '#b0c0dd', marginBottom: 4, letterSpacing: '0.1em' }}>{l}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{v}</div>
+                <div style={{ fontSize: 'var(--fs-md)', color: '#c8d8f0', marginBottom: 4, letterSpacing: '0.1em' }}>{l}</div>
+                <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: c }}>{v}</div>
               </div>
             ))}
           </div>
@@ -331,10 +331,10 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
             background: '#0a0a14', borderRadius: 4, padding: '12px 14px',
             borderLeft: `3px solid ${sigColor}55`,
           }}>
-            <div style={{ fontSize: 9, color: sigColor, fontWeight: 700, letterSpacing: '0.15em', marginBottom: 6 }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: sigColor, fontWeight: 700, letterSpacing: '0.15em', marginBottom: 6 }}>
               AI THESIS
             </div>
-            <div style={{ fontSize: 12, color: '#d0d8f0', lineHeight: 1.8, fontStyle: 'italic' }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#d0d8f0', lineHeight: 1.8, fontStyle: 'italic' }}>
               {scan.analysis.thesis || scan.analysis.reasoning || '—'}
             </div>
           </div>
@@ -415,12 +415,12 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
 
             return (
               <div style={{
-                fontSize: 12, color: '#b0c8e8', lineHeight: 1.8,
+                fontSize: 'var(--fs-md)', color: '#b0c8e8', lineHeight: 1.8,
                 background: '#070710', borderRadius: 4,
                 padding: '12px 14px',
                 borderLeft: '3px solid #4488ff55',
               }}>
-                <div style={{ fontSize: 9, color: '#4488ff', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 6 }}>
+                <div style={{ fontSize: 'var(--fs-md)', color: '#4488ff', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 6 }}>
                   TECHNICAL READING
                 </div>
                 {narrative}
@@ -430,10 +430,10 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ background: '#070e0a', border: '1px solid #00ff8822', borderRadius: 4, padding: '12px' }}>
-              <div style={{ fontSize: 11, color: '#00ff88', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>▲ BULL FACTORS</div>
+              <div style={{ fontSize: 'var(--fs-lg)', color: '#00ff88', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>▲ BULL FACTORS</div>
               {scan.analysis.bullFactors?.map((f, i) => (
                 <div key={i} style={{
-                  fontSize: 12, color: '#d0d8f0', padding: '6px 0',
+                  fontSize: 'var(--fs-md)', color: '#d0d8f0', padding: '6px 0',
                   borderBottom: i < scan.analysis.bullFactors.length - 1 ? '1px solid #0f1a14' : 'none',
                   display: 'flex', gap: 8, lineHeight: 1.5,
                 }}>
@@ -442,10 +442,10 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               ))}
             </div>
             <div style={{ background: '#0e0707', border: '1px solid #ff444422', borderRadius: 4, padding: '12px' }}>
-              <div style={{ fontSize: 11, color: '#ff4444', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>▼ BEAR FACTORS</div>
+              <div style={{ fontSize: 'var(--fs-lg)', color: '#ff4444', fontWeight: 700, marginBottom: 10, letterSpacing: '0.1em' }}>▼ BEAR FACTORS</div>
               {scan.analysis.bearFactors?.map((f, i) => (
                 <div key={i} style={{
-                  fontSize: 12, color: '#d0d8f0', padding: '6px 0',
+                  fontSize: 'var(--fs-md)', color: '#d0d8f0', padding: '6px 0',
                   borderBottom: i < scan.analysis.bearFactors.length - 1 ? '1px solid #1a0f0f' : 'none',
                   display: 'flex', gap: 8, lineHeight: 1.5,
                 }}>
@@ -473,7 +473,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           {/* Fundamentals */}
           {scan.fundamentals && (
             <div>
-              <div style={{ fontSize: 10, color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
+              <div style={{ fontSize: 'var(--fs-body)', color: '#ffaa00', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
                 FUNDAMENTALS
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -490,8 +490,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
                   ['Analyst Target', scan.fundamentals.targetMeanPrice ? fmt(scan.fundamentals.targetMeanPrice)             : null],
                 ].filter(([, v]) => v != null).map(([k, v]) => (
                   <div key={k} style={{ background: '#070710', padding: '8px 10px', borderRadius: 4 }}>
-                    <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e8f0' }}>{v}</div>
+                    <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
+                    <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: '#e8e8f0' }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -501,7 +501,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           {/* Technical Indicators */}
           {scan.ta && (
             <div>
-              <div style={{ fontSize: 10, color: '#4488ff', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
+              <div style={{ fontSize: 'var(--fs-body)', color: '#4488ff', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
                 TECHNICAL INDICATORS
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -520,8 +520,8 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
                   ['Resistance', scan.ta.sr?.nearestResistance ? fmt(scan.ta.sr.nearestResistance) : null, '#ff4444'],
                 ].filter(([, v]) => v != null).map(([k, v, c]) => (
                   <div key={k} style={{ background: '#070710', padding: '8px 10px', borderRadius: 4 }}>
-                    <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{v}</div>
+                    <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
+                    <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: c }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -531,18 +531,18 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
           {/* Options Flow — US only */}
           {scan.options && !isIndia && (
             <div>
-              <div style={{ fontSize: 10, color: '#b0c0dd', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
-                OPTIONS FLOW <span style={{ color: '#00ff8866', fontSize: 9 }}>⚡ LIVE</span>
+              <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', fontWeight: 700, letterSpacing: '0.15em', marginBottom: 10 }}>
+                OPTIONS FLOW <span style={{ color: '#00ff8866', fontSize: 'var(--fs-xs)' }}>⚡ LIVE</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 6 }}>
                 {[
                   ['Put/Call', scan.options.putCallRatio?.toFixed(2), scan.options.putCallRatio > 1 ? '#ff4444' : '#00ff88'],
                   ['Call IV',  `${scan.options.avgCallIV}%`,          '#ffaa00'],
                   ['Put IV',   `${scan.options.avgPutIV}%`,           '#ffaa00'],
                 ].map(([k, v, c]) => (
                   <div key={k} style={{ background: '#070710', padding: '8px 10px', borderRadius: 4, textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, color: '#7788aa', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{v}</div>
+                    <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', marginBottom: 3, letterSpacing: '0.1em' }}>{k}</div>
+                    <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: c }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -565,21 +565,21 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
                 borderBottom: i < Math.min(scan.news.length, 10) - 1 ? '1px solid #1a1a26' : 'none',
               }}>
                 <a href={n.url} target="_blank" rel="noopener noreferrer"
-                  style={{ color: '#c8d8f0', fontSize: 13, lineHeight: 1.5, display: 'block', textDecoration: 'none', marginBottom: 4 }}
+                  style={{ color: '#c8d8f0', fontSize: 'var(--fs-body)', lineHeight: 1.5, display: 'block', textDecoration: 'none', marginBottom: 4 }}
                   onMouseEnter={e => { if (n.url) e.currentTarget.style.color = '#ffaa00'; }}
                   onMouseLeave={e => { e.currentTarget.style.color = '#c8d8f0'; }}
                 >
                   {n.title}
                 </a>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span style={{ color: '#7788aa', fontSize: 11 }}>{n.publisher}</span>
-                  <span style={{ color: '#3a3a5e', fontSize: 11 }}>·</span>
-                  <span style={{ color: '#7788aa', fontSize: 11 }}>
+                  <span style={{ color: '#b8c8e0', fontSize: 'var(--fs-sm)' }}>{n.publisher}</span>
+                  <span style={{ color: '#3a3a5e', fontSize: 'var(--fs-sm)' }}>·</span>
+                  <span style={{ color: '#b8c8e0', fontSize: 'var(--fs-sm)' }}>
                     {new Date(n.time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                   {n.url && (
                     <a href={n.url} target="_blank" rel="noopener noreferrer"
-                      style={{ marginLeft: 'auto', fontSize: 10, color: '#ffaa0077', textDecoration: 'none', letterSpacing: '0.1em' }}
+                      style={{ marginLeft: 'auto', fontSize: 'var(--fs-body)', color: '#ffaa0077', textDecoration: 'none', letterSpacing: '0.1em' }}
                       onMouseEnter={e => { e.currentTarget.style.color = '#ffaa00'; }}
                       onMouseLeave={e => { e.currentTarget.style.color = '#ffaa0077'; }}
                     >READ →</a>
@@ -588,7 +588,7 @@ export default function ScannerResults({ scan, macro, onBack, onOpenOptions, cur
               </div>
             ))
           ) : (
-            <div style={{ fontSize: 12, color: '#7788aa', padding: '8px 0' }}>No recent news available</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', padding: '8px 0' }}>No recent news available</div>
           )}
         </div>
       </AccordionCard>
@@ -655,7 +655,7 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#aa66ff', marginBottom: 4 }}>
           ADD TO SIMULATOR
         </div>
-        <div style={{ fontSize: 12, color: '#556677', marginBottom: 20 }}>
+        <div style={{ fontSize: 'var(--fs-md)', color: '#8899bb', marginBottom: 20 }}>
           Track this signal with virtual money
         </div>
 
@@ -663,22 +663,22 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: '#e8e8f0' }}>{scan.ticker}</div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: sigColor }}>{scan.analysis?.signal} · {scan.analysis?.confidence}%</div>
-            <div style={{ fontSize: 11, color: '#7788aa' }}>Entry: {currency}{price.toFixed(2)}</div>
+            <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: sigColor }}>{scan.analysis?.signal} · {scan.analysis?.confidence}%</div>
+            <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0' }}>Entry: {currency}{price.toFixed(2)}</div>
           </div>
         </div>
 
         {/* Target / Stop */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
           <div style={{ flex: 1, background: '#0a0a14', border: '1px solid #00ff8833', borderRadius: 6, padding: '8px 12px' }}>
-            <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>TARGET</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#00ff88' }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#445', marginBottom: 2 }}>TARGET</div>
+            <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: '#00ff88' }}>
               {scan.analysis?.priceTarget ? `${currency}${parseFloat(scan.analysis.priceTarget).toFixed(2)}` : '—'}
             </div>
           </div>
           <div style={{ flex: 1, background: '#0a0a14', border: '1px solid #ff444433', borderRadius: 6, padding: '8px 12px' }}>
-            <div style={{ fontSize: 9, color: '#445', marginBottom: 2 }}>STOP LOSS</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#ff4444' }}>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#445', marginBottom: 2 }}>STOP LOSS</div>
+            <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: '#ff4444' }}>
               {scan.analysis?.stopLoss ? `${currency}${parseFloat(scan.analysis.stopLoss).toFixed(2)}` : '—'}
             </div>
           </div>
@@ -686,9 +686,9 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
 
         {/* Direction — locked to signal */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em' }}>DIRECTION</div>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#445', letterSpacing: '0.1em' }}>DIRECTION</div>
           <div style={{
-            fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 5,
+            fontSize: 'var(--fs-md)', fontWeight: 700, padding: '5px 14px', borderRadius: 5,
             background: direction === 'LONG' ? '#00ff8811' : '#ff444411',
             border: `1px solid ${direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
             color: direction === 'LONG' ? '#00ff88' : '#ff4444',
@@ -699,7 +699,7 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
 
         {/* Quantity */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 10, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>
             SHARES / UNITS
           </div>
           <input
@@ -708,31 +708,31 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
             style={{
               width: '100%', boxSizing: 'border-box',
               background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6,
-              color: '#e8e8f0', fontSize: 18, fontWeight: 700, fontFamily: 'inherit',
+              color: '#e8e8f0', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
               padding: '10px 14px', textAlign: 'right',
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>
+            <span style={{ fontSize: 'var(--fs-lg)', color: '#8899bb' }}>
               {direction === 'SHORT' ? 'Margin required (50%)' : 'Total cost'}
             </span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: exceedsBalance ? '#ff4444' : '#c8d8f0' }}>
+            <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: exceedsBalance ? '#ff4444' : '#c8d8f0' }}>
               {currency}{cashRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-            <span style={{ fontSize: 11, color: '#556677' }}>Available balance</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#7788aa' }}>
+            <span style={{ fontSize: 'var(--fs-lg)', color: '#8899bb' }}>Available balance</span>
+            <span style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: '#b8c8e0' }}>
               {currency}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </span>
           </div>
           {exceedsBalance && (
-            <div style={{ fontSize: 11, color: '#ff4444', marginTop: 6,
+            <div style={{ fontSize: 'var(--fs-lg)', color: '#ff4444', marginTop: 6,
               background: '#ff444411', border: '1px solid #ff444433',
               borderRadius: 5, padding: '6px 10px' }}>
               {direction === 'SHORT' ? `⚠ Exceeds margin available — max ${maxQty} shares (50% margin)` : `⚠ Exceeds available balance — max ${maxQty} shares`}
               <button onClick={() => setQuantity(String(maxQty))} style={{
-                marginLeft: 8, fontSize: 10, cursor: 'pointer', background: 'none',
+                marginLeft: 8, fontSize: 'var(--fs-body)', cursor: 'pointer', background: 'none',
                 border: '1px solid #ff444466', color: '#ff4444', borderRadius: 3,
                 padding: '1px 6px', fontFamily: 'inherit',
               }}>USE MAX</button>
@@ -743,7 +743,7 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
         {/* Error */}
         {error && (
           <div style={{
-            fontSize: 12, color: '#ff4444', background: '#ff444411',
+            fontSize: 'var(--fs-md)', color: '#ff4444', background: '#ff444411',
             border: '1px solid #ff444433', borderRadius: 6,
             padding: '8px 12px', marginBottom: 4,
           }}>
@@ -755,13 +755,13 @@ function SimModal({ scan, livePrice, currency: currencyProp, market, onConfirm, 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{
             flex: 1, padding: '12px', borderRadius: 6, cursor: 'pointer',
-            background: 'none', border: '1px solid #2a2a3e', color: '#556677',
-            fontFamily: 'inherit', fontSize: 13,
+            background: 'none', border: '1px solid #2a2a3e', color: '#8899bb',
+            fontFamily: 'inherit', fontSize: 'var(--fs-body)',
           }}>CANCEL</button>
           <button onClick={confirm} disabled={loading || !parseFloat(quantity)} style={{
             flex: 2, padding: '12px', borderRadius: 6, cursor: 'pointer',
             background: '#aa66ff22', border: '1px solid #aa66ff',
-            color: '#aa66ff', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+            color: '#aa66ff', fontFamily: 'inherit', fontSize: 'var(--fs-body)', fontWeight: 700,
             letterSpacing: '0.08em', opacity: loading ? 0.6 : 1,
           }}>
             {loading ? 'ADDING...' : `OPEN ${direction}`}

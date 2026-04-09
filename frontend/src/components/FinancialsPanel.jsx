@@ -31,14 +31,14 @@ function fmtPct(n, suffix = '%', alwaysSign = true) {
 }
 
 function YoYBadge({ value, isBps = false }) {
-  if (value == null) return <span style={{ color: '#445', fontSize: 10 }}>—</span>;
+  if (value == null) return <span style={{ color: '#445', fontSize: 'var(--fs-sm)' }}>—</span>;
   const up  = value >= 0;
   const txt = isBps
     ? `${up ? '+' : ''}${value.toFixed(2)}pp`
     : `${up ? '+' : ''}${value}%`;
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+      fontSize: 'var(--fs-body)', fontWeight: 700, padding: '1px 5px', borderRadius: 3,
       background: up ? '#00ff8815' : '#ff444415',
       color:      up ? '#00ff88'   : '#ff4444',
     }}>
@@ -50,7 +50,7 @@ function YoYBadge({ value, isBps = false }) {
 function BeatBadge({ beat, surprisePct }) {
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+      fontSize: 'var(--fs-body)', fontWeight: 700, padding: '1px 6px', borderRadius: 3,
       background: beat ? '#00ff8815' : '#ff444415',
       color:      beat ? '#00ff88'   : '#ff4444',
     }}>
@@ -60,10 +60,10 @@ function BeatBadge({ beat, surprisePct }) {
   );
 }
 
-const COL_STYLE = { fontSize: 13, color: '#c8d8f0', textAlign: 'right', fontFamily: "'JetBrains Mono', monospace" };
-const HDR_STYLE = { fontSize: 9, color: '#445', letterSpacing: '0.1em', textAlign: 'right' };
-const HDR_LEFT  = { fontSize: 9, color: '#445', letterSpacing: '0.1em', textAlign: 'left' };
-const PERIOD_STYLE = { fontSize: 11, color: '#7788aa' };
+const COL_STYLE = { fontSize: 'var(--fs-body)', color: '#c8d8f0', textAlign: 'right', fontFamily: "'JetBrains Mono', monospace" };
+const HDR_STYLE = { fontSize: 'var(--fs-md)', color: '#445', letterSpacing: '0.1em', textAlign: 'right' };
+const HDR_LEFT  = { fontSize: 'var(--fs-md)', color: '#445', letterSpacing: '0.1em', textAlign: 'left' };
+const PERIOD_STYLE = { fontSize: 'var(--fs-lg)', color: '#b8c8e0' };
 
 export default function FinancialsPanel({ ticker, market = 'US' }) {
   const [data,    setData]    = useState(null);
@@ -81,8 +81,8 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
       .catch(e => { setError(e.message); setLoading(false); });
   }, [ticker, market]);
 
-  if (loading) return <div style={{ color: '#445', fontSize: 12, padding: '16px 0' }}>Loading financials...</div>;
-  if (error)   return <div style={{ color: '#ff444488', fontSize: 12, padding: '8px 0' }}>Unavailable: {error}</div>;
+  if (loading) return <div style={{ color: '#445', fontSize: 'var(--fs-md)', padding: '16px 0' }}>Loading financials...</div>;
+  if (error)   return <div style={{ color: '#ff444488', fontSize: 'var(--fs-md)', padding: '8px 0' }}>Unavailable: {error}</div>;
   if (!data)   return null;
 
   const rows  = data.quarters || [];
@@ -101,14 +101,14 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
           { label: 'Net Margin YoY', value: yoy.netMarginYoY, isBps: true  },
         ].map(({ label, value, isBps }) => (
           <div key={label} style={{ background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6, padding: '7px 12px' }}>
-            <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#445', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
             <YoYBadge value={value} isBps={isBps} />
           </div>
         ))}
         {data.nextEarnings && (
           <div style={{ background: '#ff9a0011', border: '1px solid #ff9a0033', borderRadius: 6, padding: '7px 12px' }}>
-            <div style={{ fontSize: 9, color: '#ff9a0077', letterSpacing: '0.1em', marginBottom: 4 }}>NEXT EARNINGS</div>
-            <div style={{ fontSize: 12, color: '#ff9a00', fontWeight: 700 }}>{data.nextEarnings}</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#ff9a0077', letterSpacing: '0.1em', marginBottom: 4 }}>NEXT EARNINGS</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: '#ff9a00', fontWeight: 700 }}>{data.nextEarnings}</div>
           </div>
         )}
       </div>
@@ -116,13 +116,13 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
       {/* ── EPS beat/miss strip ── */}
       {eps.length > 0 && (
         <div>
-          <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>EPS SURPRISE HISTORY</div>
+          <div style={{ fontSize: 'var(--fs-md)', color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>EPS SURPRISE HISTORY</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {eps.map((e, i) => (
               <div key={i} style={{ background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 5, padding: '6px 10px', minWidth: 90 }}>
-                <div style={{ fontSize: 10, color: '#556677', marginBottom: 4 }}>{e.quarter || `Q${i + 1}`}</div>
+                <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', marginBottom: 4 }}>{e.quarter || `Q${i + 1}`}</div>
                 <BeatBadge beat={e.beat} surprisePct={e.surprisePct} />
-                <div style={{ fontSize: 10, color: '#7788aa', marginTop: 3 }}>
+                <div style={{ fontSize: 'var(--fs-body)', color: '#b8c8e0', marginTop: 3 }}>
                   {e.epsActual   != null && `Act: ${fmtEps(e.epsActual, isInr)}`}
                   {e.epsEstimate != null && ` Est: ${fmtEps(e.epsEstimate, isInr)}`}
                 </div>
@@ -137,7 +137,7 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
       {/* ── Main table ── */}
       <div style={{ background: '#0f0f1a', border: '1px solid #2a2a3e', borderRadius: 6, overflowX: 'auto' }}>
         {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid #2a2a3e', minWidth: 420 }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '0 -14px', padding: '0 14px' }}><div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid #2a2a3e', minWidth: 420 }}>
           <div style={HDR_LEFT}>PERIOD</div>
           <div style={HDR_STYLE}>REVENUE</div>
           <div style={HDR_STYLE}>NET INCOME</div>
@@ -162,12 +162,13 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
               borderBottom: i < rows.length - 1 ? '1px solid #1a1a2a' : 'none',
               background: i === 0 ? '#ff9a0008' : 'transparent',
               minWidth: 420,
+            // scroll wrapper handles overflow
             }}>
               <div>
                 <div style={{ ...PERIOD_STYLE, color: i === 0 ? '#ff9a00' : '#7788aa', fontWeight: i === 0 ? 700 : 400 }}>
                   {q.period || q.endDate?.slice(0, 7)}
                 </div>
-                {i === 0 && <div style={{ fontSize: 8, color: '#ff9a0077', marginTop: 1 }}>LATEST</div>}
+                {i === 0 && <div style={{ fontSize: 'var(--fs-xs)', color: '#ff9a0077', marginTop: 1 }}>LATEST</div>}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={COL_STYLE}>{fmtVal(q.revenue, isInr)}</div>
@@ -192,7 +193,7 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
         })}
 
         {(!rows || rows.length === 0) && (
-          <div style={{ padding: '16px 12px', color: '#7788aa', fontSize: 12 }}>
+          <div style={{ padding: '16px 12px', color: '#b8c8e0', fontSize: 'var(--fs-md)' }}>
             {data.epsTrend?.length > 0
               ? 'Income statement data unavailable — showing analyst estimates below'
               : 'No quarterly data available for this ticker'}
@@ -203,20 +204,20 @@ export default function FinancialsPanel({ ticker, market = 'US' }) {
       {/* Analyst forward estimates (for pre-revenue / early stage) */}
       {data.epsTrend?.length > 0 && (
         <div>
-          <div style={{ fontSize: 9, color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>ANALYST ESTIMATES</div>
+          <div style={{ fontSize: 'var(--fs-md)', color: '#445', letterSpacing: '0.1em', marginBottom: 8 }}>ANALYST ESTIMATES</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {data.epsTrend.map((t, i) => (
               <div key={i} style={{ background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 6, padding: '8px 12px', minWidth: 120 }}>
-                <div style={{ fontSize: 10, color: '#556677', marginBottom: 4 }}>{t.period === '0q' ? 'This Quarter' : t.period === '+1q' ? 'Next Quarter' : t.period}</div>
-                {t.epsEstimate != null && <div style={{ fontSize: 12, color: '#c8d8f0' }}>EPS Est: {fmtEps(t.epsEstimate, isInr)}</div>}
-                {t.revenueEst  != null && <div style={{ fontSize: 12, color: '#c8d8f0', marginTop: 2 }}>Rev Est: {fmtVal(t.revenueEst, isInr)}</div>}
+                <div style={{ fontSize: 'var(--fs-body)', color: '#8899bb', marginBottom: 4 }}>{t.period === '0q' ? 'This Quarter' : t.period === '+1q' ? 'Next Quarter' : t.period}</div>
+                {t.epsEstimate != null && <div style={{ fontSize: 'var(--fs-md)', color: '#c8d8f0' }}>EPS Est: {fmtEps(t.epsEstimate, isInr)}</div>}
+                {t.revenueEst  != null && <div style={{ fontSize: 'var(--fs-md)', color: '#c8d8f0', marginTop: 2 }}>Rev Est: {fmtVal(t.revenueEst, isInr)}</div>}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <div style={{ fontSize: 10, color: '#2a2a3e' }}>
+      <div style={{ fontSize: 'var(--fs-body)', color: '#2a2a3e' }}>
         Source: Yahoo Finance · Not investment advice
       </div>
     </div>

@@ -101,7 +101,7 @@ export default function SectorRotationPanel({ onScan }) {
                     <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginBottom:8, letterSpacing:'.08em' }}>
                       KEY NAMES IN {s.name.toUpperCase()} — tap to scan
                     </div>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                       {s.tickers.map(t => (
                         <button key={t} onClick={() => onScan?.(t)} style={{
                           padding:'5px 12px', borderRadius:4,
