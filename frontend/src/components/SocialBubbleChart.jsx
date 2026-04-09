@@ -123,7 +123,8 @@ export default function SocialBubbleChart({ onScan }) {
   const [hovered,     setHovered]     = useState(null);
   const [filter,      setFilter]      = useState('all');
   const [bubbles,     setBubbles]     = useState([]);
-  const [svgHeight,   setSvgHeight]   = useState(400);
+  const [svgHeight,   setSvgHeight]   = useState(360);
+  const [canvasWidth, setCanvasWidth] = useState(360);
   const [width,       setWidth]       = useState(360);
   const [lastRefresh, setLastRefresh] = useState(null);
   const containerRef = useRef(null);
@@ -152,9 +153,18 @@ export default function SocialBubbleChart({ onScan }) {
   useEffect(() => {
     if (!data?.tickers?.length || width < 100) return;
 
-    // Fewer bubbles on narrow screens — they need to fit in fixed height
-    const maxBubbles = width < 420 ? 16 : width < 640 ? 20 : 26;
-    const h = width < 420 ? 360 : width < 640 ? 420 : 480;
+    // Fixed height — wide enough canvas for all bubbles, scroll horizontally
+    const count = data.tickers.filter(t => {
+      if (filter === 'bullish') return t.sentiment > 0.1;
+      if (filter === 'bearish') return t.sentiment < -0.1;
+      return true;
+    }).length;
+    const totalBubbles = Math.min(count, 30);
+
+    // Canvas height fixed at screen-friendly size
+    // Canvas width expands to fit all bubbles — horizontal scroll handles the rest
+    const h      = 360;
+    const canvasW = Math.max(width, totalBubbles * 38); // ensure enough room
     setSvgHeight(h);
 
     const filtered = data.tickers
@@ -163,10 +173,11 @@ export default function SocialBubbleChart({ onScan }) {
         if (filter === 'bearish') return t.sentiment < -0.1;
         return true;
       })
-      .slice(0, maxBubbles);
+      .slice(0, 30);
 
-    const packed = packBubbles(filtered, width, h);
+    const packed = packBubbles(filtered, canvasW, h);
     setBubbles(packed);
+    setCanvasWidth(canvasW);
   }, [data, filter, width]);
 
   const hov = bubbles.find(b => b.symbol === hovered);
@@ -220,8 +231,9 @@ export default function SocialBubbleChart({ onScan }) {
             No trending tickers found
           </div>
         ) : (
-          <svg width="100%" viewBox={`0 0 ${width} ${svgHeight}`}
-            style={{ display: 'block' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
+          <svg width={canvasWidth} height={svgHeight} viewBox={`0 0 ${canvasWidth} ${svgHeight}`}
+            style={{ display: 'block', minWidth: '100%' }}>
             {bubbles.map(b => {
               const isHov  = hovered === b.symbol;
               const stroke = sentimentColor(b.sentiment);
@@ -269,6 +281,7 @@ export default function SocialBubbleChart({ onScan }) {
               );
             })}
           </svg>
+          </div>
         )}
 
         {/* Hover tooltip — fixed top-left */}
