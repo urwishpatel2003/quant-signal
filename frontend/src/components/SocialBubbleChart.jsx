@@ -44,17 +44,15 @@ function sentimentLabel(s) {
   return 'NEUTRAL';
 }
 
-// Pack bubbles into a fixed canvas height — spiral outward from center
-function packBubbles(items, width, height) {
-  if (!items.length) return [];
+// Pack bubbles compactly — place each bubble at the top-leftmost valid position
+function packBubbles(items, width) {
+  if (!items.length || !width) return [];
 
-  // Scale bubble sizes proportionally to canvas width
-  // Mobile (~360px) gets small bubbles, desktop (~1200px) gets large ones
-  const scale = Math.max(0.4, Math.min(1.0, width / 700));
-  const MIN_R = Math.round(18 * scale);
-  const MAX_R = Math.round(52 * scale);
   const maxMentions = Math.max(...items.map(t => t.mentions), 1);
-  const GAP = 3;
+  const scale = Math.max(0.38, Math.min(1.0, width / 680));
+  const MIN_R = Math.round(16 * scale);
+  const MAX_R = Math.round(50 * scale);
+  const GAP   = Math.round(3  * scale);
 
   const bubbles = items.map(t => ({
     ...t,
@@ -62,58 +60,57 @@ function packBubbles(items, width, height) {
     x: 0, y: 0,
   }));
 
-  // Sort largest first
   bubbles.sort((a, b) => b.r - a.r);
 
   const placed = [];
-  const cx = width / 2;
-  const cy = height / 2;
 
   for (const b of bubbles) {
     if (placed.length === 0) {
-      b.x = cx;
-      b.y = cy;
+      b.x = b.r + GAP;
+      b.y = b.r + GAP;
       placed.push(b);
       continue;
     }
 
     let best = null;
-    let bestDist = Infinity;
+    let bestScore = Infinity;
 
-    // Try many angles and distances from center, pick closest valid position
-    for (let spiral = b.r; spiral < Math.max(width, height) * 1.5; spiral += 4) {
-      for (let angle = 0; angle < Math.PI * 2; angle += 0.2) {
-        const tx = cx + spiral * Math.cos(angle);
-        const ty = cy + spiral * Math.sin(angle);
-
-        // Must stay within canvas bounds
-        if (tx - b.r < GAP || tx + b.r > width - GAP) continue;
-        if (ty - b.r < GAP || ty + b.r > height - GAP) continue;
-
-        // No overlap with placed bubbles
-        const overlaps = placed.some(p => {
-          const dx = p.x - tx, dy = p.y - ty;
-          return Math.sqrt(dx * dx + dy * dy) < p.r + b.r + GAP;
+    // Generate candidate positions tangent to each placed bubble
+    const candidates = [];
+    for (const p of placed) {
+      const dist = p.r + b.r + GAP;
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.15) {
+        candidates.push({
+          x: p.x + dist * Math.cos(angle),
+          y: p.y + dist * Math.sin(angle),
         });
-
-        if (!overlaps) {
-          const dist = Math.sqrt((tx - cx) ** 2 + (ty - cy) ** 2);
-          if (dist < bestDist) {
-            bestDist = dist;
-            best = { x: tx, y: ty };
-          }
-          break; // take first valid at this radius
-        }
       }
-      if (best) break;
+    }
+
+    for (const c of candidates) {
+      const tx = c.x, ty = c.y;
+      if (tx - b.r < GAP || tx + b.r > width - GAP) continue;
+      if (ty - b.r < GAP) continue;
+
+      const overlaps = placed.some(p => {
+        const dx = p.x - tx, dy = p.y - ty;
+        return Math.sqrt(dx * dx + dy * dy) < p.r + b.r + GAP - 0.5;
+      });
+      if (overlaps) continue;
+
+      // Prefer positions close to top, then left
+      const score = ty * 4 + tx;
+      if (score < bestScore) { bestScore = score; best = { x: tx, y: ty }; }
     }
 
     if (best) {
       b.x = best.x;
       b.y = best.y;
     } else {
-      // Truly can't fit — skip
-      continue;
+      // Fallback: stack below everything
+      const maxY = Math.max(...placed.map(p => p.y + p.r), 0);
+      b.x = b.r + GAP;
+      b.y = maxY + b.r + GAP;
     }
     placed.push(b);
   }
