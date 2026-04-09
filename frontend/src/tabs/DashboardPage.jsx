@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import SocialBubbleChart from '../components/SocialBubbleChart';
+import SocialBubbleChart      from '../components/SocialBubbleChart';
+import UnusualActivityPanel   from '../components/UnusualActivityPanel';
+import SectorRotationPanel    from '../components/SectorRotationPanel';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
@@ -214,8 +216,17 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
       {/* ── Social Buzz — US only ── */}
       {!isIndia && <SocialBubbleChart onScan={handleScan} />}
 
+      {/* ── Unusual Activity ── */}
+      <UnusualActivityPanel onScan={handleScan} />
+
+      {/* ── Sector Rotation ── */}
+      {!isIndia && <SectorRotationPanel onScan={handleScan} />}
+
       {/* ── India macro tiles — India only ── */}
       {isIndia && <IndiaMacroBar macro={indiaMacro} />}
+
+
+
 
     </div>
   );

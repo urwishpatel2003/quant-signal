@@ -48,7 +48,11 @@ function sentimentLabel(s) {
 function packBubbles(items, width, height) {
   if (!items.length) return [];
 
-  const MIN_R = 24, MAX_R = 56;
+  // Scale bubble sizes proportionally to canvas width
+  // Mobile (~360px) gets small bubbles, desktop (~1200px) gets large ones
+  const scale = Math.max(0.4, Math.min(1.0, width / 700));
+  const MIN_R = Math.round(18 * scale);
+  const MAX_R = Math.round(52 * scale);
   const maxMentions = Math.max(...items.map(t => t.mentions), 1);
   const GAP = 3;
 
@@ -153,19 +157,11 @@ export default function SocialBubbleChart({ onScan }) {
   useEffect(() => {
     if (!data?.tickers?.length || width < 100) return;
 
-    // Fixed height — wide enough canvas for all bubbles, scroll horizontally
-    const count = data.tickers.filter(t => {
-      if (filter === 'bullish') return t.sentiment > 0.1;
-      if (filter === 'bearish') return t.sentiment < -0.1;
-      return true;
-    }).length;
-    const totalBubbles = Math.min(count, 30);
-
-    // Canvas height fixed at screen-friendly size
-    // Canvas width expands to fit all bubbles — horizontal scroll handles the rest
-    const h      = 360;
-    const canvasW = Math.max(width, totalBubbles * 38); // ensure enough room
+    // Always show all 30 bubbles — scale sizes to fit the canvas
+    // Height scales with width so bubbles have room on any screen
+    const h = Math.round(width * 0.95);  // roughly square canvas
     setSvgHeight(h);
+    setCanvasWidth(width);
 
     const filtered = data.tickers
       .filter(t => {
@@ -175,9 +171,8 @@ export default function SocialBubbleChart({ onScan }) {
       })
       .slice(0, 30);
 
-    const packed = packBubbles(filtered, canvasW, h);
+    const packed = packBubbles(filtered, width, h);
     setBubbles(packed);
-    setCanvasWidth(canvasW);
   }, [data, filter, width]);
 
   const hov = bubbles.find(b => b.symbol === hovered);
@@ -231,9 +226,8 @@ export default function SocialBubbleChart({ onScan }) {
             No trending tickers found
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
-          <svg width={canvasWidth} height={svgHeight} viewBox={`0 0 ${canvasWidth} ${svgHeight}`}
-            style={{ display: 'block', minWidth: '100%' }}>
+          <svg width="100%" viewBox={`0 0 ${canvasWidth} ${svgHeight}`}
+            style={{ display: 'block' }}>
             {bubbles.map(b => {
               const isHov  = hovered === b.symbol;
               const stroke = sentimentColor(b.sentiment);
@@ -261,7 +255,7 @@ export default function SocialBubbleChart({ onScan }) {
                     x={b.x} y={b.r >= 40 ? b.y - 6 : b.y + 4}
                     textAnchor="middle" dominantBaseline="middle"
                     fontFamily="'Bebas Neue', sans-serif"
-                    fontSize={Math.min(b.r * 0.52, 20)}
+                    fontSize={Math.min(b.r * 0.55, 22)}
                     fill={textColor}
                     style={{ pointerEvents: 'none', userSelect: 'none' }}
                   >{b.symbol}</text>
@@ -281,7 +275,6 @@ export default function SocialBubbleChart({ onScan }) {
               );
             })}
           </svg>
-          </div>
         )}
 
         {/* Hover tooltip — fixed top-left */}

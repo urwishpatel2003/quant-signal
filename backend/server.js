@@ -4752,6 +4752,214 @@ setTimeout(() => {
     .catch(e => console.warn('[social] warm failed:', e.message));
 }, 5000);
 
+
+// ─── Unusual Activity Screener ────────────────────────────────────────────────
+// Scans 80 tickers for volume spikes, options flow anomalies, news velocity
+// Cached 30 minutes — runs in background
+
+const unusualCache = { data: null, ts: 0 };
+const UNUSUAL_TTL  = 30 * 60 * 1000;
+
+const SCREEN_TICKERS = [
+  // Mega cap
+  'AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','AMD','AVGO','LLY',
+  // High momentum / retail favorites
+  'PLTR','COIN','MSTR','MARA','RIOT','HOOD','SOFI','GME','AMC','RDDT',
+  // Mid-cap growth
+  'DDOG','NET','CRWD','SNOW','MNDY','GTLB','BILL','RKLB','ASTS','LUNR',
+  // Sector leaders
+  'JPM','GS','BAC','XOM','CVX','OXY','LLY','ABBV','PFE','MRNA',
+  // Semis / AI
+  'INTC','MU','QCOM','ARM','AMAT','LRCX','KLAC','SMCI','IONQ','RGTI',
+  // EV / space / emerging
+  'RIVN','LCID','NIO','JOBY','ACHR','OKLO','SMR','NNE','RKLB','ASTS',
+  // ETFs / macro
+  'SPY','QQQ','IWM','GLD','TLT','SOXL','TQQQ','ARKK','XLK','XLE',
+  // Large / misc
+  'NFLX','DIS','SHOP','UBER','ABNB','SNAP','PINS','RBLX','U','SQ',
+];
+
+async function fetchUnusualActivity() {
+  const results = [];
+  const from = new Date(Date.now() - 2*24*3600*1000).toISOString().split('T')[0];
+  const to   = new Date().toISOString().split('T')[0];
+
+  // Batch fetch quotes from Tradier (volume data)
+  const uniqueTickers = [...new Set(SCREEN_TICKERS)].filter(t => !t.includes('='));
+  let quotes = {};
+  try {
+    const batches = [];
+    for (let i = 0; i < uniqueTickers.length; i += 20) {
+      batches.push(uniqueTickers.slice(i, i + 20));
+    }
+    for (const batch of batches) {
+      const q = await tradierGet(`/v1/markets/quotes?symbols=${batch.join(',')}&greeks=false`);
+      const raw = q?.quotes?.quote || [];
+      (Array.isArray(raw) ? raw : [raw]).forEach(q => {
+        if (q?.symbol) quotes[q.symbol] = q;
+      });
+      await sleep(100);
+    }
+  } catch (e) { console.warn('[unusual] quotes failed:', e.message); }
+
+  // Fetch news counts from Finnhub for each ticker
+  const newsCount = {};
+  for (const ticker of uniqueTickers.slice(0, 40)) { // limit to 40 for API rate
+    try {
+      const news = await finnhubGet(`/company-news?symbol=${ticker}&from=${from}&to=${to}`);
+      newsCount[ticker] = Array.isArray(news) ? news.length : 0;
+    } catch {}
+    await sleep(60);
+  }
+
+  // Score each ticker
+  for (const ticker of uniqueTickers) {
+    const q = quotes[ticker];
+    if (!q) continue;
+
+    const signals = [];
+    let score = 0;
+
+    // 1. Volume spike — compare today's volume to average volume
+    const vol     = parseInt(q.volume)        || 0;
+    const avgVol  = parseInt(q.average_volume) || parseInt(q.volume) || 1;
+    const volRatio = vol / avgVol;
+
+    if (volRatio >= 5)       { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'high' });   score += 3; }
+    else if (volRatio >= 3)  { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'medium' }); score += 2; }
+    else if (volRatio >= 2)  { signals.push({ type: 'VOLUME', label: `${volRatio.toFixed(1)}x avg volume`, severity: 'low' });    score += 1; }
+
+    // 2. Price move — big move with high volume = real signal
+    const pct = parseFloat(q.change_percentage) || 0;
+    if (Math.abs(pct) >= 5 && volRatio >= 2) {
+      signals.push({ type: 'PRICE', label: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% on volume`, severity: Math.abs(pct) >= 10 ? 'high' : 'medium' });
+      score += Math.abs(pct) >= 10 ? 3 : 2;
+    }
+
+    // 3. News velocity
+    const articles = newsCount[ticker] || 0;
+    if (articles >= 8)      { signals.push({ type: 'NEWS', label: `${articles} articles today`, severity: 'high' });   score += 2; }
+    else if (articles >= 4) { signals.push({ type: 'NEWS', label: `${articles} articles today`, severity: 'medium' }); score += 1; }
+
+    // 4. 52-week high/low proximity
+    const price  = parseFloat(q.last) || 0;
+    const high52 = parseFloat(q.fifty_two_week_high) || 0;
+    const low52  = parseFloat(q.fifty_two_week_low)  || 0;
+    if (high52 && price >= high52 * 0.99) {
+      signals.push({ type: 'BREAKOUT', label: '52W high breakout', severity: 'high' });
+      score += 3;
+    } else if (low52 && price <= low52 * 1.01) {
+      signals.push({ type: 'BREAKDOWN', label: '52W low breakdown', severity: 'high' });
+      score += 3;
+    }
+
+    if (signals.length === 0) continue;
+
+    results.push({
+      ticker,
+      price:      parseFloat(q.last)              || 0,
+      changePct:  parseFloat(q.change_percentage)  || 0,
+      volume:     vol,
+      avgVolume:  avgVol,
+      volRatio:   parseFloat(volRatio.toFixed(1)),
+      newsCount:  newsCount[ticker] || 0,
+      signals,
+      score,
+    });
+  }
+
+  // Sort by score descending
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, 20);
+}
+
+app.get('/unusual/activity', async (req, res) => {
+  try {
+    if (unusualCache.data && Date.now() - unusualCache.ts < UNUSUAL_TTL) {
+      return res.json({ tickers: unusualCache.data, cached: true, cachedAt: unusualCache.ts });
+    }
+    const data = await fetchUnusualActivity();
+    unusualCache.data = data;
+    unusualCache.ts   = Date.now();
+    res.json({ tickers: data, cached: false });
+  } catch (e) {
+    console.error('[unusual/activity]', e.message);
+    if (unusualCache.data) return res.json({ tickers: unusualCache.data, cached: true, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Sector Rotation Signal ───────────────────────────────────────────────────
+const sectorCache = { data: null, ts: 0 };
+const SECTOR_TTL  = 30 * 60 * 1000;
+
+const SECTOR_LIST = [
+  { name: 'Technology',    etf: 'XLK',  tickers: ['AAPL','MSFT','NVDA','AMD','AVGO','INTC','QCOM','TXN','AMAT','MU'] },
+  { name: 'Financials',    etf: 'XLF',  tickers: ['JPM','BAC','GS','MS','WFC','BX','KKR','V','MA','AXP'] },
+  { name: 'Healthcare',    etf: 'XLV',  tickers: ['LLY','ABBV','UNH','PFE','MRK','AMGN','GILD','REGN','VRTX','BMY'] },
+  { name: 'Energy',        etf: 'XLE',  tickers: ['XOM','CVX','OXY','SLB','COP','EOG','PSX','VLO','MPC','HAL'] },
+  { name: 'Consumer Disc', etf: 'XLY',  tickers: ['AMZN','TSLA','HD','MCD','NKE','LOW','SBUX','TJX','BKNG','CMG'] },
+  { name: 'Industrials',   etf: 'XLI',  tickers: ['GE','CAT','RTX','HON','UNP','DE','LMT','BA','MMM','ITW'] },
+  { name: 'Crypto/Alt',    etf: 'MSTR', tickers: ['MSTR','COIN','MARA','RIOT','HOOD','CLSK','BTBT','HUT','CIFR','WULF'] },
+  { name: 'AI/Semis',      etf: 'SOXL', tickers: ['NVDA','AMD','AVGO','INTC','MU','QCOM','ARM','SMCI','AMAT','LRCX'] },
+  { name: 'Space/Defense', etf: 'ITA',  tickers: ['RKLB','LMT','RTX','NOC','GD','ASTS','LUNR','JOBY','ACHR','KTOS'] },
+  { name: 'Biotech',       etf: 'XBI',  tickers: ['MRNA','BNTX','NVAX','REGN','VRTX','GILD','BIIB','SGEN','ALNY','FOLD'] },
+];
+
+async function fetchSectorRotation() {
+  const sectors = [];
+  for (const sector of SECTOR_LIST) {
+    try {
+      const q = await tradierGet(`/v1/markets/quotes?symbols=${sector.etf}&greeks=false`);
+      const etf = q?.quotes?.quote;
+      if (!etf) continue;
+      const changePct    = parseFloat(etf.change_percentage) || 0;
+      const volRatio     = etf.volume && etf.average_volume ? parseFloat(etf.volume) / parseFloat(etf.average_volume) : 1;
+      const momentum     = changePct > 1.5 ? 'LEADING' : changePct < -1.5 ? 'LAGGING' : changePct > 0.3 ? 'RISING' : changePct < -0.3 ? 'FALLING' : 'FLAT';
+      const momentumColor = { LEADING:'#00ff88', RISING:'#44cc88', FLAT:'#ffaa00', FALLING:'#ff8844', LAGGING:'#ff4444' };
+      sectors.push({
+        name:      sector.name,
+        etf:       sector.etf,
+        changePct: parseFloat(changePct.toFixed(2)),
+        volRatio:  parseFloat(volRatio.toFixed(1)),
+        price:     parseFloat(etf.last),
+        momentum,
+        color:     momentumColor[momentum],
+        tickers:   sector.tickers,
+      });
+      await sleep(80);
+    } catch {}
+  }
+  sectors.sort((a, b) => b.changePct - a.changePct);
+  return sectors;
+}
+
+app.get('/sector/rotation', async (req, res) => {
+  try {
+    if (sectorCache.data && Date.now() - sectorCache.ts < SECTOR_TTL) {
+      return res.json({ sectors: sectorCache.data, cached: true });
+    }
+    const data = await fetchSectorRotation();
+    sectorCache.data = data;
+    sectorCache.ts   = Date.now();
+    res.json({ sectors: data, cached: false });
+  } catch (e) {
+    console.error('[sector/rotation]', e.message);
+    if (sectorCache.data) return res.json({ sectors: sectorCache.data, cached: true, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Warm caches on startup
+setTimeout(() => {
+  fetchUnusualActivity()
+    .then(d => { unusualCache.data = d; unusualCache.ts = Date.now(); console.log(`[unusual] warmed: ${d.length}`); })
+    .catch(e => console.warn('[unusual] warm failed:', e.message));
+  fetchSectorRotation()
+    .then(d => { sectorCache.data = d; sectorCache.ts = Date.now(); console.log(`[sector] warmed: ${d.length}`); })
+    .catch(e => console.warn('[sector] warm failed:', e.message));
+}, 8000);
+
 // ─── Signal History ──────────────────────────────────────────────────────────
 
 app.post('/signal-history', async (req, res) => {
