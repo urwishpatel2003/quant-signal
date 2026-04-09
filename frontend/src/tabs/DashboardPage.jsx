@@ -4,16 +4,7 @@ import SocialBubbleChart from '../components/SocialBubbleChart';
 const BASE = import.meta.env.VITE_API_BASE;
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
-function StatPill({ label, value, color = '#ffaa00', sub, border }) {
-  return (
-    <div style={{ background:'#0f0f1a', border:`1px solid ${border || color + '22'}`,
-      borderTop:`2px solid ${color}55`, borderRadius:6, padding:'12px 14px', flex:1, minWidth:100 }}>
-      <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.08em', marginBottom:4 }}>{label}</div>
-      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, color, lineHeight:1 }}>{value ?? '—'}</div>
-      {sub && <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginTop:3 }}>{sub}</div>}
-    </div>
-  );
-}
+
 
 function MoverRow({ ticker, changePct, price, onClick, market }) {
   const up = (changePct || 0) >= 0;
@@ -36,33 +27,7 @@ function MoverRow({ ticker, changePct, price, onClick, market }) {
   );
 }
 
-function AccuracyRing({ winRate, total }) {
-  if (!winRate || !total) return (
-    <div style={{ textAlign:'center', padding:'16px 0', fontSize:'var(--fs-xs)', color:'#334455' }}>
-      Run scans to build your accuracy record
-    </div>
-  );
-  const r = 40, circ = 2 * Math.PI * r;
-  const color = winRate >= 60 ? '#00ff88' : winRate >= 50 ? '#ffaa00' : '#ff4444';
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-      <svg width={96} height={96} viewBox="0 0 96 96">
-        <circle cx={48} cy={48} r={r} fill="none" stroke="#1a1a2e" strokeWidth={9} />
-        <circle cx={48} cy={48} r={r} fill="none" stroke={color} strokeWidth={9}
-          strokeDasharray={`${(winRate/100)*circ} ${circ}`}
-          strokeLinecap="round" transform="rotate(-90 48 48)" />
-        <text x={48} y={44} textAnchor="middle" dominantBaseline="middle"
-          fontFamily="'Bebas Neue',sans-serif" fontSize={22} fill={color}>{winRate}%</text>
-        <text x={48} y={60} textAnchor="middle" dominantBaseline="middle"
-          fontSize={9} fill="#445566">WIN RATE</text>
-      </svg>
-      <div>
-        <div style={{ fontSize:'var(--fs-sm)', color:'#c8d8f0', marginBottom:4, fontWeight:600 }}>{total} resolved signals</div>
-        <div style={{ fontSize:'var(--fs-xs)', color:'#445566', lineHeight:1.6 }}>Your personal edge,<br/>tracked automatically</div>
-      </div>
-    </div>
-  );
-}
+
 
 // ── India macro tiles ────────────────────────────────────────────────────────
 function IndiaMacroBar({ macro }) {
@@ -271,38 +236,7 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
       {!isIndia && <USRegimeCard regime={regime} />}
       {isIndia  && <IndiaRegimeCard macro={indiaMacro} movers={movers} />}
 
-      {/* ── Quick stats ── */}
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-        <StatPill
-          label="YOUR WIN RATE"
-          value={accuracy?.winRate != null ? `${accuracy.winRate}%` : '—'}
-          color={accuracy?.winRate >= 50 ? '#00ff88' : '#ff4444'}
-          sub={accuracy?.total ? `${accuracy.total} resolved` : 'No data yet'} />
-        <StatPill
-          label="PENDING"
-          value={accuracy?.pending ?? '—'}
-          color="#ffaa00"
-          sub="awaiting outcome" />
-        <StatPill
-          label="HIGH CONF"
-          value={accuracy?.highConfWinRate != null ? `${accuracy.highConfWinRate}%` : '—'}
-          color="#aa44ff"
-          sub={accuracy?.highConfTotal ? `${accuracy.highConfTotal} signals` : '70%+ conf'} />
-        {!isIndia && (
-          <StatPill
-            label="OPTIONS"
-            value={accuracy?.options?.winRate != null ? `${accuracy.options.winRate}%` : '—'}
-            color="#00ccff"
-            sub={accuracy?.options?.total ? `${accuracy.options.total} plays` : 'No options yet'} />
-        )}
-        {isIndia && (
-          <StatPill
-            label="AVG RETURN"
-            value={accuracy?.avgOutcomePct != null ? `${accuracy.avgOutcomePct > 0 ? '+' : ''}${accuracy.avgOutcomePct}%` : '—'}
-            color="#00ccff"
-            sub="per resolved signal" />
-        )}
-      </div>
+
 
       {/* ── Social Buzz — US only ── */}
       {!isIndia && <SocialBubbleChart onScan={handleScan} />}
