@@ -3,19 +3,25 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 const BASE = import.meta.env.VITE_API_BASE;
 
 const SOURCE_COLORS = {
-  reddit_wsb:    '#ff6644',
-  reddit_stocks: '#ff9944',
+  reddit_wsb:    '#ff4422',
+  reddit_stocks: '#ff8844',
+  reddit_inv:    '#ffaa44',
+  reddit_opts:   '#ffcc44',
   stocktwits:    '#4488ff',
   finnhub:       '#aa44ff',
   yahoo:         '#ffaa00',
+  yahoo_active:  '#ff6600',
 };
 
 const SOURCE_LABELS = {
-  reddit_wsb:    'WSB',
+  reddit_wsb:    'r/WSB',
   reddit_stocks: 'r/stocks',
+  reddit_inv:    'r/investing',
+  reddit_opts:   'r/options',
   stocktwits:    'StockTwits',
   finnhub:       'Finnhub',
   yahoo:         'Yahoo',
+  yahoo_active:  'Yahoo Active',
 };
 
 function sentimentColor(s) {
