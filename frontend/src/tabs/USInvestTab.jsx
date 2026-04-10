@@ -112,14 +112,14 @@ function HoldingCard({ h, currency = '$' }) {
             <Pill label={h.type} color={asColor} small />
             <Pill label={h.accountPlacement} color={acColor} small />
           </div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#b0c0dd', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
         </div>
         {/* Allocation + amount */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, fontWeight: 700, color: '#ffaa00' }}>{h.allocation}%</div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd' }}>{fmtM(h.monthlyAmount)}/mo</div>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(18px,1.8vw,24px)', fontWeight: 700, color: '#ffaa00' }}>{h.allocation}%</div>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#b0c0dd' }}>{fmtM(h.monthlyAmount)}/mo</div>
         </div>
-        <div style={{ color: '#7788aa', fontSize: 12, flexShrink: 0 }}>{open ? '▲' : '▼'}</div>
+        <div style={{ color: '#7788aa', fontSize: 'clamp(13px,1.2vw,15px)', flexShrink: 0 }}>{open ? '▲' : '▼'}</div>
       </div>
 
       {/* Expanded detail */}
@@ -138,13 +138,13 @@ function HoldingCard({ h, currency = '$' }) {
             <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ fontSize: 'var(--fs-xs)', color: '#00ff88', letterSpacing: '.08em', marginBottom: 4 }}>PROS</div>
               {h.pros?.map((p, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 2 }}>✓ {p}</div>
+                <div key={i} style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', marginBottom: 2 }}>✓ {p}</div>
               ))}
             </div>
             <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ fontSize: 'var(--fs-xs)', color: '#ff4444', letterSpacing: '.08em', marginBottom: 4 }}>CONS</div>
               {h.cons?.map((c, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 2 }}>⚠ {c}</div>
+                <div key={i} style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', marginBottom: 2 }}>⚠ {c}</div>
               ))}
             </div>
           </div>
@@ -186,8 +186,8 @@ function RetirementChart({ proj }) {
             alignItems: 'center', justifyContent: 'center',
           }}>
             <div style={{ width: 1, height: '100%', background: '#ffffff11', position: 'absolute' }} />
-            <div style={{ fontSize: 9, color: '#c8d8f0', whiteSpace: 'nowrap', zIndex: 1 }}>Age {m.age}</div>
-            <div style={{ fontSize: 10, color: '#b0c0dd', fontWeight: 700, zIndex: 1 }}>
+            <div style={{ fontSize: 'clamp(10px,1vw,12px)', color: '#c8d8f0', whiteSpace: 'nowrap', zIndex: 1 }}>Age {m.age}</div>
+            <div style={{ fontSize: 'clamp(11px,1.1vw,13px)', color: '#b0c0dd', fontWeight: 700, zIndex: 1 }}>
               {m.balance >= 1000000 ? `$${(m.balance/1000000).toFixed(1)}M` : `$${Math.round(m.balance/1000)}k`}
             </div>
           </div>
@@ -274,20 +274,20 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
   if (!started) {
     return (
       <div style={{ textAlign: 'center', padding: '32px 16px' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>🇺🇸</div>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 8 }}>
+        <div style={{ fontSize: 'clamp(32px,4vw,48px)', marginBottom: 12 }}>🇺🇸</div>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(20px,2vw,26px)', color: '#ffaa00', letterSpacing: '.1em', marginBottom: 8 }}>
           MEET MAX — YOUR US PORTFOLIO ADVISOR
         </div>
-        <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', lineHeight: 1.7, marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
+        <div style={{ fontSize: 'var(--fs-body)', color: '#b0c0dd', lineHeight: 1.7, marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
           Max will ask you a few questions about your financial situation, goals, and risk tolerance — then generate a detailed personalized portfolio with ETF picks, account strategy, tax optimization, and retirement projections.
         </div>
-        <div style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd', marginBottom: 20 }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', marginBottom: 20 }}>
           Monthly investment budget: <strong style={{ color: '#ffaa00' }}>{fmtD(monthlyBudget)}/month</strong>
         </div>
         <button onClick={start} style={{
           background: '#ffaa00', color: '#07070e', border: 'none',
           padding: '12px 32px', borderRadius: 6, cursor: 'pointer',
-          fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: '.1em',
+          fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(16px,1.6vw,20px)', letterSpacing: '.1em',
         }}>START INTAKE</button>
       </div>
     );
@@ -302,7 +302,7 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
             display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
           }}>
             {m.role === 'assistant' && (
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ffaa0022', border: '1px solid #ffaa0044', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, marginRight: 8, flexShrink: 0 }}>M</div>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ffaa0022', border: '1px solid #ffaa0044', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(14px,1.3vw,16px)', marginRight: 8, flexShrink: 0 }}>M</div>
             )}
             <div style={{
               maxWidth: '78%', padding: '10px 14px', borderRadius: 12,
@@ -318,7 +318,7 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
         ))}
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ffaa0022', border: '1px solid #ffaa0044', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>M</div>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ffaa0022', border: '1px solid #ffaa0044', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(14px,1.3vw,16px)' }}>M</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div style={{ display: 'flex', gap: 4 }}>
                 {[0,1,2].map(i => (
@@ -349,7 +349,7 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
         <button onClick={handleSend} disabled={loading || !input.trim()} style={{
           background: '#ffaa00', color: '#07070e', border: 'none',
           borderRadius: 6, padding: '10px 18px', cursor: 'pointer',
-          fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, flexShrink: 0,
+          fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(15px,1.4vw,18px)', flexShrink: 0,
           opacity: loading || !input.trim() ? 0.4 : 1,
         }}>SEND</button>
       </div>
@@ -369,7 +369,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
       <div style={{ background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 8, padding: '16px', marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
           <div>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 4 }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(18px,1.8vw,24px)', color: '#ffaa00', letterSpacing: '.1em', marginBottom: 4 }}>
               YOUR US PORTFOLIO
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -421,7 +421,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                   <div style={{
                     width: 26, height: 26, borderRadius: '50%', background: color + '22',
                     border: `1px solid ${color}44`, display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', fontSize: 11, fontWeight: 700, color, flexShrink: 0,
+                    justifyContent: 'center', fontSize: 'clamp(12px,1.1vw,14px)', fontWeight: 700, color, flexShrink: 0,
                   }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
@@ -429,7 +429,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                       <Pill label={ac.taxBenefit} color={color} small />
                       {ac.annualLimit && <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>limit: {fmtD(ac.annualLimit)}/yr</span>}
                     </div>
-                    <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd' }}>{ac.rationale}</div>
+                    <div style={{ fontSize: 'var(--fs-body)', color: '#b0c0dd' }}>{ac.rationale}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color }}>{fmtD(ac.monthlyContribution)}</div>
@@ -486,14 +486,14 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                 background: i % 2 === 0 ? '#0c0c18' : 'transparent',
               }}>
                 <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00', flexShrink: 0, width: 70 }}>{row.ticker}</div>
-                <div style={{ flex: 1, fontSize: 'var(--fs-xs)', color: '#b0c0dd' }}>{row.account}</div>
+                <div style={{ flex: 1, fontSize: 'var(--fs-sm)', color: '#b0c0dd' }}>{row.account}</div>
                 <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', flexShrink: 0 }}>{row.frequency}</div>
-                <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#ffaa00', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>{fmtD(row.amount)}</div>
+                <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: '#ffaa00', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>{fmtD(row.amount)}</div>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderTop: '2px solid #1a1a2e', background: '#0c0c18' }}>
               <span style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', fontWeight: 700 }}>TOTAL</span>
-              <span style={{ fontSize: 'var(--fs-sm)', color: '#ffaa00', fontWeight: 700 }}>{fmtD(p.monthlyPlan.total)}/month</span>
+              <span style={{ fontSize: 'var(--fs-body)', color: '#ffaa00', fontWeight: 700 }}>{fmtD(p.monthlyPlan.total)}/month</span>
             </div>
           </div>
         </Section>
@@ -518,7 +518,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
           <div style={{ background: '#0a0a14', border: `1px solid ${p.emergencyFund.status === 'Adequate' ? '#00ff8822' : '#ff444422'}`, borderRadius: 8, padding: '14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <Pill label={p.emergencyFund.status} color={p.emergencyFund.status === 'Adequate' ? '#00ff88' : p.emergencyFund.status === 'Needs building' ? '#ffaa00' : '#ff4444'} />
-              {p.emergencyFund.targetAmount && <span style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0' }}>Target: {fmtD(p.emergencyFund.targetAmount)}</span>}
+              {p.emergencyFund.targetAmount && <span style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0' }}>Target: {fmtD(p.emergencyFund.targetAmount)}</span>}
             </div>
             <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.6 }}>{p.emergencyFund.recommendation}</div>
           </div>
@@ -534,9 +534,9 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                 display: 'flex', alignItems: 'center', gap: 12,
                 background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 6, padding: '10px 14px',
               }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffaa0018', border: '1px solid #ffaa0033', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#ffaa00', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffaa0018', border: '1px solid #ffaa0033', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(12px,1.1vw,14px)', color: '#ffaa00', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', fontWeight: 600 }}>{m.goal}</div>
+                  <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', fontWeight: 600 }}>{m.goal}</div>
                   <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>{m.timeframe}</div>
                 </div>
                 {m.amount > 0 && <div style={{ fontSize: 'var(--fs-sm)', color: '#00ff88', fontWeight: 700 }}>{fmtD(m.amount)}</div>}
@@ -673,7 +673,7 @@ export default function USInvestTab() {
     <div style={{ padding: '0 0 40px' }}>
       {/* Tab header */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00', letterSpacing: '.1em' }}>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(20px,2vw,26px)', color: '#ffaa00', letterSpacing: '.1em' }}>
           🇺🇸 US INVEST
         </div>
         <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>
@@ -721,7 +721,7 @@ export default function USInvestTab() {
                   color: payFrequency === f.key ? '#ffaa00' : '#556677',
                   textAlign: 'center',
                 }}>
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 15, letterSpacing: '.06em' }}>{f.label}</div>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(15px,1.4vw,17px)', letterSpacing: '.06em' }}>{f.label}</div>
                   <div style={{ fontSize: 'var(--fs-xs)', marginTop: 2 }}>{f.sub}</div>
                 </button>
               ))}
@@ -741,21 +741,21 @@ export default function USInvestTab() {
                 return (
                   <button key={monthly} onClick={() => setMonthlyBudget(monthly)} style={{
                     padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
-                    fontFamily: "'Bebas Neue',sans-serif", fontSize: 14,
+                    fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(14px,1.3vw,16px)',
                     background: isActive ? '#ffaa00' : '#0f0f1a',
                     color: isActive ? '#07070e' : '#8899bb',
                     border: `1px solid ${isActive ? '#ffaa00' : '#2a2a3e'}`,
                     textAlign: 'center',
                   }}>
                     <div>${display.toLocaleString()}</div>
-                    <div style={{ fontSize: 9, opacity: 0.7 }}>/{freqLabel[payFrequency]}</div>
+                    <div style={{ fontSize: 'clamp(10px,1vw,12px)', opacity: 0.7 }}>/{freqLabel[payFrequency]}</div>
                   </button>
                 );
               })}
             </div>
             {/* Custom input */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ color: '#ffaa00', fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, flexShrink: 0 }}>$</span>
+              <span style={{ color: '#ffaa00', fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(18px,1.8vw,24px)', flexShrink: 0 }}>$</span>
               <input
                 type="number" min="10" max="50000"
                 value={paycheckAmt}
@@ -810,7 +810,7 @@ export default function USInvestTab() {
           <button onClick={() => setStage('chat')} disabled={!monthlyBudget || monthlyBudget < 50} style={{
             width: '100%', background: '#ffaa00', color: '#07070e', border: 'none',
             padding: '14px', borderRadius: 8, cursor: 'pointer',
-            fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: '.1em',
+            fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(18px,1.8vw,24px)', letterSpacing: '.1em',
             opacity: !monthlyBudget || monthlyBudget < 50 ? 0.4 : 1,
           }}>TALK TO MAX →</button>
         </div>
@@ -822,7 +822,7 @@ export default function USInvestTab() {
         <div style={{ background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 10, padding: '16px 16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #1a1a2e' }}>
             <div>
-              <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00' }}>MAX — US ADVISOR</span>
+              <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(15px,1.4vw,18px)', color: '#ffaa00' }}>MAX — US ADVISOR</span>
               <span style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd', marginLeft: 10 }}>Budget: {fmtD(monthlyBudget)}/mo · Paid {payFrequency}</span>
             </div>
             <button onClick={() => setStage('budget')} style={{ background: 'none', border: 'none', color: '#b0c0dd', cursor: 'pointer', fontSize: 'var(--fs-xs)' }}>← Change budget</button>
@@ -836,7 +836,7 @@ export default function USInvestTab() {
       {stage === 'generating' && (
         <div style={{ background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 10, padding: '48px 20px', textAlign: 'center' }}>
           <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid #ffaa0022', borderTop: '3px solid #ffaa00', animation: 'spin 0.8s linear infinite', margin: '0 auto 20px' }} />
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 8 }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'clamp(18px,1.8vw,24px)', color: '#ffaa00', letterSpacing: '.1em', marginBottom: 8 }}>
             BUILDING YOUR PORTFOLIO
           </div>
           <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.7 }}>
