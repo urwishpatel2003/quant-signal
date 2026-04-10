@@ -3747,6 +3747,246 @@ Recommend 4-6 specific instruments. Make the monthly amounts add exactly to ₹$
   }
 });
 
+
+// ─── US Portfolio Advisor ─────────────────────────────────────────────────────
+
+// POST /api/us-portfolio/chat — conversational intake with Max, the US advisor
+app.post('/api/us-portfolio/chat', async (req, res) => {
+  const { messages, monthlyBudget, payFrequency = 'monthly' } = req.body;
+  const msgHistory = Array.isArray(messages) ? messages : [];
+  const paycheckAmt = payFrequency === 'weekly' ? Math.round(monthlyBudget * 12 / 52)
+    : payFrequency === 'biweekly' ? Math.round(monthlyBudget * 12 / 26) : monthlyBudget;
+  const freqWord = payFrequency === 'weekly' ? 'week' : payFrequency === 'biweekly' ? 'paycheck' : 'month';
+  const budget = `$${Number(monthlyBudget || 500).toLocaleString()}/month ($${paycheckAmt.toLocaleString()} per ${freqWord})`;
+
+  try {
+    const result = await callClaudeRaw({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 700,
+      system: `You are Max, a friendly and knowledgeable US financial advisor at QuAInt Signal.
+You are doing a conversational intake with a new investor to understand their full financial picture before generating a personalized portfolio.
+
+YOUR JOB: Ask questions ONE AT A TIME in a natural, conversational way to gather:
+1. Age and employment status (W-2, self-employed, retired)
+2. Annual household income (approximate range)
+3. Primary investment goal (retirement / house down payment / wealth building / college fund / other)
+4. Investment timeline / horizon
+5. Account types they have or want (401k, Roth IRA, brokerage, HSA)
+6. Existing investments (if any — 401k balance, index funds, stocks, crypto)
+7. Monthly expenses and any debt (student loans, mortgage, credit cards)
+8. Emergency fund status (do they have 3-6 months saved)
+9. Risk tolerance (scenario: "if your portfolio dropped 30% in a crash like 2020, would you panic sell, hold, or buy more?")
+10. Tax situation (rough bracket — helps optimize account placement)
+11. Any specific sectors or companies they want to avoid (ESG, Big Tech, etc.)
+
+RULES:
+- Ask only ONE question at a time
+- Keep responses SHORT — 1-2 sentences max
+- Be warm and conversational, not robotic or stiff
+- After 8-10 exchanges when you have sufficient information, end with EXACTLY this JSON on its own line:
+  {"PORTFOLIO_READY": true}
+- Do NOT generate the portfolio yourself — just signal when ready
+- Monthly investment budget is already known: ${budget}
+- Do not ask about monthly budget again
+
+Start by greeting them warmly and asking their age and employment status in one natural question.`,
+      messages: msgHistory.length > 0
+        ? msgHistory.map(m => ({ role: m.role, content: m.content }))
+        : [{ role: 'user', content: 'Hi, I want to start investing and building wealth.' }],
+    });
+
+    if (result?.error) throw new Error(result.error.message || 'Claude API error');
+    const text = result?.content?.[0]?.text || '';
+    if (!text) throw new Error('No response from AI. Please try again.');
+
+    if (text.includes('"PORTFOLIO_READY": true')) {
+      return res.json({
+        message: text.replace(/\{"PORTFOLIO_READY":\s*true\}/g, '').trim() ||
+          "Perfect, I have everything I need! Let me build your personalized US portfolio now...",
+        done: true,
+      });
+    }
+
+    res.json({ message: text, done: false });
+  } catch (e) {
+    console.error('[us-portfolio/chat]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/us-portfolio/generate — generate full US portfolio from conversation
+app.post('/api/us-portfolio/generate', async (req, res) => {
+  const { messages, monthlyBudget, payFrequency = 'monthly' } = req.body;
+  if (!messages?.length) return res.status(400).json({ error: 'messages required' });
+
+  const transcript = messages
+    .map(m => `${m.role === 'user' ? 'Investor' : 'Advisor'}: ${m.content}`)
+    .join('\n');
+
+  try {
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      temperature: 0,
+      system: `You are a fiduciary US financial advisor (CFP-level knowledge). Based on the intake conversation, generate a comprehensive, personalized portfolio recommendation for a US investor.
+
+Return ONLY valid JSON matching this EXACT schema (no markdown, no explanation):
+{
+  "summary": "3-4 sentence personalized overview referencing their specific situation, goals, and timeline",
+  "investorProfile": {
+    "age": number,
+    "employmentType": "W-2|Self-Employed|Retired|Student",
+    "goal": "string",
+    "horizon": "string",
+    "riskLabel": "Conservative|Moderate|Aggressive|Very Aggressive",
+    "taxBracket": "10%|12%|22%|24%|32%|35%|37%",
+    "accountStrategy": "Roth IRA first|401k match first|Taxable brokerage|HSA maximization|Mixed",
+    "keyConsiderations": ["string", "string", "string"]
+  },
+  "riskAssessment": {
+    "label": "string",
+    "score": number,
+    "expectedAnnualReturn": "X-Y%",
+    "maxDrawdown": "X-Y%",
+    "volatility": "Low|Moderate|High|Very High",
+    "suitability": "one sentence"
+  },
+  "accountPlan": [
+    {
+      "accountType": "401k|Roth IRA|Traditional IRA|HSA|529|Taxable Brokerage",
+      "monthlyContribution": number,
+      "annualLimit": number,
+      "priority": number,
+      "taxBenefit": "Pre-tax growth|Tax-free growth|Tax deduction|Taxable",
+      "rationale": "one sentence why this account type for this investor"
+    }
+  ],
+  "holdings": [
+    {
+      "ticker": "string",
+      "name": "full ETF or fund name",
+      "type": "ETF|Index Fund|Bond ETF|REIT|Sector ETF|Crypto ETF",
+      "allocation": number,
+      "monthlyAmount": number,
+      "expenseRatio": "0.XX%",
+      "expectedReturn": "X-Y% p.a.",
+      "dividendYield": "X.X%",
+      "accountPlacement": "Roth IRA|401k|Taxable|HSA",
+      "assetClass": "US Equity|International Equity|Bonds|Real Estate|Commodities|Cash",
+      "pros": ["string", "string"],
+      "cons": ["string"],
+      "rationale": "2 sentence personalized rationale referencing their goal and situation"
+    }
+  ],
+  "assetAllocation": {
+    "usEquity": number,
+    "internationalEquity": number,
+    "bonds": number,
+    "realEstate": number,
+    "commodities": number,
+    "cash": number
+  },
+  "monthlyPlan": {
+    "total": number,
+    "breakdown": [
+      { "account": "string", "ticker": "string", "amount": number, "frequency": "Monthly|Bi-weekly|Weekly" }
+    ]
+  },
+  "taxStrategy": {
+    "accountPlacementStrategy": "2 sentences on what goes in Roth vs 401k vs taxable",
+    "taxLossHarvesting": "specific advice on when and how to tax-loss harvest",
+    "rothConversion": "advice on Roth conversion ladder if applicable",
+    "capitalGains": "advice on long-term vs short-term gains management"
+  },
+  "retirementProjection": {
+    "monthlyContribution": number,
+    "currentAge": number,
+    "retirementAge": 65,
+    "projectedBalance": number,
+    "assumedReturn": "X%",
+    "monthlyRetirementIncome": number,
+    "socialSecurityEstimate": number,
+    "totalMonthlyInRetirement": number
+  },
+  "rebalancing": {
+    "frequency": "Quarterly|Semi-annually|Annually",
+    "method": "Threshold-based|Calendar-based|Contribution-based",
+    "instructions": "specific step-by-step rebalancing instructions"
+  },
+  "emergencyFund": {
+    "status": "Adequate|Needs building|Critical",
+    "targetAmount": number,
+    "recommendation": "specific advice"
+  },
+  "redFlags": ["specific risk or concern from their situation"],
+  "milestones": [
+    { "timeframe": "string", "goal": "string", "amount": number }
+  ],
+  "nextSteps": ["specific action 1", "specific action 2", "specific action 3", "specific action 4"]
+}`,
+      messages: [{
+        role: 'user',
+        content: `Here is the full intake conversation:
+
+${transcript}
+
+Monthly investment budget: $${Number(monthlyBudget).toLocaleString()} (pay frequency: ${payFrequency})
+Current date: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+Market context: US market 2026, Fed rate environment, S&P 500 around 5,500.
+
+Generate a comprehensive, highly personalized portfolio. Make all monthly amounts add up to exactly $${Number(monthlyBudget).toLocaleString()}. Include 5-8 specific ETF/fund tickers. Reference their specific goals and situation throughout.`,
+      }],
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('[us-portfolio/generate]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET/POST /us-portfolio/:userId — save and load US portfolio
+app.get('/us-portfolio/:userId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('us_portfolio')
+      .eq('user_id', req.params.userId)
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    res.json({ portfolio: data?.us_portfolio || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/us-portfolio/:userId', async (req, res) => {
+  try {
+    const { portfolio } = req.body;
+    const { error } = await supabase
+      .from('user_settings')
+      .upsert({ user_id: req.params.userId, us_portfolio: portfolio, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/us-portfolio/:userId', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('user_settings')
+      .update({ us_portfolio: null })
+      .eq('user_id', req.params.userId);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Quarterly Financials ────────────────────────────────────────────────────
 
 function calcYoY(current, prior) {

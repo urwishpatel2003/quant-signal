@@ -21,6 +21,7 @@ import DashboardPage      from './tabs/DashboardPage';
 import SharePage      from './pages/SharePage';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
+import USInvestTab     from './tabs/USInvestTab';
 import HelpTab        from './tabs/HelpTab';
 import WelcomePage    from './components/WelcomePage';
 import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components/FooterModals';
@@ -312,6 +313,11 @@ export default function App() {
                     scan.runScan(ticker, scan.timeframe, 'INDIA');
                   }}
                 />
+              </div>
+            )}
+            {market !== 'INDIA' && (
+              <div style={{ display: activeTab === 'invest' ? 'block' : 'none' }}>
+                <USInvestTab />
               </div>
             )}
           </SignedIn>
