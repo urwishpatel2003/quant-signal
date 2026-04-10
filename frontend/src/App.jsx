@@ -105,13 +105,7 @@ export default function App() {
   const baseTabs = market === 'INDIA'
     ? TABS.filter(t => t.id !== 'options') // no options for India
     : TABS;
-  const visibleTabs = market === 'INDIA'
-    ? baseTabs.reduce((acc, tab) => {
-        acc.push(tab);
-        if (tab.id === 'scanner') acc.push({ id: 'invest', label: 'INVEST' });
-        return acc;
-      }, [])
-    : baseTabs;
+  const visibleTabs = baseTabs;
 
   if (!isLoaded) {
     return (
