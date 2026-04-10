@@ -356,7 +356,7 @@ export default function SocialBubbleChart({ onScan }) {
         ) : (
           <canvas ref={cvRef} style={{ display:'block', cursor:'crosshair' }}
             onMouseMove={e => { stateRef.current.hovered = getHit(e.clientX, e.clientY); }}
-            onMouseLeave={() => { stateRef.current.hovered = null; setPending(null); }}
+            onMouseLeave={() => { stateRef.current.hovered = null; }}
             onClick={e => {
               const h = getHit(e.clientX, e.clientY);
               if (!h) { setPending(null); return; }
