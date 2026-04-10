@@ -295,7 +295,7 @@ app.post('/webhook', async (req, res) => {
   res.json({ received: true });
 });
 
-function httpsGet(hostname, path, headers = {}) {
+function httpsGet(hostname, path, headers = {}, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const req = https.request(
       { hostname, path, method: 'GET', headers: { Accept: 'application/json', ...headers } },
@@ -308,6 +308,7 @@ function httpsGet(hostname, path, headers = {}) {
         });
       }
     );
+    req.setTimeout(timeoutMs, () => { req.destroy(new Error(`httpsGet timeout: ${hostname}`)); });
     req.on('error', reject);
     req.end();
   });
@@ -3251,6 +3252,30 @@ async function fetchIndiaMacroData() {
 
   return { sectors, usdInr, india10Y, crude, gold, globalSignals, updatedAt: Date.now() };
 }
+
+
+// ─── India connectivity debug endpoint ───────────────────────────────────────
+app.get('/india/debug-connectivity', async (req, res) => {
+  const tests = [
+    { name: 'yahoo_query2',   fn: () => httpsGet('query2.finance.yahoo.com', '/v8/finance/chart/RELIANCE.NS?interval=1d&range=2d', { 'User-Agent': 'Mozilla/5.0' }, 6000) },
+    { name: 'yahoo_query1',   fn: () => httpsGet('query1.finance.yahoo.com', '/v8/finance/chart/%5ENSEI?interval=1d&range=2d',     { 'User-Agent': 'Mozilla/5.0' }, 6000) },
+    { name: 'er_api_fx',      fn: () => httpsGet('open.er-api.com', '/v6/latest/USD', {}, 6000) },
+    { name: 'polygon_spy',    fn: () => polygonGet('/v2/aggs/ticker/SPY/prev?adjusted=true') },
+    { name: 'nse_india_pkg',  fn: async () => nseIndia ? (await nseIndia.getEquityDetails('RELIANCE').catch(e => ({ error: e.message }))) : { error: 'pkg not loaded' } },
+    { name: 'moneycontrol_rss', fn: () => fetch('https://www.moneycontrol.com/rss/marketreports.xml', { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) }).then(r => ({ status: r.status, ok: r.ok })).catch(e => ({ error: e.message })) },
+  ];
+  const results = {};
+  await Promise.allSettled(tests.map(async t => {
+    const start = Date.now();
+    try {
+      const data = await t.fn();
+      results[t.name] = { ok: true, ms: Date.now() - start, sample: JSON.stringify(data).slice(0, 120) };
+    } catch (e) {
+      results[t.name] = { ok: false, ms: Date.now() - start, error: e.message };
+    }
+  }));
+  res.json(results);
+});
 
 app.get('/india/macro', async (req, res) => {
   try {
