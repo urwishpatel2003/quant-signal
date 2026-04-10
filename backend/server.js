@@ -5985,6 +5985,12 @@ app.post('/sim/:userId/open', async (req, res) => {
   const isOption = positionType === 'OPTION';
 
   if (!ticker) return res.status(400).json({ error: 'ticker required' });
+  // Try to extract expiry from option symbol (e.g. AAPL250418C00170000) if not sent
+  if (isOption && !req.body.expiry && req.body.optionSymbol) {
+    const sym = req.body.optionSymbol;
+    const m = sym.match(/[A-Z]+(\d{2})(\d{2})(\d{2})[CP]/);
+    if (m) req.body.expiry = `20${m[1]}-${m[2]}-${m[3]}`;
+  }
   if (isOption && (!req.body.strike || !req.body.expiry || !req.body.optionType))
     return res.status(400).json({ error: 'strike, expiry, optionType required for options' });
   if (!isOption && (!entryPrice || !quantity))
