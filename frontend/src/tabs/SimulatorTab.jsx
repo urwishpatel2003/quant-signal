@@ -334,42 +334,45 @@ export default function SimulatorTab({ market = 'US' }) {
                     border: `1px solid ${hitTarget ? '#00ff8844' : hitStop ? '#ff444444' : '#2a2a40'}`,
                     borderRadius: 8, padding: '14px 16px',
                   }}>
-                    {/* Header row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#e8e8f0' }}>{pos.ticker}</span>
-                          {pos.position_type === 'OPTION' ? (
-                            <span style={{
-                              fontSize: 'var(--fs-body)', fontWeight: 700, padding: '2px 7px', borderRadius: 3,
-                              background: pos.option_type === 'CALL' ? '#00ff8811' : '#ff444411',
-                              border: `1px solid ${pos.option_type === 'CALL' ? '#00ff8833' : '#ff444433'}`,
-                              color: pos.option_type === 'CALL' ? '#00ff88' : '#ff4444',
-                            }}>{pos.option_type} ${pos.strike} {pos.expiry}</span>
-                          ) : (
-                            <span style={{
-                              fontSize: 'var(--fs-body)', fontWeight: 700, padding: '2px 7px', borderRadius: 3,
-                              background: pos.direction === 'LONG' ? '#00ff8811' : '#ff444411',
-                              border: `1px solid ${pos.direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
-                              color: pos.direction === 'LONG' ? '#00ff88' : '#ff4444',
-                            }}>{pos.direction}</span>
-                          )}
-                          {pos.signal && (
-                            <span style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0' }}>
-                              {pos.signal} · {pos.confidence}% conf
-                            </span>
-                          )}
-                          {hitTarget && <span style={{ fontSize: 'var(--fs-body)', color: '#00ff88', fontWeight: 700 }}>🎯 TARGET HIT</span>}
-                          {hitStop   && <span style={{ fontSize: 'var(--fs-body)', color: '#ff4444', fontWeight: 700 }}>⚠ STOP HIT</span>}
-                        </div>
-                        <div style={{ fontSize: 'var(--fs-body)', color: '#99aacc', marginTop: 2 }}>
-                          {pos.position_type === 'OPTION'
-                          ? `${pos.contracts} contract${pos.contracts > 1 ? 's' : ''} · premium ${sym}${pos.premium?.toFixed(2)}/sh · expires ${pos.expiry}`
-                          : `${pos.quantity} shares · entered ${sym}${pos.entry_price.toFixed(2)} · ${new Date(pos.opened_at).toLocaleDateString()}`}
-                        </div>
-                      </div>
-                      <PnlBadge value={pnl} pct={pct} size="lg" currency={currency} isInr={isInr} />
-                    </div>
+                     {/* Header row */}
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
+                       <div style={{ flex: 1, minWidth: 0 }}>
+                         {/* Line 1: ticker + badge — nowrap */}
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                           <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#e8e8f0', flexShrink: 0 }}>{pos.ticker}</span>
+                           {pos.position_type === 'OPTION' ? (
+                             <span style={{
+                               fontSize: 'var(--fs-xs)', fontWeight: 700, padding: '2px 6px', borderRadius: 3, flexShrink: 0,
+                               background: pos.option_type === 'CALL' ? '#00ff8811' : '#ff444411',
+                               border: `1px solid ${pos.option_type === 'CALL' ? '#00ff8833' : '#ff444433'}`,
+                               color: pos.option_type === 'CALL' ? '#00ff88' : '#ff4444',
+                             }}>{pos.option_type} ${pos.strike}</span>
+                           ) : (
+                             <span style={{
+                               fontSize: 'var(--fs-xs)', fontWeight: 700, padding: '2px 6px', borderRadius: 3, flexShrink: 0,
+                               background: pos.direction === 'LONG' ? '#00ff8811' : '#ff444411',
+                               border: `1px solid ${pos.direction === 'LONG' ? '#00ff8833' : '#ff444433'}`,
+                               color: pos.direction === 'LONG' ? '#00ff88' : '#ff4444',
+                             }}>{pos.direction}</span>
+                           )}
+                           {hitTarget && <span style={{ fontSize: 'var(--fs-xs)', color: '#00ff88', fontWeight: 700 }}>🎯 HIT</span>}
+                           {hitStop   && <span style={{ fontSize: 'var(--fs-xs)', color: '#ff4444', fontWeight: 700 }}>⚠ STOP</span>}
+                         </div>
+                         {/* Line 2: signal · conf */}
+                         {pos.signal && (
+                           <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 2 }}>
+                             {pos.signal} · {pos.confidence}% conf
+                           </div>
+                         )}
+                         {/* Line 3: details */}
+                         <div style={{ fontSize: 'var(--fs-xs)', color: '#99aacc' }}>
+                           {pos.position_type === 'OPTION'
+                           ? `${pos.contracts} contract${pos.contracts > 1 ? 's' : ''} · $${pos.premium?.toFixed(2)}/sh · exp ${pos.expiry}`
+                           : `${pos.quantity} shares · entered ${sym}${pos.entry_price.toFixed(2)} · ${new Date(pos.opened_at).toLocaleDateString()}`}
+                         </div>
+                       </div>
+                       <PnlBadge value={pnl} pct={pct} size="lg" currency={currency} isInr={isInr} />
+                     </div>
 
                     {/* Price bar */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
