@@ -314,19 +314,46 @@ export default function SimulatorTab({ market = 'US' }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {openPositions.map(pos => {
-                const cur     = prices[pos.ticker];
-                const pnl     = cur != null
-                  ? (pos.direction === 'LONG' ? (cur - pos.entry_price) : (pos.entry_price - cur)) * pos.quantity
-                  : null;
-                const pct     = cur != null
-                  ? (pos.direction === 'LONG'
-                      ? (cur - pos.entry_price) / pos.entry_price
-                      : (pos.entry_price - cur) / pos.entry_price) * 100
-                  : null;
+                const isOption  = pos.position_type === 'OPTION';
+                const optPrice  = prices[`OPT:${pos.id}`];          // live option mid price
+                const stockCur  = prices[pos.ticker];               // live stock price
+
+                // Current value: options use live premium mid, stocks use live stock price
+                const cur = isOption ? optPrice?.mid : stockCur;
+
+                // P&L calculation differs for options vs stocks
+                const pnl = isOption
+                  ? (cur != null && pos.premium != null
+                      ? (cur - pos.premium) * (pos.contracts || 1) * 100
+                      : null)
+                  : (stockCur != null
+                      ? (pos.direction === 'LONG'
+                          ? (stockCur - pos.entry_price)
+                          : (pos.entry_price - stockCur)) * pos.quantity
+                      : null);
+
+                const pct = isOption
+                  ? (cur != null && pos.premium > 0
+                      ? ((cur - pos.premium) / pos.premium) * 100
+                      : null)
+                  : (stockCur != null && pos.entry_price > 0
+                      ? (pos.direction === 'LONG'
+                          ? (stockCur - pos.entry_price) / pos.entry_price
+                          : (pos.entry_price - stockCur) / pos.entry_price) * 100
+                      : null);
+
                 const isPos   = (pnl ?? 0) >= 0;
                 const sym     = pos.market === 'INDIA' ? '₹' : '$';
-                const hitTarget = pos.price_target && cur && (pos.direction === 'LONG' ? cur >= pos.price_target : cur <= pos.price_target);
-                const hitStop   = pos.stop_loss   && cur && (pos.direction === 'LONG' ? cur <= pos.stop_loss   : cur >= pos.stop_loss);
+                // Target/stop hit logic — for options use stock price vs breakeven
+                const breakEven = isOption
+                  ? (pos.option_type === 'CALL' ? pos.strike + pos.premium : pos.strike - pos.premium)
+                  : null;
+                const hitTarget = isOption
+                  ? (breakEven && stockCur && (pos.option_type === 'CALL' ? stockCur >= pos.price_target : stockCur <= pos.price_target))
+                  : (pos.price_target && stockCur && (pos.direction === 'LONG' ? stockCur >= pos.price_target : stockCur <= pos.price_target));
+                const hitStop = isOption
+                  ? (cur != null && pos.premium && cur <= pos.premium * 0.5)  // 50% premium stop
+                  : (pos.stop_loss && stockCur && (pos.direction === 'LONG' ? stockCur <= pos.stop_loss : stockCur >= pos.stop_loss));
 
                 return (
                   <div key={pos.id} style={{

@@ -6325,88 +6325,131 @@ app.get('/sim/:userId/prices', async (req, res) => {
 
 async function runSimAutoClose() {
   try {
-    // Get all open positions that have a target or stop
     const { data: openPositions } = await supabase
-      .from('sim_positions')
-      .select('*')
-      .eq('status', 'OPEN')
-      .or('price_target.not.is.null,stop_loss.not.is.null');
-
+      .from('sim_positions').select('*').eq('status', 'OPEN');
     if (!openPositions?.length) return;
 
-    // Group by market
-    const usPosns     = openPositions.filter(p => p.market !== 'INDIA');
-    const indiaPosns  = openPositions.filter(p => p.market === 'INDIA');
-    const prices      = {};
+    const stockPosns  = openPositions.filter(p => p.position_type !== 'OPTION' && p.market !== 'INDIA');
+    const optPosns    = openPositions.filter(p => p.position_type === 'OPTION');
+    const indiaPosns  = openPositions.filter(p => p.market === 'INDIA' && p.position_type !== 'OPTION');
+    const stockPrices = {}; // ticker → live stock price
+    const optPrices   = {}; // pos.id → live option mid price
 
-    // Fetch US prices
-    if (usPosns.length) {
-      const tickers = [...new Set(usPosns.map(p => p.ticker))];
+    // Stock prices (US)
+    if (stockPosns.length) {
+      const tickers = [...new Set(stockPosns.map(p => p.ticker))];
       try {
         const data = await tradierGet(`/v1/markets/quotes?symbols=${tickers.join(',')}&greeks=false`);
-        const raw  = data?.quotes?.quote || [];
-        const list = Array.isArray(raw) ? raw : [raw];
-        list.forEach(q => { if (q.symbol && q.last) prices[q.symbol] = parseFloat(q.last); });
+        const raw  = Array.isArray(data?.quotes?.quote) ? data.quotes.quote : data?.quotes?.quote ? [data.quotes.quote] : [];
+        raw.forEach(q => { if (q.symbol && q.last) stockPrices[q.symbol] = parseFloat(q.last); });
       } catch {}
     }
 
-    // Fetch India prices
-    if (indiaPosns.length) {
-      const tickers = [...new Set(indiaPosns.map(p => p.ticker))];
-      await Promise.allSettled(tickers.map(async ticker => {
-        const q = await getNSEQuote(ticker);
-        if (q?.price) prices[ticker] = q.price;
+    // Live option mid prices via OCC symbol
+    if (optPosns.length) {
+      await Promise.allSettled(optPosns.map(async pos => {
+        try {
+          let sym = pos.option_symbol;
+          if (!sym && pos.strike && pos.expiry) {
+            const d = pos.expiry.replace(/-/g, '').slice(2);
+            const strikeStr = (parseFloat(pos.strike) * 1000).toFixed(0).padStart(8, '0');
+            sym = `${pos.ticker}${d}${pos.option_type === 'PUT' ? 'P' : 'C'}${strikeStr}`;
+          }
+          if (!sym) return;
+          const data = await tradierGet(`/v1/markets/quotes?symbols=${sym}&greeks=false`);
+          const q    = data?.quotes?.quote;
+          if (q) {
+            const mid = (q.bid && q.ask) ? (q.bid + q.ask) / 2 : q.last;
+            if (mid) optPrices[pos.id] = parseFloat(mid);
+            // also store underlying stock price for breakeven checks
+            const stockQ = await tradierGet(`/v1/markets/quotes?symbols=${pos.ticker}&greeks=false`);
+            const sq = stockQ?.quotes?.quote;
+            if (sq?.last) stockPrices[pos.ticker] = parseFloat(sq.last);
+          }
+        } catch {}
       }));
     }
 
-    // Check each position
+    // India prices
+    if (indiaPosns.length) {
+      await Promise.allSettled([...new Set(indiaPosns.map(p => p.ticker))].map(async ticker => {
+        const q = await getNSEQuote(ticker);
+        if (q?.price) stockPrices[ticker] = q.price;
+      }));
+    }
+
     const closes = [];
+    const etNow  = new Date(Date.now() - 4 * 3600 * 1000);
+    const todayET = etNow.toISOString().split('T')[0];
+    const marketClosed = etNow.getUTCHours() >= 16;
+
     for (const pos of openPositions) {
-      const cur = prices[pos.ticker];
-      if (!cur) continue;
+      const isOption = pos.position_type === 'OPTION';
+      let exitReason = null, exitPrice = null;
 
-      let exitReason = null;
-      let exitPrice  = null;
+      if (isOption) {
+        const curPremium  = optPrices[pos.id];
+        const stockPrice  = stockPrices[pos.ticker];
 
-      if (pos.direction === 'LONG') {
-        if (pos.price_target && cur >= parseFloat(pos.price_target)) {
-          exitReason = 'TARGET'; exitPrice = parseFloat(pos.price_target);
-        } else if (pos.stop_loss && cur <= parseFloat(pos.stop_loss)) {
-          exitReason = 'STOP'; exitPrice = parseFloat(pos.stop_loss);
+        // 1. Expired — close at intrinsic value
+        if (pos.expiry && (pos.expiry < todayET || (pos.expiry === todayET && marketClosed))) {
+          const intrinsic = pos.option_type === 'CALL'
+            ? Math.max(0, (stockPrice || 0) - pos.strike)
+            : Math.max(0, pos.strike - (stockPrice || 0));
+          exitReason = 'EXPIRED'; exitPrice = intrinsic;
         }
-      } else { // SHORT
-        if (pos.price_target && cur <= parseFloat(pos.price_target)) {
-          exitReason = 'TARGET'; exitPrice = parseFloat(pos.price_target);
-        } else if (pos.stop_loss && cur >= parseFloat(pos.stop_loss)) {
-          exitReason = 'STOP'; exitPrice = parseFloat(pos.stop_loss);
+        // 2. 50% premium stop (hard stop for options)
+        else if (curPremium && pos.premium && curPremium <= pos.premium * 0.5) {
+          exitReason = 'STOP'; exitPrice = curPremium;
+        }
+        // 3. 2x premium target
+        else if (curPremium && pos.premium && curPremium >= pos.premium * 2.0) {
+          exitReason = 'TARGET'; exitPrice = curPremium;
+        }
+      } else {
+        // Stock position — use stock price
+        const cur = stockPrices[pos.ticker];
+        if (!cur) continue;
+        if (pos.direction === 'LONG') {
+          if (pos.price_target && cur >= parseFloat(pos.price_target)) { exitReason = 'TARGET'; exitPrice = parseFloat(pos.price_target); }
+          else if (pos.stop_loss && cur <= parseFloat(pos.stop_loss))  { exitReason = 'STOP';   exitPrice = parseFloat(pos.stop_loss);   }
+        } else {
+          if (pos.price_target && cur <= parseFloat(pos.price_target)) { exitReason = 'TARGET'; exitPrice = parseFloat(pos.price_target); }
+          else if (pos.stop_loss && cur >= parseFloat(pos.stop_loss))  { exitReason = 'STOP';   exitPrice = parseFloat(pos.stop_loss);   }
         }
       }
 
-      if (exitReason) closes.push({ pos, exitPrice, exitReason });
+      if (exitReason) closes.push({ pos, exitPrice, exitReason, isOption });
     }
 
-    // Execute closes
-    for (const { pos, exitPrice, exitReason } of closes) {
+    for (const { pos, exitPrice, exitReason, isOption } of closes) {
       try {
-        const pnl = pos.direction === 'LONG'
-          ? (exitPrice - pos.entry_price) * pos.quantity
-          : (pos.entry_price - exitPrice) * pos.quantity;
-        const pct = pos.direction === 'LONG'
-          ? ((exitPrice - pos.entry_price) / pos.entry_price) * 100
-          : ((pos.entry_price - exitPrice) / pos.entry_price) * 100;
+        let pnl, pct;
+        if (isOption) {
+          // Options P&L = (exitPremium - entryPremium) × contracts × 100
+          pnl = (exitPrice - pos.premium) * (pos.contracts || 1) * 100;
+          pct = pos.premium > 0 ? ((exitPrice - pos.premium) / pos.premium) * 100 : -100;
+        } else {
+          pnl = pos.direction === 'LONG'
+            ? (exitPrice - pos.entry_price) * pos.quantity
+            : (pos.entry_price - exitPrice) * pos.quantity;
+          pct = pos.direction === 'LONG'
+            ? ((exitPrice - pos.entry_price) / pos.entry_price) * 100
+            : ((pos.entry_price - exitPrice) / pos.entry_price) * 100;
+        }
 
-        const simId     = `${pos.user_id}_${pos.market}`;
+        const simId = `${pos.user_id}_${pos.market}`;
         const { data: acc } = await supabase.from('sim_account').select('balance').eq('user_id', simId).single();
-        const newBalance = acc
-          ? (pos.direction === 'LONG'
-              ? acc.balance + (exitPrice * pos.quantity)
-              : acc.balance + pnl)
-          : null;
+        // Return original cost + P&L to balance
+        const originalCost = isOption
+          ? pos.premium * (pos.contracts || 1) * 100
+          : pos.entry_price * pos.quantity;
+        const newBalance = acc ? acc.balance + originalCost + pnl : null;
 
         await Promise.all([
           supabase.from('sim_positions').update({
             status:       'CLOSED',
-            exit_price:   exitPrice,
+            exit_price:   parseFloat(exitPrice.toFixed(4)),
             exit_reason:  exitReason,
             closed_at:    new Date().toISOString(),
             realized_pnl: parseFloat(pnl.toFixed(2)),
@@ -6418,7 +6461,7 @@ async function runSimAutoClose() {
           }).eq('user_id', simId)] : []),
         ]);
 
-        console.log(`[sim auto-close] ${pos.ticker} ${exitReason} @ ${exitPrice} | P&L: ${pnl.toFixed(2)}`);
+        console.log(`[sim auto-close] ${pos.ticker} ${isOption ? `${pos.option_type} $${pos.strike}` : ''} ${exitReason} | P&L: $${pnl.toFixed(2)}`);
       } catch (e) {
         console.error('[sim auto-close] error closing', pos.ticker, e.message);
       }
