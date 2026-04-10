@@ -154,14 +154,14 @@ export default function App() {
           padding: '8px 14px', gap: 10,
         }}>
           <div
-            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
-              letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}
+            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(18px,5vw,24px)',
+              letterSpacing: '0.05em', lineHeight: 1, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
             onClick={handleLogoClick}>
             <span style={{ color: '#ffaa00' }}>Qu</span>
             <span style={{ color: '#00ff88' }}>AI</span>
             <span style={{ color: '#ffaa00' }}>nt Signal</span>
           </div>
-          <div style={{ fontSize: 'var(--fs-md)', color: '#b8c8e0', letterSpacing: '0.15em', fontWeight: 600, flexShrink: 0 }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: '#b8c8e0', letterSpacing: '0.12em', fontWeight: 600, flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="hide-mobile">
             AI-POWERED MARKET INTELLIGENCE
           </div>
         </div>
