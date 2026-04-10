@@ -187,11 +187,11 @@ export default function SignalHistoryTab({ market = 'US' }) {
             background: '#0f0f1a',
             border: `1px solid ${s.outcome_result === 'WIN' ? '#00ff8822' : s.outcome_result === 'LOSS' ? '#ff444422' : '#2a2a40'}`,
             borderRadius: 8, padding: '12px 14px',
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            display: 'flex', alignItems: 'flex-start', gap: 10,
           }}>
-            {/* Ticker + signal */}
-            <div style={{ minWidth: 80 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Left: ticker + signal — fixed width */}
+            <div style={{ flexShrink: 0, width: 88 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
                 <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 15, color: '#e8e8f0' }}>{s.ticker}</div>
                 {s.signal_type === 'OPTION' && (
                   <span style={{ fontSize: 'var(--fs-xs)', background: s.option_type === 'CALL' ? '#00ff8822' : '#ff444422', color: s.option_type === 'CALL' ? '#00ff88' : '#ff4444', border: `1px solid ${s.option_type === 'CALL' ? '#00ff8844' : '#ff444444'}`, padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>
@@ -199,27 +199,27 @@ export default function SignalHistoryTab({ market = 'US' }) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: sigColor(s.signal) }}>{s.signal} · {s.confidence}%</div>
-              {s.signal_type === 'OPTION' && s.strike && (
-                <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb' }}>
-                  {`$${s.strike} · exp ${s.expiry?.slice(5)} · entry $${s.entry_premium}`}
-                </div>
-              )}
+              <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: sigColor(s.signal) }}>{s.signal} · {s.confidence}%</div>
             </div>
 
-            {/* Prices */}
-            <div style={{ flex: 1, minWidth: 120 }}>
-              <div style={{ fontSize: 'var(--fs-lg)', color: '#c8d8f0' }}>
+            {/* Middle: prices + details — grows to fill */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0' }}>
                 Entry: {market === 'INDIA' ? '₹' : '$'}{s.price_at_signal?.toFixed(2)}
                 {s.price_target && ` · Target: ${market === 'INDIA' ? '₹' : '$'}${parseFloat(s.price_target).toFixed(2)}`}
               </div>
-              <div style={{ fontSize: 'var(--fs-body)', color: '#99aacc', marginTop: 2 }}>
+              {s.signal_type === 'OPTION' && s.strike && (
+                <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', marginTop: 1 }}>
+                  {`$${s.strike} · exp ${s.expiry?.slice(5)} · entry $${s.entry_premium}`}
+                </div>
+              )}
+              <div style={{ fontSize: 'var(--fs-xs)', color: '#99aacc', marginTop: 2 }}>
                 {s.timeframe} · {new Date(s.created_at).toLocaleDateString()}
               </div>
             </div>
 
-            {/* Outcome */}
-            <div style={{ textAlign: 'right' }}>
+            {/* Right: outcome — fixed width */}
+            <div style={{ flexShrink: 0, textAlign: 'right' }}>
               <OutcomeBadge result={s.outcome_result} />
               {s.outcome_pct != null && (
                 <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, marginTop: 4, color: s.outcome_pct >= 0 ? '#00ff88' : '#ff4444' }}>
