@@ -12,9 +12,16 @@ function packBubbles(items, W) {
   if (!items.length || !W) return [];
   const maxM  = Math.max(...items.map(t => t.mentions), 1);
   const count = items.length;
-  const MAX_R = Math.max(14, Math.min(54, Math.floor(W * Math.sqrt(0.65 / (count * Math.PI)))));
+
+  // Target aspect ratio: landscape on desktop, square-ish on mobile
+  const aspect = W >= 600 ? 0.5 : 0.9;  // H = W * aspect
+  const H = Math.round(W * aspect);
+
+  // Scale bubble sizes to fit W×H canvas
+  const area = W * H * 0.72;
+  const MAX_R = Math.max(14, Math.min(54, Math.floor(Math.sqrt(area / (count * Math.PI)))));
   const MIN_R = Math.max(10, Math.floor(MAX_R * 0.45));
-  const GAP   = Math.max(3, Math.floor(MAX_R * 0.1));
+  const GAP   = Math.max(3, Math.floor(MAX_R * 0.08));
 
   const bs = items.map(t => ({
     ...t,
@@ -27,37 +34,35 @@ function packBubbles(items, W) {
   }));
   bs.sort((a, b) => b.r - a.r);
 
+  // Spiral outward from center of the target canvas
+  const cx = W / 2, cy = H / 2;
   const placed = [];
   for (const b of bs) {
-    if (!placed.length) { b.x = 0; b.y = 0; placed.push(b); continue; }
-    let best = null, bestScore = Infinity;
-    const cands = [];
-    for (const p of placed) {
-      const d = p.r + b.r + GAP;
-      for (let a = 0; a < Math.PI * 2; a += 0.15)
-        cands.push({ x: p.x + d * Math.cos(a), y: p.y + d * Math.sin(a) });
-    }
-    for (const c of cands) {
-      if (c.x - b.r < GAP || c.x + b.r > W - GAP) continue;
-      if (c.y - b.r < GAP) continue;
-      if (placed.some(p => Math.hypot(p.x - c.x, p.y - c.y) < p.r + b.r + GAP - 0.5)) continue;
-      const score = c.y * 4 + Math.abs(c.x - W / 2);
-      if (score < bestScore) { bestScore = score; best = c; }
+    if (!placed.length) { b.x = cx; b.y = cy; placed.push(b); continue; }
+    let best = null, bestDist = Infinity;
+    for (let spiral = b.r; spiral < Math.max(W, H) * 1.5; spiral += 3) {
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.18) {
+        const tx = cx + spiral * Math.cos(angle);
+        const ty = cy + spiral * Math.sin(angle);
+        if (tx - b.r < GAP || tx + b.r > W - GAP) continue;
+        if (ty - b.r < GAP || ty + b.r > H - GAP) continue;
+        if (placed.some(p => Math.hypot(p.x-tx, p.y-ty) < p.r + b.r + GAP)) continue;
+        const dist = Math.hypot(tx - cx, ty - cy);
+        if (dist < bestDist) { bestDist = dist; best = { x: tx, y: ty }; }
+        break;
+      }
+      if (best) break;
     }
     if (best) { b.x = best.x; b.y = best.y; }
-    else { const mY = Math.max(...placed.map(p => p.y + p.r), 0); b.x = W/2; b.y = mY + b.r + GAP; }
+    else {
+      // Fallback: place at bottom center
+      const maxY = Math.max(...placed.map(p => p.y + p.r), cy);
+      b.x = cx; b.y = maxY + b.r + GAP;
+    }
     placed.push(b);
   }
 
-  // Translate so cluster fits snugly
-  const minX = Math.min(...placed.map(b => b.x - b.r));
-  const maxX = Math.max(...placed.map(b => b.x + b.r));
-  const minY = Math.min(...placed.map(b => b.y - b.r));
-  const maxY = Math.max(...placed.map(b => b.y + b.r));
-  const shiftX = (W - (maxX - minX)) / 2 - minX;
-  const shiftY = GAP * 2 - minY;
-  placed.forEach(b => { b.x += shiftX; b.y += shiftY; });
-  return { bubbles: placed.sort((a,b) => a.z - b.z), H: (maxY - minY) + GAP * 4 };
+  return { bubbles: placed.sort((a, b) => a.z - b.z), H };
 }
 
 function drawBubble(ctx, b, tick, isHov) {
@@ -163,8 +168,10 @@ export default function SocialBubbleChart({ onScan }) {
 
     const { bubbles, H } = packBubbles(filtered, W);
     state.bubbles = bubbles;
+    state.W = W;
+    state.H = H;
 
-    // Size canvas properly
+    // Size canvas
     cv.width       = Math.round(W * dpr);
     cv.height      = Math.round(H * dpr);
     cv.style.width  = W + 'px';
