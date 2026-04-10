@@ -361,12 +361,16 @@ export default function SocialBubbleChart({ onScan }) {
               const h = getHit(e.clientX, e.clientY);
               if (!h) { setPending(null); return; }
               if (pending?.symbol === h.symbol) {
-                // Second click = confirmed
                 onScan?.(h.symbol);
                 setPending(null);
               } else {
-                // First click = show confirm
-                setPending({ symbol: h.symbol, x: e.clientX, y: e.clientY });
+                // Store position relative to the wrapper div
+                const rect = wrapRef.current?.getBoundingClientRect();
+                setPending({
+                  symbol: h.symbol,
+                  x: e.clientX - (rect?.left || 0),
+                  y: e.clientY - (rect?.top  || 0),
+                });
               }
             }}
             onTouchStart={e => {
@@ -378,7 +382,12 @@ export default function SocialBubbleChart({ onScan }) {
                 onScan?.(h.symbol);
                 setPending(null);
               } else {
-                setPending({ symbol: h.symbol, x: t.clientX, y: t.clientY });
+                const rect = wrapRef.current?.getBoundingClientRect();
+                setPending({
+                  symbol: h.symbol,
+                  x: t.clientX - (rect?.left || 0),
+                  y: t.clientY - (rect?.top  || 0),
+                });
               }
             }}
           />
@@ -386,40 +395,52 @@ export default function SocialBubbleChart({ onScan }) {
 
         {/* ── Scan confirmation tooltip ── */}
         {pending && (() => {
-          const wrap = wrapRef.current;
-          const rect = wrap?.getBoundingClientRect();
-          const relX = pending.x - (rect?.left || 0);
-          const relY = pending.y - (rect?.top  || 0);
-          // Keep tooltip inside canvas bounds
-          const tipW = 160, tipH = 56;
-          const left = Math.max(8, Math.min(relX - tipW/2, (rect?.width || W) - tipW - 8));
-          const top  = Math.max(8, relY - tipH - 12);
+          const wrapW = wrapRef.current?.offsetWidth || 400;
+          const wrapH = wrapRef.current?.offsetHeight || 300;
+          const tipW  = Math.min(240, wrapW - 24);
+          const tipH  = 90;
+          // Position above the click point, clamped inside wrapper
+          const left = Math.max(8, Math.min(pending.x - tipW / 2, wrapW - tipW - 8));
+          const top  = Math.max(8, pending.y - tipH - 16);
           return (
-            <div style={{
-              position: 'absolute', left, top,
-              background: '#0d0d1a', border: '1px solid #ffaa0066',
-              borderRadius: 6, padding: '8px 12px',
-              display: 'flex', flexDirection: 'column', gap: 6,
-              pointerEvents: 'auto', zIndex: 10,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
-              minWidth: tipW,
-            }}>
-              <div style={{ fontSize: 'var(--fs-xs)', color: '#ffaa00', fontWeight: 700, letterSpacing: '.06em' }}>
-                SCAN {pending.symbol}?
+            <div
+              style={{
+                position: 'absolute', left, top, width: tipW,
+                background: '#0d0d1a',
+                border: '1px solid #ffaa00',
+                borderRadius: 8, padding: '14px 16px',
+                display: 'flex', flexDirection: 'column', gap: 10,
+                pointerEvents: 'auto', zIndex: 20,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.8), 0 0 0 1px #ffaa0033',
+              }}
+              // Stop canvas mouse-leave from dismissing while over tooltip
+              onMouseEnter={e => e.stopPropagation()}
+            >
+              <div style={{ fontSize: 'clamp(13px,1.3vw,16px)', color: '#ffaa00', fontWeight: 700, letterSpacing: '.08em', textAlign: 'center' }}>
+                ⚡ SCAN {pending.symbol}?
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button
-                  onClick={() => { onScan?.(pending.symbol); setPending(null); }}
-                  style={{ flex: 1, padding: '4px 0', fontSize: 'var(--fs-xs)', fontWeight: 700,
-                    background: '#ffaa0022', border: '1px solid #ffaa0066', borderRadius: 3,
-                    color: '#ffaa00', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  ⚡ YES
+                  onClick={e => { e.stopPropagation(); onScan?.(pending.symbol); setPending(null); }}
+                  style={{
+                    flex: 1, padding: '9px 0',
+                    fontSize: 'clamp(13px,1.2vw,15px)', fontWeight: 700,
+                    background: '#ffaa0022', border: '2px solid #ffaa00',
+                    borderRadius: 5, color: '#ffaa00',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    letterSpacing: '.06em',
+                  }}>
+                  YES
                 </button>
                 <button
-                  onClick={() => setPending(null)}
-                  style={{ flex: 1, padding: '4px 0', fontSize: 'var(--fs-xs)',
-                    background: 'transparent', border: '1px solid #2a2a3e', borderRadius: 3,
-                    color: '#7788aa', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  onClick={e => { e.stopPropagation(); setPending(null); }}
+                  style={{
+                    flex: 1, padding: '9px 0',
+                    fontSize: 'clamp(13px,1.2vw,15px)',
+                    background: 'transparent', border: '1px solid #2a2a3e',
+                    borderRadius: 5, color: '#7788aa',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
                   CANCEL
                 </button>
               </div>
