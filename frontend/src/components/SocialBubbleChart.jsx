@@ -132,14 +132,32 @@ function drawBubble(ctx, b, tick, isHov) {
   ctx.strokeStyle = sentColor(sentiment, 0.28 + z*0.38);
   ctx.lineWidth = isHov ? 1.8 : 0.85; ctx.stroke();
 
-  // Text
-  const fs = Math.max(9, Math.round(r * 0.42));
+  // Text — auto-shrink for long tickers, clip to bubble diameter
+  const maxTextW = r * 1.6; // max text width = 80% of diameter
+  let fs = Math.max(8, Math.round(r * 0.42));
   ctx.font = `700 ${fs}px 'JetBrains Mono',monospace`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // Shrink font until text fits
+  let label = b.symbol;
+  let measured = ctx.measureText(label).width;
+  while (measured > maxTextW && fs > 7) {
+    fs -= 1;
+    ctx.font = `700 ${fs}px 'JetBrains Mono',monospace`;
+    measured = ctx.measureText(label).width;
+  }
+  // Truncate with ellipsis if still too long at min size
+  if (measured > maxTextW && label.length > 4) {
+    while (ctx.measureText(label + '…').width > maxTextW && label.length > 2) {
+      label = label.slice(0, -1);
+    }
+    label = label + '…';
+  }
+
   ctx.fillStyle = `rgba(255,255,255,${0.72 + z*0.22})`;
-  ctx.fillText(b.symbol, x, y + (r > 22 ? -fs*0.48 : 0));
+  ctx.fillText(label, x, y + (r > 22 ? -fs*0.48 : 0));
   if (r > 22) {
-    const ms = Math.max(8, Math.round(r * 0.27));
+    const ms = Math.max(7, Math.round(r * 0.27));
     ctx.font = `400 ${ms}px monospace`;
     ctx.fillStyle = `rgba(255,255,255,${0.3 + z*0.18})`;
     ctx.fillText(b.mentions, x, y + fs*0.62);
@@ -156,8 +174,11 @@ export default function SocialBubbleChart({ onScan, market = 'US' }) {
   const cvRef    = useRef(null);
   const stateRef = useRef({ bubbles: [], hovered: null, tick: 0, raf: null });
 
-  // Fetch
+  // Fetch — re-runs when market changes
   useEffect(() => {
+    setData(null);
+    setLoading(true);
+    stateRef.current.bubbles = []; // clear old bubbles immediately
     fetch(`${BASE}/${market === 'INDIA' ? 'india/social-buzz' : 'social/trending'}`)
       .then(r => r.json())
       .then(d => {
@@ -166,7 +187,7 @@ export default function SocialBubbleChart({ onScan, market = 'US' }) {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [market]);
 
   // Main effect — runs whenever data/filter change, sets up canvas + loop
   useEffect(() => {
@@ -176,6 +197,11 @@ export default function SocialBubbleChart({ onScan, market = 'US' }) {
 
     const state = stateRef.current;
     if (state.raf) { cancelAnimationFrame(state.raf); state.raf = null; }
+    // Reset matrix rain on market switch so it reinits for new canvas size
+    if (state.lastMarket !== market) {
+      state.matrix = null;
+      state.lastMarket = market;
+    }
 
     if (!data?.tickers?.length) return;
 
