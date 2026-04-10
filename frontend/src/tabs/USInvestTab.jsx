@@ -38,7 +38,7 @@ function Section({ title, children, accent = '#ffaa00' }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{
-        fontFamily: "'Bebas Neue',sans-serif", fontSize: 15, color: accent,
+        fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: accent,
         letterSpacing: '.12em', marginBottom: 10, paddingBottom: 6,
         borderBottom: `1px solid ${accent}22`,
       }}>{title}</div>
@@ -55,7 +55,7 @@ function StatCard({ label, value, sub, color = '#c8d8f0', accent }) {
       borderTop: accent ? `2px solid ${accent}` : undefined,
     }}>
       <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', letterSpacing: '.08em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color, fontFamily: "'JetBrains Mono',monospace" }}>{value}</div>
+      <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color, fontFamily: "'JetBrains Mono',monospace" }}>{value}</div>
       {sub && <div style={{ fontSize: 'var(--fs-xs)', color: '#445566', marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -108,16 +108,16 @@ function HoldingCard({ h, currency = '$' }) {
         {/* Ticker + name */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
-            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17, color: '#ffaa00' }}>{h.ticker}</span>
+            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00' }}>{h.ticker}</span>
             <Pill label={h.type} color={asColor} small />
             <Pill label={h.accountPlacement} color={acColor} small />
           </div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
         </div>
         {/* Allocation + amount */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: '#ffaa00' }}>{h.allocation}%</div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb' }}>{fmtM(h.monthlyAmount)}/mo</div>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, fontWeight: 700, color: '#ffaa00' }}>{h.allocation}%</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb' }}>{fmtM(h.monthlyAmount)}/mo</div>
         </div>
         <div style={{ color: '#334455', fontSize: 12, flexShrink: 0 }}>{open ? '▲' : '▼'}</div>
       </div>
@@ -125,13 +125,13 @@ function HoldingCard({ h, currency = '$' }) {
       {/* Expanded detail */}
       {open && (
         <div style={{ padding: '0 14px 14px', borderTop: '1px solid #12121e' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8, margin: '10px 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, margin: '12px 0' }}>
             <StatCard label="EXP RATIO"   value={h.expenseRatio}  color="#c8d8f0" />
             <StatCard label="EST RETURN"  value={h.expectedReturn} color="#00ff88" />
             <StatCard label="DIV YIELD"   value={h.dividendYield}  color="#4488ff" />
             <StatCard label="ASSET CLASS" value={h.assetClass?.replace(' Equity','')} color={asColor} />
           </div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.6, marginBottom: 10 }}>
+          <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.6, marginBottom: 10 }}>
             {h.rationale}
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -166,7 +166,7 @@ function RetirementChart({ proj }) {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
         <StatCard label="PROJECTED BALANCE" value={fmtD(proj.projectedBalance)} color="#00ff88" accent="#00ff88" />
         <StatCard label="MONTHLY INCOME" value={fmtD(proj.monthlyRetirementIncome)} color="#ffaa00" />
         <StatCard label="SOC SECURITY EST" value={fmtD(proj.socialSecurityEstimate)} color="#4488ff" />
@@ -308,7 +308,7 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
               maxWidth: '78%', padding: '10px 14px', borderRadius: 12,
               background: m.role === 'user' ? '#ffaa0022' : '#0f0f1a',
               border: `1px solid ${m.role === 'user' ? '#ffaa0044' : '#1a1a2e'}`,
-              fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.6,
+              fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.6,
               borderBottomRightRadius: m.role === 'user' ? 4 : 12,
               borderBottomLeftRadius: m.role === 'assistant' ? 4 : 12,
             }}>
@@ -392,12 +392,12 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
             }}>↺ START OVER</button>
           </div>
         </div>
-        <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.7 }}>{p.summary}</div>
+        <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.7 }}>{p.summary}</div>
       </div>
 
       {/* Key Stats */}
       <Section title="📊 PORTFOLIO OVERVIEW">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
           <StatCard label="MONTHLY INVEST" value={fmtD(monthlyBudget)} color="#ffaa00" accent="#ffaa00" />
           <StatCard label="EXP ANNUAL RETURN" value={p.riskAssessment?.expectedAnnualReturn} color="#00ff88" accent="#00ff8844" />
           <StatCard label="MAX DRAWDOWN" value={p.riskAssessment?.maxDrawdown} color="#ff4444" />
@@ -425,14 +425,14 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                   }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                      <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 15, color }}>{ac.accountType}</span>
+                      <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color }}>{ac.accountType}</span>
                       <Pill label={ac.taxBenefit} color={color} small />
                       {ac.annualLimit && <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>limit: {fmtD(ac.annualLimit)}/yr</span>}
                     </div>
-                    <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb' }}>{ac.rationale}</div>
+                    <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb' }}>{ac.rationale}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color }}>{fmtD(ac.monthlyContribution)}</div>
+                    <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color }}>{fmtD(ac.monthlyContribution)}</div>
                     <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>per month</div>
                   </div>
                 </div>
@@ -468,7 +468,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
             ].filter(t => t.text).map((t, i) => (
               <div key={i} style={{ background: '#0a0a14', border: '1px solid #aa44ff22', borderRadius: 6, padding: '10px 14px' }}>
                 <div style={{ fontSize: 'var(--fs-xs)', color: '#aa44ff', letterSpacing: '.08em', marginBottom: 4 }}>{t.label.toUpperCase()}</div>
-                <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.6 }}>{t.text}</div>
+                <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.6 }}>{t.text}</div>
               </div>
             ))}
           </div>
@@ -485,7 +485,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                 borderBottom: i < p.monthlyPlan.breakdown.length - 1 ? '1px solid #12121e' : 'none',
                 background: i % 2 === 0 ? '#0c0c18' : 'transparent',
               }}>
-                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 15, color: '#ffaa00', flexShrink: 0, width: 60 }}>{row.ticker}</div>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00', flexShrink: 0, width: 70 }}>{row.ticker}</div>
                 <div style={{ flex: 1, fontSize: 'var(--fs-xs)', color: '#8899bb' }}>{row.account}</div>
                 <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', flexShrink: 0 }}>{row.frequency}</div>
                 <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#ffaa00', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>{fmtD(row.amount)}</div>
@@ -507,7 +507,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
               <Pill label={p.rebalancing.frequency} color="#ffaa00" />
               <Pill label={p.rebalancing.method} color="#4488ff" />
             </div>
-            <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.7 }}>{p.rebalancing.instructions}</div>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.7 }}>{p.rebalancing.instructions}</div>
           </div>
         </Section>
       )}
@@ -520,7 +520,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
               <Pill label={p.emergencyFund.status} color={p.emergencyFund.status === 'Adequate' ? '#00ff88' : p.emergencyFund.status === 'Needs building' ? '#ffaa00' : '#ff4444'} />
               {p.emergencyFund.targetAmount && <span style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0' }}>Target: {fmtD(p.emergencyFund.targetAmount)}</span>}
             </div>
-            <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.6 }}>{p.emergencyFund.recommendation}</div>
+            <div style={{ fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.6 }}>{p.emergencyFund.recommendation}</div>
           </div>
         </Section>
       )}
@@ -554,7 +554,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
               <div key={i} style={{
                 display: 'flex', gap: 10, padding: '10px 14px',
                 background: '#ff444408', border: '1px solid #ff444422', borderRadius: 6,
-                fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.5,
+                fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.5,
               }}>
                 <span style={{ color: '#ff4444', flexShrink: 0 }}>⚠</span> {f}
               </div>
@@ -571,7 +571,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
               <div key={i} style={{
                 display: 'flex', gap: 10, padding: '10px 14px',
                 background: '#00ff8806', border: '1px solid #00ff8820', borderRadius: 6,
-                fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.5,
+                fontSize: 'var(--fs-body)', color: '#c8d8f0', lineHeight: 1.5,
               }}>
                 <span style={{ color: '#00ff88', fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
               </div>
@@ -670,7 +670,7 @@ export default function USInvestTab() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 0 40px' }}>
+    <div style={{ padding: '0 0 40px' }}>
       {/* Tab header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00', letterSpacing: '.1em' }}>
@@ -702,10 +702,10 @@ export default function USInvestTab() {
         <div style={{ background: '#0a0a14', border: '1px solid #1a1a2e', borderRadius: 10, padding: '24px 20px' }}>
           {/* Step 1: Pay frequency */}
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 6 }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00', letterSpacing: '.1em', marginBottom: 6 }}>
               STEP 1 — HOW OFTEN DO YOU GET PAID?
             </div>
-            <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 12 }}>
+            <div style={{ fontSize: 'var(--fs-sm)', color: '#556677', marginBottom: 12 }}>
               We'll calculate your per-paycheck investment so it aligns with your cash flow.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -730,7 +730,7 @@ export default function USInvestTab() {
 
           {/* Step 2: Amount per paycheck */}
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 6 }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00', letterSpacing: '.1em', marginBottom: 6 }}>
               STEP 2 — HOW MUCH PER {freqLabel[payFrequency].toUpperCase()}?
             </div>
             {/* Quick picks — shown in per-paycheck amounts */}
@@ -790,7 +790,7 @@ export default function USInvestTab() {
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'var(--fs-lg)', color: '#00ff88', fontWeight: 700 }}>${(monthlyBudget * 12).toLocaleString()}</div>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
                 {[
                   { icon: '📊', text: 'Personalized ETF picks' },
                   { icon: '🏦', text: '401k / Roth IRA strategy' },
