@@ -3,6 +3,47 @@ import { useUser } from '@clerk/clerk-react';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
+// ── Safe date parser — handles MM/DD/YYYY, YYYY-MM-DD, M/D/YY, "Jan 15, 2024" etc ──
+function parseDateSafe(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s) return null;
+
+  // Already ISO: 2024-01-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // MM/DD/YYYY or M/D/YYYY (Robinhood, Schwab, TD)
+  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (mdy) {
+    const [, m, d, y] = mdy;
+    const year = y.length === 2 ? (parseInt(y) > 50 ? '19' + y : '20' + y) : y;
+    return `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+
+  // MM-DD-YYYY
+  const mdyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (mdyDash) {
+    const [, m, d, y] = mdyDash;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+
+  // "Jan 15, 2024" or "January 15, 2024"
+  const months = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+  const longDate = s.match(/^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (longDate) {
+    const m = months[longDate[1].toLowerCase().slice(0,3)];
+    if (m) return `${longDate[3]}-${String(m).padStart(2,'0')}-${longDate[2].padStart(2,'0')}`;
+  }
+
+  // Last resort: let browser parse but catch errors
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  } catch {}
+
+  return null; // unparseable — skip row
+}
+
 // ── Broker CSV field mappings ─────────────────────────────────────────────────
 const BROKER_PROFILES = {
   robinhood: {
@@ -100,8 +141,8 @@ function normalizeTransactions(rows, brokerKey) {
     const type    = profile.typeMap[rawType] || profile.typeMap[rawType?.toLowerCase()] || 'OTHER';
     const symbol  = getField(row, profile.symbolField)?.toUpperCase()?.replace(/[^A-Z]/g, '') || null;
     const dateRaw = getField(row, profile.dateField);
-    const date    = dateRaw ? new Date(dateRaw).toISOString().split('T')[0] : null;
-    if (!date || date === 'Invalid Date' || isNaN(new Date(dateRaw))) continue;
+    const date    = parseDateSafe(dateRaw);
+    if (!date) continue;
     const quantity = parseFloat(getField(row, profile.qtyField)) || null;
     const price    = parseFloat(getField(row, profile.priceField)?.replace(/[^0-9.]/g, '')) || null;
     const amount   = parseFloat(getField(row, profile.amountField)?.replace(/[^0-9.-]/g, '')) || null;
