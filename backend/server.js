@@ -4852,12 +4852,21 @@ async function fetchSocialSentiment() {
   const tickers = {};
 
   const SKIP_WORDS = new Set([
+    // Finance acronyms
     'DD','WSB','CEO','IPO','ETF','OTM','ATM','ITM','PUT','CALL','THE','AND','FOR',
     'NOT','ARE','YOU','NOW','ALL','NEW','GET','OUT','CAN','HAS','ITS','YTD','EPS',
     'PE','AI','IV','SEC','GDP','CPI','USA','USD','EUR','GBP','JPY','FED','IMF',
-    'WHO','WTO','NATO','US','UK','EU','PMI','NFP','ISM',
+    'WHO','WTO','NATO','US','UK','EU','PMI','NFP','ISM','APR','AUG','JAN','FEB',
+    'MAR','MAY','JUN','JUL','SEP','OCT','NOV','DEC',
+    // Reddit slang / common words mistaken for tickers
     'EDIT','TLDR','IMO','FWIW','HODL','YOLO','APE','MOON','BEAR','BULL',
-    'GAIN','LOSS','LOL','OMG','WTF','BUY','SELL','HOLD',
+    'GAIN','LOSS','LOL','OMG','WTF','BUY','SELL','HOLD','RIP','GG','EZ',
+    'FOMO','BTFD','DYOR','NFA','EOD','EOW','ATH','YOY','QOQ','MOM',
+    'LMAO','LMFAO','SMH','TBH','TIL','IIRC','AFAIK','ETA','FYI','PSA',
+    'OP','OG','DM','PM','MOD','SUB','LONG','SHORT','PUTS','CALLS',
+    'CASH','DEBT','RISK','FUND','BANK','RATE','BOND','LOAN','LOSS','SAVE',
+    'HIGH','LOWW','OPEN','NOPE','NEXT','LAST','BEST','ONLY','JUST','ALSO',
+    'GOOD','VERY','REAL','BACK','DOWN','STAY','SAFE','SURE','NEED','WANT',
   ]);
 
   const addTicker = (symbol, source, bullish = null, mentions = 1) => {
@@ -4998,7 +5007,11 @@ async function fetchSocialSentiment() {
 
   const maxMentions = Math.max(...Object.values(tickers).map(t => t.mentions), 1);
   const result = Object.values(tickers)
-    .filter(t => t.mentions >= 2 || KNOWN_TICKERS.has(t.symbol) && t.mentions >= 1)
+    .filter(t => {
+      if (KNOWN_TICKERS.has(t.symbol)) return t.mentions >= 1;
+      // Unknown tickers: need 3+ mentions from 2+ distinct sources to avoid false positives like RIP, GG etc.
+      return t.mentions >= 3 && t.sources.size >= 2;
+    })
     .map(t => {
       const total     = t.bullish + t.bearish;
       const sentiment = total > 0 ? (t.bullish - t.bearish) / total : 0; // -1 to +1

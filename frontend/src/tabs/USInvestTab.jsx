@@ -202,52 +202,73 @@ function RetirementChart({ proj }) {
 
 // ── Chat Component ─────────────────────────────────────────────────────────────
 function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
+  const GREETING = `Hi! I'm Max, your US portfolio advisor. I'll ask you a few quick questions to build your personalized investment plan.\n\nLet's start — how old are you, and are you employed (W-2), self-employed, or retired?`;
+
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
   const [started, setStarted]     = useState(false);
+  const [retrying, setRetrying]   = useState(false);
   const bottomRef                 = useRef(null);
 
   const scroll = () => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
 
-  const send = useCallback(async (userMsg, history) => {
+  const callAPI = useCallback(async (history, attempt = 1) => {
+    const res = await fetch(`${BASE}/api/us-portfolio/chat`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history, monthlyBudget, payFrequency }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      // Retry on overload up to 3 times with backoff
+      if ((data.error.includes('overload') || data.error.includes('529') || res.status === 529) && attempt < 3) {
+        setRetrying(true);
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        setRetrying(false);
+        return callAPI(history, attempt + 1);
+      }
+      throw new Error(data.error);
+    }
+    return data;
+  }, [monthlyBudget, payFrequency]);
+
+  const send = useCallback(async (history) => {
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/api/us-portfolio/chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, monthlyBudget }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
+      const data    = await callAPI(history);
       const updated = [...history, { role: 'assistant', content: data.message }];
       setMessages(updated);
       scroll();
-
-      if (data.done) {
-        // Start portfolio generation
-        setTimeout(() => onComplete(updated), 600);
-      }
+      if (data.done) setTimeout(() => onComplete(updated), 600);
     } catch (e) {
-      setMessages(m => [...m, { role: 'assistant', content: `Sorry, something went wrong: ${e.message}` }]);
+      const msg = e.message?.toLowerCase().includes('overload')
+        ? "Max is busy right now — the AI is overloaded. Please wait a moment and try again."
+        : `Something went wrong: ${e.message}`;
+      setMessages(m => [...m, { role: 'assistant', content: msg }]);
     } finally {
       setLoading(false);
     }
-  }, [monthlyBudget, onComplete]);
+  }, [callAPI, onComplete]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(() => {
     setStarted(true);
-    await send('Hi, I want to start investing and building wealth.', []);
-  }, [send]);
+    // Show hardcoded greeting instantly — no API call needed for the opener
+    const initialHistory = [
+      { role: 'user',      content: 'Hi, I want to start investing and building wealth.' },
+      { role: 'assistant', content: GREETING },
+    ];
+    setMessages(initialHistory);
+    scroll();
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
-    const userMsg  = input.trim();
-    const updated  = [...messages, { role: 'user', content: userMsg }];
+    const userMsg = input.trim();
+    const updated = [...messages, { role: 'user', content: userMsg }];
     setMessages(updated);
     setInput('');
     scroll();
-    await send(userMsg, updated);
+    await send(updated);
   };
 
   if (!started) {
@@ -298,11 +319,14 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#ffaa0022', border: '1px solid #ffaa0044', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>M</div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[0,1,2].map(i => (
-                <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffaa00', opacity: 0.6,
-                  animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffaa00', opacity: 0.6,
+                    animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />
+                ))}
+              </div>
+              {retrying && <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Retrying — API busy...</div>}
             </div>
           </div>
         )}
