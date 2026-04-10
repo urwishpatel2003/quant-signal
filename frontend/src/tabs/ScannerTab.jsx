@@ -436,16 +436,18 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
               {isIndia ? '🇮🇳 NIFTY 50 MOVERS' : '📈 STOCK MOVERS'}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: moversOpen ? '1px solid #1e1e30' : 'none', marginBottom: moversOpen ? 12 : 0 }}>
-              <div style={{ display: 'flex', gap: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: moversOpen ? '1px solid #1e1e30' : 'none', marginBottom: moversOpen ? 12 : 0, overflow: 'hidden' }}>
+              {/* Tab buttons — shrink if needed, never wrap */}
+              <div style={{ display: 'flex', flex: 1, minWidth: 0, overflow: 'hidden' }}>
               {MOVER_TABS.map(t => (
                 <button key={t.key}
                   onClick={() => { setMoversTab(t.key); setMoversOpen(true); }}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    padding: '8px 14px', fontSize: 'var(--fs-md)', letterSpacing: '0.1em',
+                    padding: '8px 10px', fontSize: 'var(--fs-sm)', letterSpacing: '0.06em',
                     textTransform: 'uppercase', fontFamily: 'inherit', fontWeight: 700,
-                    color:        moversTab === t.key ? t.color : '#b0c0dd',
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                    color:        moversTab === t.key ? t.color : '#8899bb',
                     borderBottom: moversTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
                     marginBottom: -1,
                   }}>
@@ -453,18 +455,12 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                 </button>
               ))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4 }}>
-                {scan.ticker && !moversOpen && (
-                  <span style={{ fontSize: 'var(--fs-lg)', color: '#c8d8f0', fontWeight: 600 }}>
-                    {scan.ticker} · {TIMEFRAMES[scan.timeframe]?.label}
-                  </span>
-                )}
-                <button onClick={() => setMoversOpen(o => !o)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#c8d8f0', fontSize: 'var(--fs-body)', padding: '4px 8px', fontFamily: 'inherit' }}>
-                  {moversOpen ? '▲' : '▼'}
-                </button>
-              </div>
+              {/* Collapse toggle — fixed width, never pushed out */}
+              <button onClick={() => setMoversOpen(o => !o)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                  color: '#556677', fontSize: 'var(--fs-sm)', padding: '4px 6px', fontFamily: 'inherit' }}>
+                {moversOpen ? '▲' : '▼'}
+              </button>
             </div>
 
             {moversOpen && (
@@ -497,24 +493,23 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                         }}
                         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
-                        <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
-                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-body)', color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
-                        <div style={{ fontSize: 'var(--fs-md)', color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
+                        <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', width: 16, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-body)', color: '#ffaa00', flex: '0 0 auto', minWidth: 44 }}>{m.ticker}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: '#4488ff', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#4488ff', display: 'flex', alignItems: 'center', gap: 4 }}>
                             {fmtVol(m.volume)}
                             {isUnusual && (
-                              <span style={{ fontSize: 'var(--fs-md)', color: '#ffaa00', background: '#ffaa0011', border: '1px solid #ffaa0033', padding: '1px 5px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 'var(--fs-xs)', color: '#ffaa00', background: '#ffaa0011', border: '1px solid #ffaa0033', padding: '1px 4px', borderRadius: 2 }}>
                                 {m.volVsAvg}x
                               </span>
                             )}
                           </div>
-                          {m.avgVolume > 0 && <div style={{ fontSize: 'var(--fs-body)', color: '#b8c8e0' }}>avg {fmtVol(m.avgVolume)}</div>}
+                          {m.avgVolume > 0 && <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb' }}>avg {fmtVol(m.avgVolume)}</div>}
                         </div>
-                        <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: pctColor, flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
+                        <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: pctColor, flexShrink: 0, textAlign: 'right' }}>
                           {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                         </div>
-                        <div style={{ fontSize: 'var(--fs-body)', color: isActive ? '#4488ff' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
+                        <div style={{ fontSize: 'var(--fs-sm)', color: isActive ? '#4488ff' : '#445566', flexShrink: 0, width: 20, textAlign: 'center' }}>{isActive ? '●' : '›'}</div>
                       </div>
                     );
                   })}
@@ -537,17 +532,14 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
                         }}
                         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#ffffff08'; }}
                         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
-                        <div style={{ fontSize: 'var(--fs-lg)', color: '#b8c8e0', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
-                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-body)', color: '#ffaa00', width: 72, flexShrink: 0 }}>{m.ticker}</div>
-                        <div style={{ fontSize: 'var(--fs-md)', color: '#e8e8f0', width: 72, flexShrink: 0, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
+                        <div style={{ fontSize: 'var(--fs-xs)', color: '#8899bb', width: 16, textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+                        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-body)', color: '#ffaa00', flex: '0 0 auto', minWidth: 44 }}>{m.ticker}</div>
+                        <div style={{ fontSize: 'var(--fs-sm)', color: '#e8e8f0', flex: '0 0 auto', minWidth: 56, fontWeight: 600 }}>{fmtPrice(m.price, currency)}</div>
                         <div style={{ flex: 1 }} />
-                        <div style={{ fontSize: 'var(--fs-lg)', color: color + '99', flexShrink: 0, textAlign: 'right', minWidth: 52, fontWeight: 600 }}>
-                          {isGainer ? '+' : ''}{currency}{m.change?.toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color, flexShrink: 0, textAlign: 'right', minWidth: 66 }}>
+                        <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color, flexShrink: 0, textAlign: 'right' }}>
                           {isGainer ? '▲' : '▼'} {Math.abs(m.changePct).toFixed(2)}%
                         </div>
-                        <div style={{ fontSize: 'var(--fs-body)', color: isActive ? '#ffaa00' : '#7788aa', flexShrink: 0 }}>{isActive ? '●' : '→'}</div>
+                        <div style={{ fontSize: 'var(--fs-sm)', color: isActive ? '#ffaa00' : '#445566', flexShrink: 0, width: 20, textAlign: 'center' }}>{isActive ? '●' : '›'}</div>
                       </div>
                     );
                   })}
