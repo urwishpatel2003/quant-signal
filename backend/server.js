@@ -5078,15 +5078,6 @@ setTimeout(() => {
 const INDIA_BUZZ_CACHE = { data: null, ts: 0 };
 const INDIA_BUZZ_TTL   = 10 * 60 * 1000; // 10 min
 
-const NIFTY50 = [
-  'RELIANCE','TCS','HDFCBANK','ICICIBANK','INFOSYS','HDFC','KOTAKBANK','HINDUNILVR',
-  'ITC','SBIN','BHARTIARTL','BAJFINANCE','ASIANPAINT','AXISBANK','LT','MARUTI',
-  'TITAN','SUNPHARMA','NESTLEIND','ULTRACEMCO','WIPRO','POWERGRID','NTPC','TECHM',
-  'HCLTECH','ONGC','JSWSTEEL','TATASTEEL','ADANIPORTS','GRASIM','BAJAJFINSV',
-  'BPCL','BRITANNIA','CIPLA','COALINDIA','DIVISLAB','DRREDDY','EICHERMOT','HEROMOTOCO',
-  'HINDALCO','INDUSINDBK','IOC','M&M','SBILIFE','SHREECEM','TATACONSUM','TATAMOTORS',
-  'UPL','VEDL','BAJAJ-AUTO',
-];
 
 async function fetchIndiaBuzz() {
   const buzz = {}; // ticker → { mentions, sentiment, sources }
@@ -5102,36 +5093,63 @@ async function fetchIndiaBuzz() {
     buzz[ticker].sources.add(source);
   };
 
-  // ── 1. NSE volume spikes ────────────────────────────────────────────────
+  // ── 1. NSE volume spikes — use existing movers data + individual quotes ────
   try {
-    await Promise.allSettled(NIFTY50.map(async ticker => {
-      try {
-        const q = await getNSEQuote(ticker);
-        if (!q) return;
-        const changePct = q.changePct || 0;
-        const volRatio  = q.volumeRatio || 1;
+    // First try the fast movers endpoint (already cached on server)
+    let moversData = null;
+    try {
+      const mRes = await fetch(`http://localhost:${process.env.PORT || 3001}/india/movers`, {
+        signal: AbortSignal.timeout(4000),
+      }).then(r => r.ok ? r.json() : null);
+      moversData = mRes;
+    } catch {}
 
-        // Volume spike score
+    if (moversData) {
+      // Gainers, losers, volume from movers — fast path
+      const allMovers = [
+        ...(moversData.gainers || []),
+        ...(moversData.losers  || []),
+        ...(moversData.volume  || []),
+      ];
+      const seen = new Set();
+      for (const m of allMovers) {
+        if (!m.ticker || seen.has(m.ticker)) continue;
+        seen.add(m.ticker);
+        const changePct = m.changePct || 0;
+        const volRatio  = m.volVsAvg  || 1;
         let volPoints = 0;
-        if (volRatio >= 4)    volPoints = 60;
+        if (volRatio >= 4)      volPoints = 60;
         else if (volRatio >= 3) volPoints = 45;
         else if (volRatio >= 2) volPoints = 30;
         else if (volRatio >= 1.5) volPoints = 15;
-
-        // Price move score
         const absPct = Math.abs(changePct);
         let pricePoints = 0;
         if (absPct >= 5)      pricePoints = 40;
         else if (absPct >= 3) pricePoints = 25;
         else if (absPct >= 2) pricePoints = 12;
-
-        const totalPoints = volPoints + pricePoints;
-        if (totalPoints > 0) {
+        const total = volPoints + pricePoints;
+        if (total > 0) {
           const sent = changePct > 0 ? 1 : changePct < 0 ? -1 : 0;
-          addBuzz(ticker, totalPoints, sent, 'nse_volume');
+          addBuzz(m.ticker, total, sent, 'nse_volume');
         }
-      } catch {}
-    }));
+      }
+      console.log(`[india-buzz] movers fast path: ${seen.size} tickers`);
+    } else {
+      // Fallback: hit individual NSE quotes (slower)
+      await Promise.allSettled(NIFTY50.slice(0, 20).map(async ticker => {
+        try {
+          const q = await getNSEQuote(ticker);
+          if (!q) return;
+          const changePct = q.changePct || 0;
+          const volRatio  = q.volumeRatio || 1;
+          let volPoints = volRatio >= 4 ? 60 : volRatio >= 3 ? 45 : volRatio >= 2 ? 30 : volRatio >= 1.5 ? 15 : 0;
+          const absPct = Math.abs(changePct);
+          let pricePoints = absPct >= 5 ? 40 : absPct >= 3 ? 25 : absPct >= 2 ? 12 : 0;
+          const total = volPoints + pricePoints;
+          if (total > 0) addBuzz(ticker, total, changePct > 0 ? 1 : changePct < 0 ? -1 : 0, 'nse_volume');
+        } catch {}
+      }));
+    }
     console.log('[india-buzz] NSE volume done');
   } catch (e) { console.warn('[india-buzz] volume failed:', e.message); }
 
@@ -5143,7 +5161,7 @@ async function fetchIndiaBuzz() {
     }).then(r => r.text()).catch(() => null);
 
     if (etData) {
-      const tickerRe = new RegExp(`(?<![A-Z])(${NIFTY50.join('|')})(?![A-Z])`, 'g');
+      const tickerRe = new RegExp(`(${NIFTY50.join('|')})`, 'g');
       const items    = etData.match(/<title>(.*?)<\/title>/g) || [];
       for (const item of items) {
         const text    = item.replace(/<[^>]+>/g, '').trim();
@@ -5166,7 +5184,7 @@ async function fetchIndiaBuzz() {
     }).then(r => r.text()).catch(() => null);
 
     if (mcData) {
-      const tickerRe = new RegExp(`(?<![A-Z])(${NIFTY50.join('|')})(?![A-Z])`, 'g');
+      const tickerRe = new RegExp(`(${NIFTY50.join('|')})`, 'g');
       const items    = mcData.match(/<title>(.*?)<\/title>/g) || [];
       for (const item of items) {
         const text    = item.replace(/<[^>]+>/g, '').trim();
@@ -5195,13 +5213,11 @@ async function fetchIndiaBuzz() {
     }).then(r => r.text()).catch(() => null);
 
     if (gtRaw) {
-      // Google prepends ")]}',
-" — strip it
-      const json = gtRaw.replace(/^\)\]\}',?
-/, '').trim();
+      // Google prepends )]}',\n prefix — strip it
+      const json = gtRaw.replace(/^\)\]\}'?\n/, '').trim();
       const data = JSON.parse(json);
       const days = data?.default?.trendingSearchesDays || [];
-      const tickerRe = new RegExp(`\b(${NIFTY50.join('|')})\b`, 'g');
+      const tickerRe = new RegExp(`(?:^|\\s)(${NIFTY50.join('|')})(?=\\s|$)`, 'g');
       let found = 0;
       for (const day of days) {
         for (const search of (day.trendingSearches || [])) {

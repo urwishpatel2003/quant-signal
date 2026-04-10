@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 const BASE = import.meta.env.VITE_API_BASE;
 
 function sentColor(s, a) {
-  if (s > 0.15)  return `rgba(0,255,136,${a})`;
-  if (s < -0.15) return `rgba(255,68,68,${a})`;
-  return `rgba(255,170,0,${a})`;
+  // s is -1 (bearish) to +1 (bullish), 0 = neutral
+  if (s > 0.15)  return `rgba(0,255,136,${a})`;   // bullish → green
+  if (s < -0.15) return `rgba(255,68,68,${a})`;   // bearish → red
+  return `rgba(255,170,0,${a})`;                   // neutral → amber
 }
 
 function packBubbles(items, W) {
@@ -160,13 +161,6 @@ export default function SocialBubbleChart({ onScan, market = 'US' }) {
     fetch(`${BASE}/${market === 'INDIA' ? 'india/social-buzz' : 'social/trending'}`)
       .then(r => r.json())
       .then(d => {
-        // Normalize India sentiment: -1..1 → 0..1 scale used by bubble renderer
-        if (market === 'INDIA' && d.tickers) {
-          d.tickers = d.tickers.map(t => ({
-            ...t,
-            sentiment: (t.sentiment + 1) / 2,  // -1..1 → 0..1
-          }));
-        }
         setData(d);
         setLastRefresh(new Date());
         setLoading(false);
@@ -189,8 +183,8 @@ export default function SocialBubbleChart({ onScan, market = 'US' }) {
     const dpr = window.devicePixelRatio || 1;
 
     const filtered = data.tickers.filter(t => {
-      if (filter === 'bullish') return t.sentiment > 0.1;
-      if (filter === 'bearish') return t.sentiment < -0.1;
+      if (filter === 'bullish') return t.sentiment > 0.15;
+      if (filter === 'bearish') return t.sentiment < -0.15;
       return true;
     }).slice(0, 30);
 
@@ -335,12 +329,13 @@ export default function SocialBubbleChart({ onScan, market = 'US' }) {
         padding:'10px 14px', borderBottom:'1px solid #1a1a2e', flexWrap:'wrap', gap:8 }}>
         <div>
           <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color: market === 'INDIA' ? '#ff9a00' : '#ffaa00', letterSpacing:'.1em' }}>
-            {market === 'INDIA' ? '🇮🇳 INDIA BUZZ' : '💬 SOCIAL BUZZ'}
+            💬 SOCIAL BUZZ
           </span>
           <span style={{ fontSize:'var(--fs-xs)', color:'#7788aa', marginLeft:8 }}>
             {market === 'INDIA'
-              ? 'NSE Volume · ET/MC News · Bulk Deals · tap to scan'
-              : 'Reddit · StockTwits · News · tap to scan'}
+              ? '🇮🇳 NSE Volume · ET · Moneycontrol · Bulk Deals'
+              : 'Reddit · StockTwits · News'}
+            {' · tap to scan'}
           </span>
         </div>
         <div style={{ display:'flex', gap:6 }}>
