@@ -21,6 +21,7 @@ import DashboardPage      from './tabs/DashboardPage';
 import SharePage      from './pages/SharePage';
 import WatchlistTab     from './tabs/WatchlistTab';
 import IndiaInvestTab  from './tabs/IndiaInvestTab';
+import PortfolioTab   from './tabs/PortfolioTab';
 import USInvestTab     from './tabs/USInvestTab';
 import HelpTab        from './tabs/HelpTab';
 import WelcomePage    from './components/WelcomePage';
@@ -312,6 +313,12 @@ export default function App() {
             {market !== 'INDIA' && (
               <div style={{ display: activeTab === 'invest' ? 'block' : 'none' }}>
                 <USInvestTab />
+              </div>
+            )}
+
+            {activeTab === 'portfolio' && (
+              <div style={{ padding: '16px' }}>
+                <PortfolioTab macro={macro} />
               </div>
             )}
           </SignedIn>

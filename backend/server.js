@@ -6437,6 +6437,100 @@ app.post('/sim/:userId/check-expiry', async (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTFOLIO TRACKER ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /portfolio/quotes?symbols=AAPL,TSLA,NVDA  — batch live prices via Tradier
+app.get('/portfolio/quotes', async (req, res) => {
+  try {
+    const symbols = (req.query.symbols || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!symbols.length) return res.json({});
+
+    // Chunk into batches of 30 (Tradier limit)
+    const chunks = [];
+    for (let i = 0; i < symbols.length; i += 30) chunks.push(symbols.slice(i, i + 30));
+
+    const priceMap = {};
+    await Promise.allSettled(chunks.map(async chunk => {
+      try {
+        const data = await tradierGet(`/v1/markets/quotes?symbols=${chunk.join(',')}&greeks=false`);
+        const quotes = Array.isArray(data?.quotes?.quote) ? data.quotes.quote
+          : data?.quotes?.quote ? [data.quotes.quote] : [];
+        quotes.forEach(q => {
+          if (q.symbol) priceMap[q.symbol] = q.last || q.prevclose || 0;
+        });
+      } catch {}
+    }));
+
+    res.json(priceMap);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /portfolio/scan — AI analysis for a single portfolio position
+app.post('/portfolio/scan', async (req, res) => {
+  try {
+    const { symbol, bonds, macroNews, intlMarkets, calendar } = req.body;
+    if (!symbol) return res.status(400).json({ error: 'symbol required' });
+
+    // Fetch price + fundamentals in parallel
+    const [quoteData, histData, fundsData, newsData] = await Promise.allSettled([
+      tradierGet(`/v1/markets/quotes?symbols=${symbol}&greeks=false`),
+      tradierGet(`/v1/markets/history?symbol=${symbol}&interval=daily&start=${new Date(Date.now()-30*86400000).toISOString().split('T')[0]}&end=${new Date().toISOString().split('T')[0]}`),
+      fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=summaryDetail,defaultKeyStatistics,financialData,recommendationTrend`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.json()).catch(() => null),
+      fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${symbol}&newsCount=5`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.json()).catch(() => null),
+    ]);
+
+    const quote = quoteData.status === 'fulfilled'
+      ? (quoteData.value?.quotes?.quote || quoteData.value?.quotes?.quote?.[0] || {}) : {};
+    const livePrice = quote.last || quote.prevclose || 0;
+
+    const hist = histData.status === 'fulfilled' ? histData.value?.history?.day || [] : [];
+    const closes = hist.map(d => d.close).filter(Boolean);
+    const ohlcv = closes.length ? {
+      current: closes[closes.length - 1],
+      prev:    closes[closes.length - 2] || closes[closes.length - 1],
+      close:   closes,
+    } : null;
+
+    const yahooSummary = fundsData.status === 'fulfilled' ? fundsData.value?.quoteSummary?.result?.[0] : null;
+    const fundamentals = yahooSummary ? {
+      pe:                  yahooSummary.summaryDetail?.trailingPE?.raw,
+      beta:                yahooSummary.summaryDetail?.beta?.raw,
+      marketCap:           yahooSummary.summaryDetail?.marketCap?.raw,
+      targetMeanPrice:     yahooSummary.financialData?.targetMeanPrice?.raw,
+      recommendationKey:   yahooSummary.financialData?.recommendationKey,
+      roe:                 yahooSummary.financialData?.returnOnEquity?.raw,
+    } : null;
+
+    const newsItems = newsData.status === 'fulfilled'
+      ? (newsData.value?.news || []).map(n => n.title).slice(0, 5) : [];
+
+    // Run AI analysis via existing endpoint
+    const result = await callClaudeAPI({
+      model: 'claude-sonnet-4-20250514', max_tokens: 800, temperature: 0,
+      system: `You are a quantitative portfolio analyst. Analyze this stock held in a portfolio.
+Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":0-100,"priceTarget":number,"stopLoss":number,
+"timeframe":"string","thesis":"2-3 sentence thesis","bullFactors":["","",""],"bearFactors":["","",""],
+"riskLevel":"LOW"|"MEDIUM"|"HIGH","macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL"}`,
+      messages: [{ role: 'user', content: `Analyze ${symbol} @ $${livePrice?.toFixed(2)}
+P/E: ${fundamentals?.pe || 'N/A'} | Beta: ${fundamentals?.beta || 'N/A'} | Rec: ${fundamentals?.recommendationKey || 'N/A'}
+Recent closes (5): ${closes.slice(-5).map(c => '$'+c.toFixed(2)).join(', ')}
+News: ${newsItems.join(' | ') || 'none'}
+Macro: ${macroNews?.slice(0,2).map(n => n.headline || n.summary || '').join(' | ') || 'none'}
+Return JSON only.` }]
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('[portfolio/scan]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
   console.log(`✅ QuAInt Signal backend on port ${process.env.PORT || 3001}`);
   // Hydrate in-memory caches from persistent DB on startup
@@ -6455,3 +6549,185 @@ app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
     }
   }, 60000); // 60 second delay to let server stabilize
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTFOLIO TRACKER — CSV import, positions, transactions
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /portfolio/:userId/import — receive parsed transactions from frontend
+app.post('/portfolio/:userId/import', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { transactions, broker = 'unknown' } = req.body;
+    if (!transactions?.length) return res.status(400).json({ error: 'No transactions provided' });
+
+    // Upsert transactions (dedupe by userId+date+type+symbol+quantity)
+    const rows = transactions.map(t => ({
+      user_id:     userId,
+      broker,
+      date:        t.date,
+      type:        t.type,        // BUY | SELL | DIV | SPLIT | TRANSFER
+      symbol:      t.symbol || null,
+      quantity:    t.quantity || null,
+      price:       t.price || null,
+      amount:      t.amount || null,
+      description: t.description || null,
+      raw:         t.raw || null,
+    }));
+
+    // Delete existing for this broker+user then re-insert (clean reimport)
+    await supabase.from('portfolio_transactions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('broker', broker);
+
+    const { error } = await supabase.from('portfolio_transactions').insert(rows);
+    if (error) throw new Error(error.message);
+
+    // Rebuild positions from transactions
+    await rebuildPositions(userId, broker);
+
+    res.json({ ok: true, imported: rows.length });
+  } catch (e) {
+    console.error('[portfolio/import]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /portfolio/:userId — return positions + transactions
+app.get('/portfolio/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const [posRes, txRes] = await Promise.all([
+      supabase.from('portfolio_positions').select('*').eq('user_id', userId).order('ticker'),
+      supabase.from('portfolio_transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(200),
+    ]);
+    if (posRes.error) throw new Error(posRes.error.message);
+    if (txRes.error)  throw new Error(txRes.error.message);
+
+    // Fetch live prices for all positions
+    const tickers = (posRes.data || []).map(p => p.ticker).filter(Boolean);
+    let prices = {};
+    if (tickers.length) {
+      try {
+        const chunks = [];
+        for (let i = 0; i < tickers.length; i += 30) chunks.push(tickers.slice(i, i + 30));
+        await Promise.allSettled(chunks.map(async chunk => {
+          const data = await tradierGet(`/v1/markets/quotes?symbols=${chunk.join(',')}&greeks=false`);
+          const quotes = Array.isArray(data?.quotes?.quote) ? data.quotes.quote
+            : data?.quotes?.quote ? [data.quotes.quote] : [];
+          quotes.forEach(q => { if (q.symbol) prices[q.symbol] = { last: q.last, prevClose: q.prevclose, change: q.change, changePct: q.change_percentage }; });
+        }));
+      } catch {}
+    }
+
+    // Enrich positions with live price data
+    const positions = (posRes.data || []).map(p => {
+      const q = prices[p.ticker] || {};
+      const livePrice  = q.last || p.avg_cost || 0;
+      const mktValue   = livePrice * p.shares;
+      const costBasis  = p.avg_cost * p.shares;
+      const unrealPnl  = mktValue - costBasis;
+      const unrealPct  = costBasis > 0 ? (unrealPnl / costBasis) * 100 : 0;
+      const dayChange  = (q.change || 0) * p.shares;
+      return { ...p, livePrice, mktValue, costBasis, unrealPnl, unrealPct, dayChange, changePct: q.changePct };
+    });
+
+    const totalValue   = positions.reduce((s, p) => s + p.mktValue, 0);
+    const totalCost    = positions.reduce((s, p) => s + p.costBasis, 0);
+    const totalPnl     = totalValue - totalCost;
+    const totalPnlPct  = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+    const dayChange    = positions.reduce((s, p) => s + (p.dayChange || 0), 0);
+
+    res.json({
+      positions,
+      transactions: txRes.data || [],
+      summary: { totalValue, totalCost, totalPnl, totalPnlPct, dayChange, positionCount: positions.length },
+    });
+  } catch (e) {
+    console.error('[portfolio/get]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /portfolio/:userId — clear all data
+app.delete('/portfolio/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    await Promise.all([
+      supabase.from('portfolio_positions').delete().eq('user_id', userId),
+      supabase.from('portfolio_transactions').delete().eq('user_id', userId),
+    ]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Helper — rebuild positions from transaction log
+async function rebuildPositions(userId, broker) {
+  const { data: txs } = await supabase
+    .from('portfolio_transactions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('broker', broker)
+    .order('date', { ascending: true });
+
+  // Build position map using FIFO cost basis
+  const posMap = {}; // ticker → { shares, totalCost, lots: [{qty, price}] }
+  for (const tx of (txs || [])) {
+    if (!tx.symbol) continue;
+    const sym = tx.symbol.toUpperCase();
+    if (!posMap[sym]) posMap[sym] = { shares: 0, totalCost: 0, lots: [], dividends: 0 };
+    const p = posMap[sym];
+
+    if (tx.type === 'BUY') {
+      const qty   = Math.abs(tx.quantity || 0);
+      const price = Math.abs(tx.price || 0);
+      p.shares    += qty;
+      p.totalCost += qty * price;
+      p.lots.push({ qty, price });
+
+    } else if (tx.type === 'SELL') {
+      const qty = Math.abs(tx.quantity || 0);
+      // FIFO: remove from oldest lots first
+      let remaining = qty;
+      while (remaining > 0 && p.lots.length) {
+        const lot = p.lots[0];
+        const used = Math.min(lot.qty, remaining);
+        p.totalCost -= used * lot.price;
+        lot.qty -= used;
+        remaining -= used;
+        if (lot.qty <= 0) p.lots.shift();
+      }
+      p.shares = Math.max(0, p.shares - qty);
+
+    } else if (tx.type === 'DIV') {
+      p.dividends += Math.abs(tx.amount || 0);
+
+    } else if (tx.type === 'SPLIT') {
+      const ratio = tx.quantity || 1;
+      p.shares *= ratio;
+      p.lots.forEach(l => { l.qty *= ratio; l.price /= ratio; });
+    }
+  }
+
+  // Delete old positions and insert rebuilt ones
+  await supabase.from('portfolio_positions').delete().eq('user_id', userId).eq('broker', broker);
+
+  const posRows = Object.entries(posMap)
+    .filter(([, p]) => p.shares > 0.0001)
+    .map(([ticker, p]) => ({
+      user_id:    userId,
+      broker,
+      ticker,
+      shares:     Math.round(p.shares * 10000) / 10000,
+      avg_cost:   p.shares > 0 ? Math.round((p.totalCost / p.shares) * 10000) / 10000 : 0,
+      total_cost: Math.round(p.totalCost * 100) / 100,
+      dividends:  Math.round(p.dividends * 100) / 100,
+    }));
+
+  if (posRows.length) {
+    await supabase.from('portfolio_positions').insert(posRows);
+  }
+}
