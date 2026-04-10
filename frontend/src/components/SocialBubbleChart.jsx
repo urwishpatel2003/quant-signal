@@ -132,6 +132,7 @@ export default function SocialBubbleChart({ onScan }) {
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState('all');
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [pending,     setPending]     = useState(null); // { symbol, x, y }
   const wrapRef  = useRef(null);
   const cvRef    = useRef(null);
   const stateRef = useRef({ bubbles: [], hovered: null, tick: 0, raf: null });
@@ -325,7 +326,7 @@ export default function SocialBubbleChart({ onScan }) {
       </div>
 
       {/* Canvas */}
-      <div ref={wrapRef} style={{ width:'100%' }}>
+      <div ref={wrapRef} style={{ width:'100%', position:'relative' }}>
         {loading ? (
           <div style={{ height:240, display:'flex', flexDirection:'column', alignItems:'center',
             justifyContent:'center', gap:12, background:'#07070e' }}>
@@ -337,11 +338,76 @@ export default function SocialBubbleChart({ onScan }) {
         ) : (
           <canvas ref={cvRef} style={{ display:'block', cursor:'crosshair' }}
             onMouseMove={e => { stateRef.current.hovered = getHit(e.clientX, e.clientY); }}
-            onMouseLeave={() => { stateRef.current.hovered = null; }}
-            onClick={e => { const h = getHit(e.clientX, e.clientY); if (h) onScan?.(h.symbol); }}
-            onTouchStart={e => { e.preventDefault(); const t = e.touches[0]; const h = getHit(t.clientX, t.clientY); if (h) onScan?.(h.symbol); }}
+            onMouseLeave={() => { stateRef.current.hovered = null; setPending(null); }}
+            onClick={e => {
+              const h = getHit(e.clientX, e.clientY);
+              if (!h) { setPending(null); return; }
+              if (pending?.symbol === h.symbol) {
+                // Second click = confirmed
+                onScan?.(h.symbol);
+                setPending(null);
+              } else {
+                // First click = show confirm
+                setPending({ symbol: h.symbol, x: e.clientX, y: e.clientY });
+              }
+            }}
+            onTouchStart={e => {
+              e.preventDefault();
+              const t = e.touches[0];
+              const h = getHit(t.clientX, t.clientY);
+              if (!h) { setPending(null); return; }
+              if (pending?.symbol === h.symbol) {
+                onScan?.(h.symbol);
+                setPending(null);
+              } else {
+                setPending({ symbol: h.symbol, x: t.clientX, y: t.clientY });
+              }
+            }}
           />
         )}
+
+        {/* ── Scan confirmation tooltip ── */}
+        {pending && (() => {
+          const wrap = wrapRef.current;
+          const rect = wrap?.getBoundingClientRect();
+          const relX = pending.x - (rect?.left || 0);
+          const relY = pending.y - (rect?.top  || 0);
+          // Keep tooltip inside canvas bounds
+          const tipW = 160, tipH = 56;
+          const left = Math.max(8, Math.min(relX - tipW/2, (rect?.width || W) - tipW - 8));
+          const top  = Math.max(8, relY - tipH - 12);
+          return (
+            <div style={{
+              position: 'absolute', left, top,
+              background: '#0d0d1a', border: '1px solid #ffaa0066',
+              borderRadius: 6, padding: '8px 12px',
+              display: 'flex', flexDirection: 'column', gap: 6,
+              pointerEvents: 'auto', zIndex: 10,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+              minWidth: tipW,
+            }}>
+              <div style={{ fontSize: 'var(--fs-xs)', color: '#ffaa00', fontWeight: 700, letterSpacing: '.06em' }}>
+                SCAN {pending.symbol}?
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => { onScan?.(pending.symbol); setPending(null); }}
+                  style={{ flex: 1, padding: '4px 0', fontSize: 'var(--fs-xs)', fontWeight: 700,
+                    background: '#ffaa0022', border: '1px solid #ffaa0066', borderRadius: 3,
+                    color: '#ffaa00', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  ⚡ YES
+                </button>
+                <button
+                  onClick={() => setPending(null)}
+                  style={{ flex: 1, padding: '4px 0', fontSize: 'var(--fs-xs)',
+                    background: 'transparent', border: '1px solid #2a2a3e', borderRadius: 3,
+                    color: '#7788aa', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Legend */}
