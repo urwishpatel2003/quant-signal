@@ -13,15 +13,13 @@ function packBubbles(items, W) {
   const maxM  = Math.max(...items.map(t => t.mentions), 1);
   const count = items.length;
 
-  // Target aspect ratio: landscape on desktop, square-ish on mobile
-  const aspect = W >= 600 ? 0.5 : 0.9;  // H = W * aspect
-  const H = Math.round(W * aspect);
-
-  // Scale bubble sizes to fit W×H canvas
-  const area = W * H * 0.72;
+  // Use a generous working canvas — bubbles pack freely, then we crop to actual content
+  const workH = Math.round(W * (W >= 600 ? 0.7 : 1.1));
+  const area  = W * workH * 0.72;
   const MAX_R = Math.max(14, Math.min(54, Math.floor(Math.sqrt(area / (count * Math.PI)))));
   const MIN_R = Math.max(10, Math.floor(MAX_R * 0.45));
   const GAP   = Math.max(3, Math.floor(MAX_R * 0.08));
+  const PAD   = GAP * 2; // padding around content
 
   const bs = items.map(t => ({
     ...t,
@@ -34,33 +32,53 @@ function packBubbles(items, W) {
   }));
   bs.sort((a, b) => b.r - a.r);
 
-  // Spiral outward from center of the target canvas
-  const cx = W / 2, cy = H / 2;
+  // Spiral outward from top-center so cluster sits near top of canvas
+  const cx = W / 2, cy = workH * 0.35;
   const placed = [];
   for (const b of bs) {
     if (!placed.length) { b.x = cx; b.y = cy; placed.push(b); continue; }
-    let best = null, bestDist = Infinity;
-    for (let spiral = b.r; spiral < Math.max(W, H) * 1.5; spiral += 3) {
-      for (let angle = 0; angle < Math.PI * 2; angle += 0.18) {
+    let best = null, bestScore = Infinity;
+    for (let spiral = b.r; spiral < Math.max(W, workH) * 1.5; spiral += 3) {
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.16) {
         const tx = cx + spiral * Math.cos(angle);
         const ty = cy + spiral * Math.sin(angle);
         if (tx - b.r < GAP || tx + b.r > W - GAP) continue;
-        if (ty - b.r < GAP || ty + b.r > H - GAP) continue;
+        if (ty - b.r < GAP || ty + b.r > workH - GAP) continue;
         if (placed.some(p => Math.hypot(p.x-tx, p.y-ty) < p.r + b.r + GAP)) continue;
-        const dist = Math.hypot(tx - cx, ty - cy);
-        if (dist < bestDist) { bestDist = dist; best = { x: tx, y: ty }; }
+        // Score: prefer close to center-top
+        const score = Math.hypot(tx - cx, ty - cy) + Math.max(0, ty - cy) * 0.5;
+        if (score < bestScore) { bestScore = score; best = { x: tx, y: ty }; }
         break;
       }
       if (best) break;
     }
     if (best) { b.x = best.x; b.y = best.y; }
     else {
-      // Fallback: place at bottom center
       const maxY = Math.max(...placed.map(p => p.y + p.r), cy);
       b.x = cx; b.y = maxY + b.r + GAP;
     }
     placed.push(b);
   }
+
+  // Measure actual bounding box of placed bubbles
+  const minY = Math.min(...placed.map(b => b.y - b.r));
+  const maxY = Math.max(...placed.map(b => b.y + b.r));
+  const minX = Math.min(...placed.map(b => b.x - b.r));
+  const maxX = Math.max(...placed.map(b => b.x + b.r));
+
+  // Shift all bubbles so content starts at y=PAD, centered horizontally
+  const shiftX = (W - (maxX - minX)) / 2 - minX;
+  const shiftY = PAD - minY;
+  placed.forEach(b => { b.x += shiftX; b.y += shiftY; });
+
+  // Canvas height = exact content height + bottom pad
+  const H = Math.round((maxY - minY) + PAD * 2);
+
+  // Clamp physics bounds to actual canvas
+  placed.forEach(b => {
+    b.x = Math.max(b.r + GAP, Math.min(W - b.r - GAP, b.x));
+    b.y = Math.max(b.r + GAP, Math.min(H - b.r - GAP, b.y));
+  });
 
   return { bubbles: placed.sort((a, b) => a.z - b.z), H };
 }
