@@ -145,7 +145,7 @@ function drawBubble(ctx, b, tick, isHov) {
   }
 }
 
-export default function SocialBubbleChart({ onScan }) {
+export default function SocialBubbleChart({ onScan, market = 'US' }) {
   const [data,        setData]        = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState('all');
@@ -157,9 +157,20 @@ export default function SocialBubbleChart({ onScan }) {
 
   // Fetch
   useEffect(() => {
-    fetch(`${BASE}/social/trending`)
+    fetch(`${BASE}/${market === 'INDIA' ? 'india/social-buzz' : 'social/trending'}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLastRefresh(new Date()); setLoading(false); })
+      .then(d => {
+        // Normalize India sentiment: -1..1 → 0..1 scale used by bubble renderer
+        if (market === 'INDIA' && d.tickers) {
+          d.tickers = d.tickers.map(t => ({
+            ...t,
+            sentiment: (t.sentiment + 1) / 2,  // -1..1 → 0..1
+          }));
+        }
+        setData(d);
+        setLastRefresh(new Date());
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -323,11 +334,13 @@ export default function SocialBubbleChart({ onScan }) {
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
         padding:'10px 14px', borderBottom:'1px solid #1a1a2e', flexWrap:'wrap', gap:8 }}>
         <div>
-          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color:'#ffaa00', letterSpacing:'.1em' }}>
-            💬 SOCIAL BUZZ
+          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color: market === 'INDIA' ? '#ff9a00' : '#ffaa00', letterSpacing:'.1em' }}>
+            {market === 'INDIA' ? '🇮🇳 INDIA BUZZ' : '💬 SOCIAL BUZZ'}
           </span>
-          <span style={{ fontSize:'var(--fs-xs)', color:'#334455', marginLeft:8 }}>
-            Reddit · StockTwits · News · tap to scan
+          <span style={{ fontSize:'var(--fs-xs)', color:'#7788aa', marginLeft:8 }}>
+            {market === 'INDIA'
+              ? 'NSE Volume · ET/MC News · Bulk Deals · tap to scan'
+              : 'Reddit · StockTwits · News · tap to scan'}
           </span>
         </div>
         <div style={{ display:'flex', gap:6 }}>

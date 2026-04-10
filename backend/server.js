@@ -5072,6 +5072,212 @@ setTimeout(() => {
 }, 5000);
 
 
+// ─── India Social Buzz ───────────────────────────────────────────────────────
+// Proxy for social interest: volume spike + news mentions + bulk/block deals + price move
+
+const INDIA_BUZZ_CACHE = { data: null, ts: 0 };
+const INDIA_BUZZ_TTL   = 10 * 60 * 1000; // 10 min
+
+const NIFTY50 = [
+  'RELIANCE','TCS','HDFCBANK','ICICIBANK','INFOSYS','HDFC','KOTAKBANK','HINDUNILVR',
+  'ITC','SBIN','BHARTIARTL','BAJFINANCE','ASIANPAINT','AXISBANK','LT','MARUTI',
+  'TITAN','SUNPHARMA','NESTLEIND','ULTRACEMCO','WIPRO','POWERGRID','NTPC','TECHM',
+  'HCLTECH','ONGC','JSWSTEEL','TATASTEEL','ADANIPORTS','GRASIM','BAJAJFINSV',
+  'BPCL','BRITANNIA','CIPLA','COALINDIA','DIVISLAB','DRREDDY','EICHERMOT','HEROMOTOCO',
+  'HINDALCO','INDUSINDBK','IOC','M&M','SBILIFE','SHREECEM','TATACONSUM','TATAMOTORS',
+  'UPL','VEDL','BAJAJ-AUTO',
+];
+
+async function fetchIndiaBuzz() {
+  const buzz = {}; // ticker → { mentions, sentiment, sources }
+
+  const init = () => ({ mentions: 0, sentiment: 0, sentCount: 0, sources: new Set() });
+  NIFTY50.forEach(t => { buzz[t] = init(); });
+
+  const addBuzz = (ticker, points, sentiment, source) => {
+    if (!buzz[ticker]) buzz[ticker] = init();
+    buzz[ticker].mentions   += points;
+    buzz[ticker].sentCount  += 1;
+    buzz[ticker].sentiment  += (sentiment ?? 0);
+    buzz[ticker].sources.add(source);
+  };
+
+  // ── 1. NSE volume spikes ────────────────────────────────────────────────
+  try {
+    await Promise.allSettled(NIFTY50.map(async ticker => {
+      try {
+        const q = await getNSEQuote(ticker);
+        if (!q) return;
+        const changePct = q.changePct || 0;
+        const volRatio  = q.volumeRatio || 1;
+
+        // Volume spike score
+        let volPoints = 0;
+        if (volRatio >= 4)    volPoints = 60;
+        else if (volRatio >= 3) volPoints = 45;
+        else if (volRatio >= 2) volPoints = 30;
+        else if (volRatio >= 1.5) volPoints = 15;
+
+        // Price move score
+        const absPct = Math.abs(changePct);
+        let pricePoints = 0;
+        if (absPct >= 5)      pricePoints = 40;
+        else if (absPct >= 3) pricePoints = 25;
+        else if (absPct >= 2) pricePoints = 12;
+
+        const totalPoints = volPoints + pricePoints;
+        if (totalPoints > 0) {
+          const sent = changePct > 0 ? 1 : changePct < 0 ? -1 : 0;
+          addBuzz(ticker, totalPoints, sent, 'nse_volume');
+        }
+      } catch {}
+    }));
+    console.log('[india-buzz] NSE volume done');
+  } catch (e) { console.warn('[india-buzz] volume failed:', e.message); }
+
+  // ── 2. Economic Times headlines ─────────────────────────────────────────
+  try {
+    const etData = await fetch('https://economictimes.indiatimes.com/markets/stocks/rss_feed.cms', {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/xml, text/xml, */*' },
+      signal: AbortSignal.timeout(8000),
+    }).then(r => r.text()).catch(() => null);
+
+    if (etData) {
+      const tickerRe = new RegExp(`(?<![A-Z])(${NIFTY50.join('|')})(?![A-Z])`, 'g');
+      const items    = etData.match(/<title>(.*?)<\/title>/g) || [];
+      for (const item of items) {
+        const text    = item.replace(/<[^>]+>/g, '').trim();
+        const bull    = /rally|surge|jump|gain|buy|bull|breakout|upgrade|target|record/i.test(text);
+        const bear    = /fall|drop|crash|sell|bear|breakdown|downgrade|loss|weak/i.test(text);
+        const matches = [...text.matchAll(tickerRe)].map(m => m[1]);
+        for (const ticker of [...new Set(matches)]) {
+          addBuzz(ticker, 12, bull ? 1 : bear ? -1 : 0, 'et_news');
+        }
+      }
+      console.log(`[india-buzz] ET headlines: ${items.length} items`);
+    }
+  } catch (e) { console.warn('[india-buzz] ET failed:', e.message); }
+
+  // ── 3. Moneycontrol news ────────────────────────────────────────────────
+  try {
+    const mcData = await fetch('https://www.moneycontrol.com/rss/marketreports.xml', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
+    }).then(r => r.text()).catch(() => null);
+
+    if (mcData) {
+      const tickerRe = new RegExp(`(?<![A-Z])(${NIFTY50.join('|')})(?![A-Z])`, 'g');
+      const items    = mcData.match(/<title>(.*?)<\/title>/g) || [];
+      for (const item of items) {
+        const text    = item.replace(/<[^>]+>/g, '').trim();
+        const bull    = /rally|surge|jump|gain|buy|bull|breakout|upgrade/i.test(text);
+        const bear    = /fall|drop|crash|sell|bear|breakdown|downgrade/i.test(text);
+        const matches = [...text.matchAll(tickerRe)].map(m => m[1]);
+        for (const ticker of [...new Set(matches)]) {
+          addBuzz(ticker, 10, bull ? 1 : bear ? -1 : 0, 'mc_news');
+        }
+      }
+      console.log(`[india-buzz] Moneycontrol: ${items.length} items`);
+    }
+  } catch (e) { console.warn('[india-buzz] Moneycontrol failed:', e.message); }
+
+  // ── 4. Google Trends — daily trending searches India ─────────────────────
+  try {
+    const gtUrl = 'https://trends.google.com/trends/api/dailytrends?hl=en-IN&tz=-330&geo=IN&ns=15';
+    const gtRaw = await fetch(gtUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-IN,en;q=0.9',
+        'Referer': 'https://trends.google.com/',
+      },
+      signal: AbortSignal.timeout(8000),
+    }).then(r => r.text()).catch(() => null);
+
+    if (gtRaw) {
+      // Google prepends ")]}',
+" — strip it
+      const json = gtRaw.replace(/^\)\]\}',?
+/, '').trim();
+      const data = JSON.parse(json);
+      const days = data?.default?.trendingSearchesDays || [];
+      const tickerRe = new RegExp(`\b(${NIFTY50.join('|')})\b`, 'g');
+      let found = 0;
+      for (const day of days) {
+        for (const search of (day.trendingSearches || [])) {
+          const query = search.title?.query || '';
+          const articles = (search.articles || []).map(a => `${a.title} ${a.snippet}`).join(' ');
+          const fullText = `${query} ${articles}`;
+          const matches = [...fullText.matchAll(tickerRe)].map(m => m[1]);
+          const traffic = parseInt((search.formattedTraffic || '0').replace(/[^0-9]/g, '')) || 1;
+          const points  = Math.min(50, Math.max(8, Math.floor(Math.log10(traffic + 1) * 12)));
+          const bull = /buy|surge|gain|rally|up|bullish/i.test(fullText);
+          const bear = /sell|drop|fall|crash|down|bearish/i.test(fullText);
+          for (const ticker of [...new Set(matches)]) {
+            addBuzz(ticker, points, bull ? 1 : bear ? -1 : 0, 'google_trends');
+            found++;
+          }
+        }
+      }
+      console.log(`[india-buzz] Google Trends IN: ${found} ticker mentions`);
+    }
+  } catch (e) { console.warn('[india-buzz] Google Trends failed:', e.message); }
+
+  // ── 5. NSE bulk/block deals ─────────────────────────────────────────────
+  try {
+    const today   = new Date().toISOString().split('T')[0].replace(/-/g, '-');
+    const bulkUrl = `https://www.nseindia.com/api/bulk-deal-archives?var=bulk&date=${today}`;
+    const nseHeaders = {
+      'User-Agent':  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      'Accept':      'application/json',
+      'Referer':     'https://www.nseindia.com/market-data/bulk-block-deals',
+      'Accept-Language': 'en-US,en;q=0.9',
+    };
+    const bulkData = await fetch(bulkUrl, { headers: nseHeaders, signal: AbortSignal.timeout(6000) })
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+
+    if (bulkData?.data?.length) {
+      for (const deal of bulkData.data) {
+        const ticker = (deal.symbol || deal.SYMBOL || '').toUpperCase().replace(/\s/g, '');
+        if (!ticker || !buzz[ticker] && !NIFTY50.includes(ticker)) continue;
+        const isBuy  = /buy|acquire/i.test(deal.buySell || deal.CLIENT_TYPE || '');
+        addBuzz(ticker, 45, isBuy ? 1 : -1, 'nse_bulk');
+      }
+      console.log(`[india-buzz] NSE bulk deals: ${bulkData.data.length}`);
+    }
+  } catch (e) { console.warn('[india-buzz] NSE bulk deals failed:', e.message); }
+
+  // ── Build result ────────────────────────────────────────────────────────
+  const result = Object.entries(buzz)
+    .filter(([, v]) => v.mentions > 0)
+    .map(([symbol, v]) => ({
+      symbol,
+      mentions:  v.mentions,
+      sentiment: v.sentCount > 0 ? v.sentiment / v.sentCount : 0,
+      sources:   [...v.sources],
+    }))
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 30);
+
+  return result;
+}
+
+app.get('/india/social-buzz', async (req, res) => {
+  try {
+    if (INDIA_BUZZ_CACHE.data && Date.now() - INDIA_BUZZ_CACHE.ts < INDIA_BUZZ_TTL) {
+      return res.json({ tickers: INDIA_BUZZ_CACHE.data, cached: true });
+    }
+    const data = await fetchIndiaBuzz();
+    INDIA_BUZZ_CACHE.data = data;
+    INDIA_BUZZ_CACHE.ts   = Date.now();
+    res.json({ tickers: data, cached: false });
+  } catch (e) {
+    console.error('[india/social-buzz]', e.message);
+    if (INDIA_BUZZ_CACHE.data) return res.json({ tickers: INDIA_BUZZ_CACHE.data, cached: true, stale: true });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Unusual Activity Screener ────────────────────────────────────────────────
 // Scans 80 tickers for volume spikes, options flow anomalies, news velocity
 // Cached 30 minutes — runs in background
@@ -6188,6 +6394,56 @@ app.post('/sim/:userId/close/:positionId', async (req, res) => {
     res.json({ pnl, pct, newBalance });
   } catch (e) {
     console.error('[sim close]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /sim/:userId/position/:positionId — delete a single position from history
+app.delete('/sim/:userId/position/:positionId', async (req, res) => {
+  try {
+    const { userId, positionId } = req.params;
+    // Only allow deleting own positions
+    const { data: pos } = await supabase
+      .from('sim_positions').select('id, user_id, status, market, entry_price, quantity, premium, contracts, position_type')
+      .eq('id', positionId).eq('user_id', userId).single();
+    if (!pos) return res.status(404).json({ error: 'Position not found' });
+
+    // If position was OPEN, refund the cost back to balance
+    if (pos.status === 'OPEN') {
+      const simId = `${userId}_${pos.market}`;
+      const cost  = pos.position_type === 'OPTION'
+        ? (pos.premium || 0) * (pos.contracts || 1) * 100
+        : (pos.entry_price || 0) * (pos.quantity || 0);
+      if (cost > 0) {
+        const { data: acc } = await supabase.from('sim_account').select('balance').eq('user_id', simId).single();
+        if (acc) {
+          await supabase.from('sim_account').update({
+            balance: parseFloat((acc.balance + cost).toFixed(2)),
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', simId);
+        }
+      }
+    }
+
+    await supabase.from('sim_positions').delete().eq('id', positionId);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[sim delete position]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /sim/:userId/closed — delete ALL closed positions (cleanup bad data)
+app.delete('/sim/:userId/closed', async (req, res) => {
+  try {
+    const market = req.query.market || 'US';
+    await supabase.from('sim_positions')
+      .delete()
+      .eq('user_id', req.params.userId)
+      .eq('market', market)
+      .eq('status', 'CLOSED');
+    res.json({ ok: true });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });

@@ -337,8 +337,8 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
 
 
 
-      {/* ── Social Buzz — US only ── */}
-      {!isIndia && <SocialBubbleChart onScan={handleScan} />}
+      {/* ── Social Buzz — US + India ── */}
+      <SocialBubbleChart onScan={handleScan} market={market} />
 
       {/* ── Sector Rotation ── */}
       {!isIndia && <SectorRotationPanel onScan={handleScan} />}
