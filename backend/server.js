@@ -5461,16 +5461,17 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
       'Position Trade (1-3 months)': 90*864e5, 'Long Term (6-12 months)': 365*864e5,
     };
     const now      = Date.now();
-    const todayStr = new Date().toISOString().split('T')[0];
-    // Market closes at 4pm ET — after 4pm treat today as expired
-    const etHour   = new Date().toLocaleString('en-US', { timeZone:'America/New_York', hour:'numeric', hour12:false });
-    const marketClosed = parseInt(etHour) >= 16;
+    // ET offset: EDT = UTC-4, EST = UTC-5. Use fixed UTC-4 (EDT, Apr-Oct)
+    const etNow    = new Date(now - 4 * 3600 * 1000);
+    const todayET  = etNow.toISOString().split('T')[0];   // YYYY-MM-DD in ET
+    const etHour   = etNow.getUTCHours();                 // hour in ET
+    const marketClosed = etHour >= 16;                    // 4pm ET
 
     const toCheck = pending.filter(s => {
-      // Options: resolve immediately once expiry date has passed + market closed
+      // Options: resolve once expiry date has passed OR it's expiry day + market closed
       if (s.signal_type === 'OPTION' && s.expiry) {
-        const expired = s.expiry <= todayStr && (s.expiry < todayStr || marketClosed);
-        if (expired) return true;
+        if (s.expiry < todayET) return true;              // past expiry — always resolve
+        if (s.expiry === todayET && marketClosed) return true; // expiry day, market closed
       }
       // Stocks: resolve after timeframe has elapsed
       return now - new Date(s.created_at).getTime() >= (tfMs[s.timeframe] || 7*864e5);
@@ -5536,6 +5537,52 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
 });
 
 
+
+// ─── Force-resolve a single expired signal ───────────────────────────────────
+app.post('/signal-history/:userId/resolve/:signalId', async (req, res) => {
+  try {
+    const { userId, signalId } = req.params;
+    const { data: sig } = await supabase
+      .from('signal_history').select('*').eq('id', signalId).eq('user_id', userId).single();
+    if (!sig) return res.status(404).json({ error: 'Signal not found' });
+    if (sig.outcome_result !== 'PENDING') return res.json({ message: 'Already resolved', result: sig.outcome_result });
+
+    // Fetch current price
+    let cur = 0;
+    try {
+      const q = await tradierGet(`/v1/markets/quotes?symbols=${sig.ticker}&greeks=false`);
+      cur = parseFloat(q?.quotes?.quote?.last || q?.quotes?.quote?.prevclose || 0);
+    } catch {}
+    if (!cur) return res.status(400).json({ error: 'Could not fetch current price' });
+
+    let pct, result;
+    if (sig.signal_type === 'OPTION' && sig.entry_premium && sig.strike) {
+      const intrinsic = sig.option_type === 'CALL'
+        ? Math.max(0, cur - sig.strike)
+        : Math.max(0, sig.strike - cur);
+      pct    = parseFloat(((intrinsic - sig.entry_premium) / sig.entry_premium * 100).toFixed(2));
+      result = pct > 10 ? 'WIN' : pct < -10 ? 'LOSS' : 'SCRATCH';
+    } else {
+      pct = parseFloat(((cur - sig.price_at_signal) / sig.price_at_signal * 100).toFixed(2));
+      if (sig.signal==='BUY')  result = pct>2?'WIN':pct<-2?'LOSS':'SCRATCH';
+      if (sig.signal==='SELL') result = pct<-2?'WIN':pct>2?'LOSS':'SCRATCH';
+      if (sig.signal==='HOLD') result = Math.abs(pct)<5?'WIN':'LOSS';
+    }
+
+    await supabase.from('signal_history').update({
+      outcome_price:      cur,
+      outcome_checked_at: new Date().toISOString(),
+      outcome_pct:        pct,
+      outcome_result:     result,
+    }).eq('id', signalId);
+
+    console.log(`[force-resolve] ${sig.ticker} ${sig.signal_type} → ${result} (${pct}%)`);
+    res.json({ result, pct, price: cur });
+  } catch (e) {
+    console.error('[force-resolve]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ─── Save Options Signal (called from frontend after options analysis) ─────────
 app.post('/signal-history/options', async (req, res) => {

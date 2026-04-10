@@ -34,6 +34,7 @@ export default function SignalHistoryTab({ market = 'US' }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [checking,   setChecking]   = useState(false);
+  const [resolving,  setResolving]  = useState({});
   const [filter,     setFilter]     = useState('ALL'); // ALL | BUY | SELL | HOLD
   const [error,      setError]      = useState('');
 
@@ -54,9 +55,20 @@ export default function SignalHistoryTab({ market = 'US' }) {
     try {
       const res  = await fetch(`${BASE}/signal-history/${user.id}/check-outcomes`, { method: 'POST' });
       const json = await res.json();
-      if (json.checked > 0) await load(); // reload if any updated
+      if (json.checked > 0) await load();
     } catch {}
     setChecking(false);
+  };
+
+  const forceResolve = async (signalId) => {
+    if (!user?.id) return;
+    setResolving(r => ({ ...r, [signalId]: true }));
+    try {
+      const res  = await fetch(`${BASE}/signal-history/${user.id}/resolve/${signalId}`, { method: 'POST' });
+      const json = await res.json();
+      if (json.result) await load();
+    } catch {}
+    setResolving(r => { const n = { ...r }; delete n[signalId]; return n; });
   };
 
   // Reload when tab becomes visible + auto-refresh every 30s
@@ -222,6 +234,23 @@ export default function SignalHistoryTab({ market = 'US' }) {
             {/* Right: outcome — fixed width */}
             <div style={{ flexShrink: 0, textAlign: 'right' }}>
               <OutcomeBadge result={s.outcome_result} />
+              {s.outcome_result === 'PENDING' && s.signal_type === 'OPTION' && s.expiry && (() => {
+                const etNow     = new Date(Date.now() - 4 * 3600 * 1000);
+                const todayET   = etNow.toISOString().split('T')[0];
+                const etHour    = etNow.getUTCHours();
+                const isExpired = s.expiry < todayET || (s.expiry === todayET && etHour >= 16);
+                if (!isExpired) return null;
+                return (
+                  <button
+                    onClick={() => forceResolve(s.id)}
+                    disabled={resolving[s.id]}
+                    style={{ fontSize: 'var(--fs-xs)', color: '#ffaa00', background: '#ffaa0011',
+                      border: '1px solid #ffaa0044', borderRadius: 3, padding: '2px 8px',
+                      cursor: 'pointer', fontFamily: 'inherit', opacity: resolving[s.id] ? 0.5 : 1 }}>
+                    {resolving[s.id] ? '...' : '↻ RESOLVE'}
+                  </button>
+                );
+              })()}
               {s.outcome_pct != null && (
                 <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, marginTop: 4, color: s.outcome_pct >= 0 ? '#00ff88' : '#ff4444' }}>
                   {fmtPct(s.outcome_pct)}
