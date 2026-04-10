@@ -5460,8 +5460,21 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
       'Short Term (1-5 days)': 5*864e5, 'Swing Trade (1-4 weeks)': 28*864e5,
       'Position Trade (1-3 months)': 90*864e5, 'Long Term (6-12 months)': 365*864e5,
     };
-    const now     = Date.now();
-    const toCheck = pending.filter(s => now - new Date(s.created_at).getTime() >= (tfMs[s.timeframe] || 7*864e5));
+    const now      = Date.now();
+    const todayStr = new Date().toISOString().split('T')[0];
+    // Market closes at 4pm ET — after 4pm treat today as expired
+    const etHour   = new Date().toLocaleString('en-US', { timeZone:'America/New_York', hour:'numeric', hour12:false });
+    const marketClosed = parseInt(etHour) >= 16;
+
+    const toCheck = pending.filter(s => {
+      // Options: resolve immediately once expiry date has passed + market closed
+      if (s.signal_type === 'OPTION' && s.expiry) {
+        const expired = s.expiry <= todayStr && (s.expiry < todayStr || marketClosed);
+        if (expired) return true;
+      }
+      // Stocks: resolve after timeframe has elapsed
+      return now - new Date(s.created_at).getTime() >= (tfMs[s.timeframe] || 7*864e5);
+    });
     if (!toCheck.length) return res.json({ checked: 0, message: 'No signals ready for outcome check yet' });
 
     const usTickers    = [...new Set(toCheck.filter(s=>s.market!=='INDIA').map(s=>s.ticker))];

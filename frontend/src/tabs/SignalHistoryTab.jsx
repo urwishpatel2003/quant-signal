@@ -62,7 +62,8 @@ export default function SignalHistoryTab({ market = 'US' }) {
   // Reload when tab becomes visible + auto-refresh every 30s
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
-    load();
+    // Auto-check outcomes on load (resolves expired options immediately)
+    load().then(() => checkOutcomes());
     const onFocus = () => load();
     window.addEventListener('focus', onFocus);
     const interval = setInterval(load, 30000); // refresh every 30s
