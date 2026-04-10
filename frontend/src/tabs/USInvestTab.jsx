@@ -54,9 +54,9 @@ function StatCard({ label, value, sub, color = '#c8d8f0', accent }) {
       border: `1px solid ${accent ? accent + '33' : '#1a1a2e'}`,
       borderTop: accent ? `2px solid ${accent}` : undefined,
     }}>
-      <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', letterSpacing: '.08em', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', letterSpacing: '.08em', marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color, fontFamily: "'JetBrains Mono',monospace" }}>{value}</div>
-      {sub && <div style={{ fontSize: 'var(--fs-xs)', color: '#445566', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -112,14 +112,14 @@ function HoldingCard({ h, currency = '$' }) {
             <Pill label={h.type} color={asColor} small />
             <Pill label={h.accountPlacement} color={acColor} small />
           </div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
         </div>
         {/* Allocation + amount */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, fontWeight: 700, color: '#ffaa00' }}>{h.allocation}%</div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb' }}>{fmtM(h.monthlyAmount)}/mo</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd' }}>{fmtM(h.monthlyAmount)}/mo</div>
         </div>
-        <div style={{ color: '#334455', fontSize: 12, flexShrink: 0 }}>{open ? '▲' : '▼'}</div>
+        <div style={{ color: '#7788aa', fontSize: 12, flexShrink: 0 }}>{open ? '▲' : '▼'}</div>
       </div>
 
       {/* Expanded detail */}
@@ -138,13 +138,13 @@ function HoldingCard({ h, currency = '$' }) {
             <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ fontSize: 'var(--fs-xs)', color: '#00ff88', letterSpacing: '.08em', marginBottom: 4 }}>PROS</div>
               {h.pros?.map((p, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-xs)', color: '#99aacc', marginBottom: 2 }}>✓ {p}</div>
+                <div key={i} style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 2 }}>✓ {p}</div>
               ))}
             </div>
             <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ fontSize: 'var(--fs-xs)', color: '#ff4444', letterSpacing: '.08em', marginBottom: 4 }}>CONS</div>
               {h.cons?.map((c, i) => (
-                <div key={i} style={{ fontSize: 'var(--fs-xs)', color: '#99aacc', marginBottom: 2 }}>⚠ {c}</div>
+                <div key={i} style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 2 }}>⚠ {c}</div>
               ))}
             </div>
           </div>
@@ -186,14 +186,14 @@ function RetirementChart({ proj }) {
             alignItems: 'center', justifyContent: 'center',
           }}>
             <div style={{ width: 1, height: '100%', background: '#ffffff11', position: 'absolute' }} />
-            <div style={{ fontSize: 9, color: '#556677', whiteSpace: 'nowrap', zIndex: 1 }}>Age {m.age}</div>
-            <div style={{ fontSize: 10, color: '#8899bb', fontWeight: 700, zIndex: 1 }}>
+            <div style={{ fontSize: 9, color: '#c8d8f0', whiteSpace: 'nowrap', zIndex: 1 }}>Age {m.age}</div>
+            <div style={{ fontSize: 10, color: '#b0c0dd', fontWeight: 700, zIndex: 1 }}>
               {m.balance >= 1000000 ? `$${(m.balance/1000000).toFixed(1)}M` : `$${Math.round(m.balance/1000)}k`}
             </div>
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>
+      <div style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd' }}>
         Assumes {proj.assumedReturn} annual return · Retirement at age {proj.retirementAge} · Contributions of {fmtD(proj.monthlyContribution)}/month
       </div>
     </div>
@@ -278,10 +278,10 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 8 }}>
           MEET MAX — YOUR US PORTFOLIO ADVISOR
         </div>
-        <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', lineHeight: 1.7, marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', lineHeight: 1.7, marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
           Max will ask you a few questions about your financial situation, goals, and risk tolerance — then generate a detailed personalized portfolio with ETF picks, account strategy, tax optimization, and retirement projections.
         </div>
-        <div style={{ fontSize: 'var(--fs-xs)', color: '#445566', marginBottom: 20 }}>
+        <div style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd', marginBottom: 20 }}>
           Monthly investment budget: <strong style={{ color: '#ffaa00' }}>{fmtD(monthlyBudget)}/month</strong>
         </div>
         <button onClick={start} style={{
@@ -326,7 +326,7 @@ function ChatIntake({ monthlyBudget, payFrequency = 'monthly', onComplete }) {
                     animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />
                 ))}
               </div>
-              {retrying && <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>Retrying — API busy...</div>}
+              {retrying && <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>Retrying — API busy...</div>}
             </div>
           </div>
         )}
@@ -427,13 +427,13 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
                       <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color }}>{ac.accountType}</span>
                       <Pill label={ac.taxBenefit} color={color} small />
-                      {ac.annualLimit && <span style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>limit: {fmtD(ac.annualLimit)}/yr</span>}
+                      {ac.annualLimit && <span style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>limit: {fmtD(ac.annualLimit)}/yr</span>}
                     </div>
-                    <div style={{ fontSize: 'var(--fs-sm)', color: '#8899bb' }}>{ac.rationale}</div>
+                    <div style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd' }}>{ac.rationale}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color }}>{fmtD(ac.monthlyContribution)}</div>
-                    <div style={{ fontSize: 'var(--fs-xs)', color: '#445566' }}>per month</div>
+                    <div style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd' }}>per month</div>
                   </div>
                 </div>
               );
@@ -486,13 +486,13 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                 background: i % 2 === 0 ? '#0c0c18' : 'transparent',
               }}>
                 <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00', flexShrink: 0, width: 70 }}>{row.ticker}</div>
-                <div style={{ flex: 1, fontSize: 'var(--fs-xs)', color: '#8899bb' }}>{row.account}</div>
-                <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', flexShrink: 0 }}>{row.frequency}</div>
+                <div style={{ flex: 1, fontSize: 'var(--fs-xs)', color: '#b0c0dd' }}>{row.account}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', flexShrink: 0 }}>{row.frequency}</div>
                 <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#ffaa00', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>{fmtD(row.amount)}</div>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderTop: '2px solid #1a1a2e', background: '#0c0c18' }}>
-              <span style={{ fontSize: 'var(--fs-sm)', color: '#8899bb', fontWeight: 700 }}>TOTAL</span>
+              <span style={{ fontSize: 'var(--fs-sm)', color: '#b0c0dd', fontWeight: 700 }}>TOTAL</span>
               <span style={{ fontSize: 'var(--fs-sm)', color: '#ffaa00', fontWeight: 700 }}>{fmtD(p.monthlyPlan.total)}/month</span>
             </div>
           </div>
@@ -537,7 +537,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffaa0018', border: '1px solid #ffaa0033', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#ffaa00', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', fontWeight: 600 }}>{m.goal}</div>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>{m.timeframe}</div>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>{m.timeframe}</div>
                 </div>
                 {m.amount > 0 && <div style={{ fontSize: 'var(--fs-sm)', color: '#00ff88', fontWeight: 700 }}>{fmtD(m.amount)}</div>}
               </div>
@@ -581,7 +581,7 @@ function PortfolioResult({ result, monthlyBudget, onReset, saved }) {
       )}
 
       {/* Disclaimer */}
-      <div style={{ marginTop: 20, padding: '12px 14px', background: '#0a0a0f', border: '1px solid #1a1a2e', borderRadius: 6, fontSize: 'var(--fs-xs)', color: '#445566', lineHeight: 1.6 }}>
+      <div style={{ marginTop: 20, padding: '12px 14px', background: '#0a0a0f', border: '1px solid #1a1a2e', borderRadius: 6, fontSize: 'var(--fs-xs)', color: '#b0c0dd', lineHeight: 1.6 }}>
         ⚠ This is AI-generated financial analysis for educational purposes only. Not SEC-registered financial advice. Past performance does not guarantee future results. Consult a licensed CFP or RIA before making investment decisions.
       </div>
     </div>
@@ -663,7 +663,7 @@ export default function USInvestTab() {
 
   if (!portfolioLoaded) {
     return (
-      <div style={{ padding: 24, textAlign: 'center', color: '#556677', fontSize: 'var(--fs-sm)' }}>
+      <div style={{ padding: 24, textAlign: 'center', color: '#c8d8f0', fontSize: 'var(--fs-sm)' }}>
         Loading your portfolio...
       </div>
     );
@@ -676,7 +676,7 @@ export default function USInvestTab() {
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: '#ffaa00', letterSpacing: '.1em' }}>
           🇺🇸 US INVEST
         </div>
-        <div style={{ fontSize: 'var(--fs-xs)', color: '#556677' }}>
+        <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>
           AI portfolio advisor · ETFs · 401k · Roth IRA · Tax optimization
         </div>
       </div>
@@ -705,7 +705,7 @@ export default function USInvestTab() {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 'var(--fs-lg)', color: '#ffaa00', letterSpacing: '.1em', marginBottom: 6 }}>
               STEP 1 — HOW OFTEN DO YOU GET PAID?
             </div>
-            <div style={{ fontSize: 'var(--fs-sm)', color: '#556677', marginBottom: 12 }}>
+            <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', marginBottom: 12 }}>
               We'll calculate your per-paycheck investment so it aligns with your cash flow.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -766,7 +766,7 @@ export default function USInvestTab() {
                   fontSize: 'var(--fs-lg)', outline: 'none', fontFamily: "'JetBrains Mono',monospace",
                 }}
               />
-              <span style={{ color: '#556677', fontSize: 'var(--fs-xs)', flexShrink: 0 }}>/{freqLabel[payFrequency]}</span>
+              <span style={{ color: '#c8d8f0', fontSize: 'var(--fs-xs)', flexShrink: 0 }}>/{freqLabel[payFrequency]}</span>
             </div>
           </div>
 
@@ -778,15 +778,15 @@ export default function USInvestTab() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
                 <div style={{ textAlign: 'center', padding: '10px 8px', background: '#0a0a14', borderRadius: 6 }}>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>PER {freqLabel[payFrequency].toUpperCase()}</div>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 3 }}>PER {freqLabel[payFrequency].toUpperCase()}</div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'var(--fs-lg)', color: '#ffaa00', fontWeight: 700 }}>${paycheckAmt.toLocaleString()}</div>
                 </div>
                 <div style={{ textAlign: 'center', padding: '10px 8px', background: '#0a0a14', borderRadius: 6 }}>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>PER MONTH</div>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 3 }}>PER MONTH</div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'var(--fs-lg)', color: '#c8d8f0', fontWeight: 700 }}>${monthlyBudget.toLocaleString()}</div>
                 </div>
                 <div style={{ textAlign: 'center', padding: '10px 8px', background: '#0a0a14', borderRadius: 6 }}>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', marginBottom: 3 }}>PER YEAR</div>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: '#c8d8f0', marginBottom: 3 }}>PER YEAR</div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'var(--fs-lg)', color: '#00ff88', fontWeight: 700 }}>${(monthlyBudget * 12).toLocaleString()}</div>
                 </div>
               </div>
@@ -799,7 +799,7 @@ export default function USInvestTab() {
                   { icon: '⚖️', text: 'Rebalancing schedule' },
                   { icon: '🛡️', text: 'Emergency fund analysis' },
                 ].map((f, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-xs)', color: '#556677' }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-xs)', color: '#c8d8f0' }}>
                     <span>{f.icon}</span>{f.text}
                   </div>
                 ))}
@@ -823,9 +823,9 @@ export default function USInvestTab() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #1a1a2e' }}>
             <div>
               <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: '#ffaa00' }}>MAX — US ADVISOR</span>
-              <span style={{ fontSize: 'var(--fs-xs)', color: '#445566', marginLeft: 10 }}>Budget: {fmtD(monthlyBudget)}/mo · Paid {payFrequency}</span>
+              <span style={{ fontSize: 'var(--fs-xs)', color: '#b0c0dd', marginLeft: 10 }}>Budget: {fmtD(monthlyBudget)}/mo · Paid {payFrequency}</span>
             </div>
-            <button onClick={() => setStage('budget')} style={{ background: 'none', border: 'none', color: '#445566', cursor: 'pointer', fontSize: 'var(--fs-xs)' }}>← Change budget</button>
+            <button onClick={() => setStage('budget')} style={{ background: 'none', border: 'none', color: '#b0c0dd', cursor: 'pointer', fontSize: 'var(--fs-xs)' }}>← Change budget</button>
           </div>
           {error && <div style={{ color: '#ff4444', fontSize: 'var(--fs-xs)', marginBottom: 10 }}>{error}</div>}
           <ChatIntake monthlyBudget={monthlyBudget} payFrequency={payFrequency} onComplete={handleChatComplete} />
@@ -839,7 +839,7 @@ export default function USInvestTab() {
           <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: '#ffaa00', letterSpacing: '.1em', marginBottom: 8 }}>
             BUILDING YOUR PORTFOLIO
           </div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#556677', lineHeight: 1.7 }}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0', lineHeight: 1.7 }}>
             Analyzing your profile · Selecting optimal ETFs<br />
             Running retirement projections · Optimizing for taxes...
           </div>
