@@ -8,7 +8,8 @@ import BondPanel      from '../components/BondPanel';
 import TechnicalPanel from '../components/TechnicalPanel';
 import UsageBadge     from '../components/UsageBadge';
 import UpgradeModal   from '../components/UpgradeModal';
-import ScannerResults from '../components/ScannerResults';
+import ScannerResults       from '../components/ScannerResults';
+import UnusualActivityPanel from '../components/UnusualActivityPanel';
 
 const TF_KEYS = ['short', 'swing', 'position', 'longterm'];
 const BASE = import.meta.env.VITE_API_BASE;
@@ -547,6 +548,8 @@ export default function ScannerTab({ scan, macro, onOpenOptions, onAddToWatchlis
               )
             )}
           </div>
+          {/* ── Unusual Activity ── */}
+          <UnusualActivityPanel onScan={handleScan} market={market} />
         </>
       )}
     </div>
