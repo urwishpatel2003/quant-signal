@@ -3949,13 +3949,22 @@ Generate a comprehensive, highly personalized portfolio. Make all monthly amount
 app.get('/us-portfolio/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('user_settings')
-      .select('us_portfolio')
+      .from('us_portfolio_recommendations')
+      .select('result, monthly_budget, pay_frequency, updated_at')
       .eq('user_id', req.params.userId)
       .single();
-    if (error && error.code !== 'PGRST116') throw error;
-    res.json({ portfolio: data?.us_portfolio || null });
+    if (error && error.code === 'PGRST116') return res.json({ portfolio: null });
+    if (error) throw error;
+    res.json({
+      portfolio: data?.result ? {
+        result:        data.result,
+        monthlyBudget: data.monthly_budget,
+        payFrequency:  data.pay_frequency,
+        savedAt:       data.updated_at,
+      } : null
+    });
   } catch (e) {
+    console.error('[us-portfolio GET]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -3963,13 +3972,20 @@ app.get('/us-portfolio/:userId', async (req, res) => {
 app.post('/us-portfolio/:userId', async (req, res) => {
   try {
     const { portfolio } = req.body;
+    if (!portfolio?.result) return res.status(400).json({ error: 'result required' });
     const { error } = await supabase
-      .from('user_settings')
-      .upsert({ user_id: req.params.userId, us_portfolio: portfolio, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' });
+      .from('us_portfolio_recommendations')
+      .upsert({
+        user_id:        req.params.userId,
+        result:         portfolio.result,
+        monthly_budget: portfolio.monthlyBudget,
+        pay_frequency:  portfolio.payFrequency || 'monthly',
+        updated_at:     new Date().toISOString(),
+      }, { onConflict: 'user_id' });
     if (error) throw error;
     res.json({ ok: true });
   } catch (e) {
+    console.error('[us-portfolio POST]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -3977,12 +3993,13 @@ app.post('/us-portfolio/:userId', async (req, res) => {
 app.delete('/us-portfolio/:userId', async (req, res) => {
   try {
     const { error } = await supabase
-      .from('user_settings')
-      .update({ us_portfolio: null })
+      .from('us_portfolio_recommendations')
+      .delete()
       .eq('user_id', req.params.userId);
     if (error) throw error;
     res.json({ ok: true });
   } catch (e) {
+    console.error('[us-portfolio DELETE]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
