@@ -183,84 +183,75 @@ export default function SocialBubbleChart({ onScan }) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // ── Background ─────────────────────────────────────────────────────
-      ctx.fillStyle = '#07070e';
+      ctx.fillStyle = 'rgba(7,7,14,0.18)'; // trail fade (lower = longer trails)
       ctx.fillRect(0, 0, W, H);
 
-      // ── 3D Perspective Grid ─────────────────────────────────────────────
-      const vpX = W / 2;          // vanishing point X (center)
-      const vpY = H * 0.42;       // vanishing point Y (slightly above center)
-      const COLS = 12;             // vertical lines
-      const ROWS = 10;             // horizontal depth bands
-      const SPEED = 0.18;          // scroll speed
-      const scroll = (state.tick * SPEED) % (H / ROWS);
-
-      // Horizon fade: lines near VP are faint, lines near viewer are bright
-      const gridAlpha = (t) => 0.008 + t * t * 0.12; // t=0 at horizon, t=1 at bottom
-
-      // Vertical perspective lines (converge to vanishing point)
-      for (let i = 0; i <= COLS; i++) {
-        const t = i / COLS;
-        const bx = t * W; // x at bottom edge
-        ctx.beginPath();
-        ctx.moveTo(vpX, vpY);
-        ctx.lineTo(bx, H);
-        // fade based on distance from center column
-        const centerDist = Math.abs(t - 0.5) * 2; // 0=center, 1=edge
-        ctx.strokeStyle = `rgba(0,255,136,${0.025 + centerDist * 0.015})`;
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
+      // ── Matrix rain — init columns once ────────────────────────────────
+      if (!state.matrix) {
+        const COLS_M = Math.floor(W / 14);
+        state.matrix = Array.from({ length: COLS_M }, (_, i) => ({
+          x:     i * 14,
+          y:     Math.random() * H * -1,       // stagger start above canvas
+          speed: 1.2 + Math.random() * 2.8,    // different fall speeds
+          len:   8  + Math.floor(Math.random() * 18), // column length
+          chars: [],
+          timer: 0,
+          bright: Math.random() > 0.85,        // occasional bright column
+        }));
+        // Pre-fill chars
+        const GLYPHS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$%⚡▲▼◉⬡ΔΣΩ∞≈≠±√';
+        state.matrix.forEach(col => {
+          col.chars = Array.from({ length: col.len }, () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)]);
+        });
       }
 
-      // Horizontal depth lines (animate scrolling toward viewer)
-      for (let r = 0; r <= ROWS + 1; r++) {
-        // t: 0=near horizon, 1=near viewer — uses perspective projection
-        const rawT = (r / ROWS + scroll / H * (ROWS / H));
-        const tRaw = (rawT % 1.0);
-        // Perspective: map linear t → projected y using 1/z curve
-        const perspT = tRaw * tRaw; // squish rows near horizon, spread near viewer
-        const y = vpY + perspT * (H - vpY);
-        if (y > H) continue;
+      const CHAR_H = 14;
+      const GLYPHS2 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$%⚡▲▼◉⬡ΔΣΩ∞≈≠±√';
+      ctx.font = '700 11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
 
-        // x extent at this depth — narrows toward horizon
-        const spread = perspT;
-        const x0 = vpX - spread * vpX;
-        const x1 = vpX + spread * (W - vpX);
+      for (const col of state.matrix) {
+        col.timer++;
+        // Randomly mutate one char per frame
+        if (col.timer % 3 === 0) {
+          const idx = Math.floor(Math.random() * col.chars.length);
+          col.chars[idx] = GLYPHS2[Math.floor(Math.random() * GLYPHS2.length)];
+        }
 
-        const alpha = gridAlpha(perspT);
-        ctx.beginPath();
-        ctx.moveTo(x0, y);
-        ctx.lineTo(x1, y);
-        ctx.strokeStyle = `rgba(0,255,136,${alpha})`;
-        ctx.lineWidth = 0.4 + perspT * 0.6;
-        ctx.stroke();
+        // Draw each char in the column
+        for (let j = 0; j < col.chars.length; j++) {
+          const cy = col.y + j * CHAR_H;
+          if (cy < -CHAR_H || cy > H + CHAR_H) continue;
+          const isHead = j === col.chars.length - 1; // leading char = brightest
+          let alpha;
+          if (isHead)          alpha = col.bright ? 1.0  : 0.95;
+          else if (j > col.chars.length - 4) alpha = 0.5 + (j / col.chars.length) * 0.3;
+          else                 alpha = Math.max(0.03, (j / col.chars.length) * 0.18);
 
-        // Node dots at intersections
-        if (perspT > 0.05) {
-          for (let i = 0; i <= COLS; i++) {
-            const bx = (i / COLS) * W;
-            const nx = vpX + (bx - vpX) * perspT;
-            const dotAlpha = alpha * 2.5;
-            ctx.beginPath();
-            ctx.arc(nx, y, 0.8 + perspT * 1.2, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(0,255,136,${Math.min(dotAlpha, 0.25)})`;
-            ctx.fill();
-          }
+          const r = isHead ? 220 : 0;
+          const g = isHead ? 255 : 255;
+          const b = isHead ? (col.bright ? 220 : 136) : 100;
+          ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+          ctx.fillText(col.chars[j], col.x + 7, cy);
+        }
+
+        // Advance column
+        col.y += col.speed;
+
+        // Reset when fully off screen
+        if (col.y - col.len * CHAR_H > H) {
+          col.y     = -col.len * CHAR_H - Math.random() * H * 0.5;
+          col.speed = 1.2 + Math.random() * 2.8;
+          col.len   = 8 + Math.floor(Math.random() * 18);
+          col.bright = Math.random() > 0.85;
+          col.chars = Array.from({ length: col.len }, () => GLYPHS2[Math.floor(Math.random() * GLYPHS2.length)]);
         }
       }
 
-      // Horizon glow line
-      ctx.beginPath();
-      ctx.moveTo(0, vpY); ctx.lineTo(W, vpY);
-      const hg = ctx.createLinearGradient(0, vpY, W, vpY);
-      hg.addColorStop(0,   'rgba(0,255,136,0)');
-      hg.addColorStop(0.5, 'rgba(0,255,136,0.06)');
-      hg.addColorStop(1,   'rgba(0,255,136,0)');
-      ctx.strokeStyle = hg; ctx.lineWidth = 1; ctx.stroke();
-
-      // Subtle radial overlay to darken edges (keeps focus on center)
-      const vignette = ctx.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, H*0.85);
-      vignette.addColorStop(0, 'rgba(0,0,0,0)');
-      vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
+      // Vignette — darken edges so bubbles pop
+      const vignette = ctx.createRadialGradient(W/2, H/2, H*0.15, W/2, H/2, H*0.9);
+      vignette.addColorStop(0, 'rgba(7,7,14,0.45)');
+      vignette.addColorStop(1, 'rgba(7,7,14,0.82)');
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, W, H);
 

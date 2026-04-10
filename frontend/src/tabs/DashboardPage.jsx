@@ -29,7 +29,7 @@ function IndiaMacroBar({ macro }) {
         {tiles.map(t => (
           <div key={t.label} style={{ background:'#0f0f1a', border:`1px solid ${t.color}22`,
             borderTop:`2px solid ${t.color}44`, borderRadius:6, padding:'10px 12px' }}>
-            <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginBottom:3 }}>{t.label}</div>
+            <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc', marginBottom:3 }}>{t.label}</div>
             <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:t.color, lineHeight:1 }}>{t.value}</div>
             {t.pct != null && (
               <div style={{ fontSize:'var(--fs-xs)', color: t.pct >= 0 ? '#00ff88' : '#ff4444', marginTop:2 }}>
@@ -43,7 +43,7 @@ function IndiaMacroBar({ macro }) {
       {/* Sector pulse */}
       {sectors?.length > 0 && (
         <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:8, padding:'12px 14px' }}>
-          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', letterSpacing:'.1em', marginBottom:10 }}>SECTOR PULSE</div>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc', letterSpacing:'.1em', marginBottom:10 }}>SECTOR PULSE</div>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             {sectors.slice(0, 6).map(s => {
               const pct = s.changePct || 0;
@@ -81,11 +81,11 @@ function USRegimeCard({ regime }) {
       borderLeft:`3px solid ${color}`, borderRadius:6, padding:'10px 14px',
       display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
       <div>
-        <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginBottom:2 }}>MARKET REGIME</div>
+        <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc', marginBottom:2 }}>MARKET REGIME</div>
         <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color, lineHeight:1 }}>
           {regime.regime.replace('_', ' ')}
         </div>
-        <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginTop:2 }}>{regime.confidence}% confidence</div>
+        <div style={{ fontSize:'var(--fs-xs)', color:'#8899bb', marginTop:2 }}>{regime.confidence}% confidence</div>
       </div>
       {regime.summary && (
         <div style={{ fontSize:'var(--fs-xs)', color:'#8899bb', lineHeight:1.6, flex:1 }}>{regime.summary}</div>
@@ -113,22 +113,22 @@ function IndiaRegimeCard({ macro, movers }) {
       borderLeft:`3px solid ${color}`, borderRadius:6, padding:'10px 14px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
         <div>
-          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginBottom:2 }}>NIFTY REGIME</div>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc', marginBottom:2 }}>NIFTY REGIME</div>
           <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color, lineHeight:1 }}>{regime}</div>
-          <div style={{ fontSize:'var(--fs-xs)', color:'#445566', marginTop:2 }}>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#8899bb', marginTop:2 }}>
             {advancing} sectors up · {declining} sectors down
           </div>
         </div>
         <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
           <div style={{ textAlign:'center' }}>
-            <div style={{ fontSize:'var(--fs-xs)', color:'#556677' }}>USD/INR</div>
+            <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc' }}>USD/INR</div>
             <div style={{ fontSize:'var(--fs-sm)', fontWeight:700, color: inrWeak ? '#ff8844' : '#00ff88' }}>
               ₹{usdInr?.toFixed(2) || '—'}
             </div>
           </div>
           {macro.globalSignals?.nifty && (
             <div style={{ textAlign:'center' }}>
-              <div style={{ fontSize:'var(--fs-xs)', color:'#556677' }}>NIFTY</div>
+              <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc' }}>NIFTY</div>
               <div style={{ fontSize:'var(--fs-sm)', fontWeight:700,
                 color: (macro.globalSignals.nifty.changePct || 0) >= 0 ? '#00ff88' : '#ff4444' }}>
                 {(macro.globalSignals.nifty.changePct || 0) >= 0 ? '▲' : '▼'} {Math.abs(macro.globalSignals.nifty.changePct || 0).toFixed(2)}%
@@ -141,6 +141,135 @@ function IndiaRegimeCard({ macro, movers }) {
             ⚠ Weak INR — watch FII outflows and import-heavy sectors
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── India Nifty Movers ───────────────────────────────────────────────────────
+function IndiaMoversList({ onScan }) {
+  const [movers, setMovers]   = useState(null);
+  const [tab, setTab]         = useState('gainers');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/india/movers`)
+      .then(r => r.json())
+      .then(d => { setMovers(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const TABS = [
+    { key:'gainers', label:'▲ GAINERS', color:'#00ff88' },
+    { key:'losers',  label:'▼ LOSERS',  color:'#ff4444' },
+    { key:'volume',  label:'◉ VOLUME',  color:'#4488ff' },
+  ];
+
+  const list = movers?.[tab] || [];
+
+  return (
+    <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:6, overflow:'hidden' }}>
+      {/* Header + tabs */}
+      <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #1a1a2e' }}>
+        <div style={{ padding:'10px 14px', fontFamily:"'Bebas Neue',sans-serif", fontSize:'var(--fs-lg)', color:'#ff9a00', letterSpacing:'.1em', flexShrink:0 }}>
+          🇮🇳 NIFTY MOVERS
+        </div>
+        <div style={{ display:'flex', flex:1 }}>
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{
+              background:'none', border:'none', cursor:'pointer', padding:'10px 14px',
+              fontSize:'var(--fs-xs)', fontFamily:'inherit', fontWeight:700, letterSpacing:'.08em',
+              color: tab===t.key ? t.color : '#7788aa',
+              borderBottom: `2px solid ${tab===t.key ? t.color : 'transparent'}`,
+              marginBottom:-1,
+            }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding:'24px', textAlign:'center', color:'#7788aa', fontSize:'var(--fs-sm)' }}>Loading Nifty data...</div>
+      ) : list.length === 0 ? (
+        <div style={{ padding:'24px', textAlign:'center', color:'#7788aa', fontSize:'var(--fs-sm)' }}>Market data unavailable — NSE may be closed</div>
+      ) : (
+        <div>
+          {list.slice(0, 8).map((m, i) => {
+            const isGainer = (m.changePct || 0) >= 0;
+            const color    = isGainer ? '#00ff88' : '#ff4444';
+            return (
+              <div key={m.ticker} onClick={() => onScan(m.ticker)} style={{
+                display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
+                borderBottom: i < list.length - 1 ? '1px solid #12121e' : 'none',
+                cursor:'pointer',
+              }}
+                onMouseEnter={e => e.currentTarget.style.background='#ffffff05'}
+                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#556677', width:18, textAlign:'right', flexShrink:0 }}>{i+1}</div>
+                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'var(--fs-lg)', color:'#ff9a00', flex:'0 0 120px' }}>{m.ticker}</div>
+                <div style={{ fontSize:'var(--fs-sm)', color:'#c8d8f0', fontWeight:600, flex:'0 0 80px' }}>
+                  ₹{m.price?.toLocaleString('en-IN', { maximumFractionDigits: 2 }) || '—'}
+                </div>
+                {tab === 'volume' ? (
+                  <div style={{ flex:1, fontSize:'var(--fs-sm)', color:'#4488ff', fontWeight:700 }}>
+                    {m.volume >= 1e7 ? `${(m.volume/1e7).toFixed(1)}Cr`
+                     : m.volume >= 1e5 ? `${(m.volume/1e5).toFixed(1)}L`
+                     : m.volume?.toLocaleString('en-IN') || '—'}
+                  </div>
+                ) : (
+                  <div style={{ flex:1 }} />
+                )}
+                <div style={{ fontSize:'var(--fs-sm)', fontWeight:700, color, textAlign:'right', minWidth:70 }}>
+                  {isGainer ? '▲' : '▼'} {Math.abs(m.changePct || 0).toFixed(2)}%
+                </div>
+                <div style={{ fontSize:'var(--fs-xs)', color:'#445566', width:16, textAlign:'center' }}>›</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── India Sector Heatmap ──────────────────────────────────────────────────────
+function IndiaSectorHeatmap({ sectors, onScan }) {
+  if (!sectors?.length) return null;
+  const SECTOR_TICKERS = {
+    'NIFTY IT':       'TCS',     'NIFTY BANK':     'HDFCBANK',
+    'NIFTY AUTO':     'MARUTI',  'NIFTY PHARMA':   'SUNPHARMA',
+    'NIFTY FMCG':     'HINDUNILVR','NIFTY METAL':  'TATASTEEL',
+    'NIFTY ENERGY':   'RELIANCE','NIFTY REALTY':   'DLF',
+    'NIFTY INFRA':    'LT',      'NIFTY MEDIA':    'ZEEL',
+  };
+
+  return (
+    <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:6, overflow:'hidden' }}>
+      <div style={{ padding:'10px 14px', borderBottom:'1px solid #1a1a2e', fontFamily:"'Bebas Neue',sans-serif", fontSize:'var(--fs-lg)', color:'#ff9a00', letterSpacing:'.1em' }}>
+        SECTOR PERFORMANCE
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))', gap:1, background:'#1a1a2e' }}>
+        {sectors.slice(0, 10).map((s, i) => {
+          const pct   = s.changePct || 0;
+          const pos   = pct >= 0;
+          const color = pct > 1 ? '#00ff88' : pct > 0 ? '#44cc88' : pct > -1 ? '#ff8844' : '#ff4444';
+          const bg    = pos ? `rgba(0,255,136,${Math.min(Math.abs(pct)/5, 0.25)})`
+                            : `rgba(255,68,68,${Math.min(Math.abs(pct)/5, 0.25)})`;
+          const name  = s.name?.replace('NIFTY ','') || s.sector || `Sector ${i+1}`;
+          const ticker = SECTOR_TICKERS[s.name] || null;
+          return (
+            <div key={i} onClick={() => ticker && onScan(ticker)} style={{
+              background: bg, padding:'12px 10px', textAlign:'center',
+              cursor: ticker ? 'pointer' : 'default',
+            }}>
+              <div style={{ fontSize:'var(--fs-xs)', color:'#b0c0dd', marginBottom:4, fontWeight:600, letterSpacing:'.04em' }}>
+                {name.length > 10 ? name.slice(0,10)+'…' : name}
+              </div>
+              <div style={{ fontSize:'var(--fs-body)', fontWeight:700, color, fontFamily:"'JetBrains Mono',monospace" }}>
+                {pos ? '+' : ''}{pct.toFixed(2)}%
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -192,7 +321,7 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
           <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(20px,4vw,30px)', color:'#ffaa00', lineHeight:1 }}>
             {greeting()}{user?.firstName ? `, ${user.firstName}` : ''}
           </div>
-          <div style={{ fontSize:'var(--fs-xs)', color:'#556677', marginTop:3 }}>
+          <div style={{ fontSize:'var(--fs-xs)', color:'#99aacc', marginTop:3 }}>
             {time.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' })}
             {' · '}
             <span style={{ color: isIndia ? '#ff9a00' : '#4488ff' }}>
@@ -216,6 +345,12 @@ export default function DashboardPage({ user, market, onNavigate, onScan }) {
 
       {/* ── India macro tiles — India only ── */}
       {isIndia && <IndiaMacroBar macro={indiaMacro} />}
+
+      {/* ── India Nifty movers — India only ── */}
+      {isIndia && <IndiaMoversList onScan={handleScan} />}
+
+      {/* ── India sector heatmap — India only ── */}
+      {isIndia && indiaMacro?.sectors?.length > 0 && <IndiaSectorHeatmap sectors={indiaMacro.sectors} onScan={handleScan} />}
 
 
 

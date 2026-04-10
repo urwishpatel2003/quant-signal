@@ -3,6 +3,7 @@ export const TABS = [
   { id: 'scanner',   label: 'SCANNER'   },
   { id: 'options',   label: 'OPTIONS'   },
   { id: 'invest',    label: 'INVEST'    },
+  { id: 'portfolio', label: 'PORTFOLIO' },
   { id: 'simulator', label: 'SIMULATE'  },
   { id: 'accuracy',  label: 'ACCURACY'  },
   { id: 'markets',   label: 'MARKETS'   },
