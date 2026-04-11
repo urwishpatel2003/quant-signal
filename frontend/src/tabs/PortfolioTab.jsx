@@ -370,7 +370,8 @@ function TxRow({ tx }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PortfolioTab({ macro }) {
   const { user } = useUser();
-  const [tab, setTab]             = useState('positions'); // positions | transactions | upload
+  const [tab,        setTab]        = useState('positions'); // positions | transactions
+  const [showUpload, setShowUpload] = useState(false);      // show upload screen
   const [portfolio, setPortfolio] = useState(null);
   const [aiCache, setAiCache]     = useState({});
   const [scanningSet, setScanningSet] = useState(new Set());
@@ -406,7 +407,7 @@ export default function PortfolioTab({ macro }) {
 
   // Auto-refresh prices every 60s while on positions tab
   useEffect(() => {
-    if (!portfolio || tab !== 'positions') return;
+    if (!portfolio || showUpload) return;
     const interval = setInterval(loadPortfolio, 60000);
     return () => clearInterval(interval);
   }, [portfolio, tab]);
@@ -448,8 +449,7 @@ export default function PortfolioTab({ macro }) {
       if (!res.ok) throw new Error(data.error);
       setPreview(null);
       setImporting(false);
-      // Show loading state while positions are built
-      setLoading(true);
+      setShowUpload(false);
       await loadPortfolio();
       setTab('positions');
     } catch (e) {
@@ -461,7 +461,7 @@ export default function PortfolioTab({ macro }) {
   const handleClear = async () => {
     if (!confirm('Clear all portfolio data?')) return;
     await fetch(`${BASE}/portfolio/${user.id}`, { method: 'DELETE' });
-    setPortfolio(null); setAiCache({});
+    setPortfolio(null); setAiCache({}); setShowUpload(false);
   };
 
   // Scan a position with AI
@@ -516,7 +516,7 @@ export default function PortfolioTab({ macro }) {
               <button onClick={scanAll} style={{ fontSize:'var(--fs-xs)', color:'#00ff88', background:'#00ff8811', border:'1px solid #00ff8833', borderRadius:3, padding:'5px 12px', cursor:'pointer', fontFamily:'inherit' }}>
                 ⚡ SCAN ALL
               </button>
-              <button onClick={() => setTab('upload')} style={{ fontSize:'var(--fs-xs)', color:'#ffaa00', background:'#ffaa0011', border:'1px solid #ffaa0033', borderRadius:3, padding:'5px 12px', cursor:'pointer', fontFamily:'inherit' }}>
+              <button onClick={() => setShowUpload(true)} style={{ fontSize:'var(--fs-xs)', color:'#ffaa00', background:'#ffaa0011', border:'1px solid #ffaa0033', borderRadius:3, padding:'5px 12px', cursor:'pointer', fontFamily:'inherit' }}>
                 ↑ REIMPORT
               </button>
               <button onClick={handleClear} style={{ fontSize:'var(--fs-xs)', color:'#ff4444', background:'transparent', border:'1px solid #ff444433', borderRadius:3, padding:'5px 12px', cursor:'pointer', fontFamily:'inherit' }}>
@@ -534,7 +534,7 @@ export default function PortfolioTab({ macro }) {
       )}
 
       {/* ── Empty state / Upload ── */}
-      {(!portfolio || tab === 'upload') && (
+      {(!portfolio || showUpload) && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
           {/* Broker instructions */}
@@ -619,7 +619,7 @@ export default function PortfolioTab({ macro }) {
       )}
 
       {/* ── Portfolio loaded ── */}
-      {portfolio && tab !== 'upload' && (
+      {portfolio && !showUpload && (
         <>
           {/* Summary cards */}
           {summary && (
