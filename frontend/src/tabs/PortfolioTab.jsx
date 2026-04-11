@@ -389,19 +389,27 @@ export default function PortfolioTab({ macro }) {
   }, [user?.id]);
 
   const loadPortfolio = async () => {
+    if (!user?.id) return;
     setLoading(true);
     try {
       const res  = await fetch(`${BASE}/portfolio/${user.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setPortfolio(data);
-      // Load AI cache from Supabase via a separate endpoint if needed
+      setError('');
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // Auto-refresh prices every 60s while on positions tab
+  useEffect(() => {
+    if (!portfolio || tab !== 'positions') return;
+    const interval = setInterval(loadPortfolio, 60000);
+    return () => clearInterval(interval);
+  }, [portfolio, tab]);
 
   // Parse CSV file
   const handleFile = (file) => {
@@ -439,11 +447,13 @@ export default function PortfolioTab({ macro }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setPreview(null);
+      setImporting(false);
+      // Show loading state while positions are built
+      setLoading(true);
       await loadPortfolio();
       setTab('positions');
     } catch (e) {
       setError(e.message);
-    } finally {
       setImporting(false);
     }
   };
@@ -644,9 +654,19 @@ export default function PortfolioTab({ macro }) {
           {/* Positions tab */}
           {tab === 'positions' && (
             loading ? (
-              <div style={{ padding:'40px 0', textAlign:'center', color:'#7788aa', fontSize:'var(--fs-sm)' }}>Loading positions...</div>
+              <div style={{ padding:'40px 0', textAlign:'center', color:'#7788aa', fontSize:'var(--fs-sm)' }}>
+                <div style={{ width:32, height:32, borderRadius:'50%', border:'2px solid #ffaa0022', borderTop:'2px solid #ffaa00', animation:'spin .8s linear infinite', margin:'0 auto 12px' }} />
+                Building positions from transactions...
+              </div>
             ) : positions.length === 0 ? (
-              <div style={{ padding:'40px 0', textAlign:'center', color:'#7788aa', fontSize:'var(--fs-sm)' }}>No open positions found in your import.</div>
+              <div style={{ padding:'40px 20px', textAlign:'center' }}>
+                <div style={{ fontSize:32, marginBottom:12 }}>📭</div>
+                <div style={{ fontSize:'var(--fs-body)', color:'#c8d8f0', marginBottom:8 }}>No open positions found</div>
+                <div style={{ fontSize:'var(--fs-sm)', color:'#7788aa', maxWidth:320, margin:'0 auto', lineHeight:1.7 }}>
+                  This can happen if all positions were sold, or if the CSV only contains cash transfers.
+                  Check the <button onClick={() => setTab('transactions')} style={{ background:'none', border:'none', color:'#ffaa00', cursor:'pointer', fontSize:'inherit', fontFamily:'inherit', padding:0, textDecoration:'underline' }}>transaction history</button> to verify your data imported correctly.
+                </div>
+              </div>
             ) : (
               <div style={{ background:'#0a0a14', border:'1px solid #1a1a2e', borderRadius:6, overflow:'hidden' }}>
                 {/* Column headers */}
