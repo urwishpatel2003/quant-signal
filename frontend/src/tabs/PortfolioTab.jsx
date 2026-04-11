@@ -48,13 +48,28 @@ function parseDateSafe(raw) {
 const BROKER_PROFILES = {
   robinhood: {
     name: 'Robinhood',
-    dateField:   ['Activity Date', 'Date'],
+    dateField:   ['Activity Date', 'Process Date', 'Date'],
     typeField:   ['Trans Code', 'Type', 'Transaction Type'],
-    symbolField: ['Instrument', 'Symbol', 'Description'],
+    symbolField: ['Instrument', 'Symbol'],  // Instrument = ticker, NOT Description
     qtyField:    ['Quantity'],
     priceField:  ['Price'],
     amountField: ['Amount'],
-    typeMap: { 'Buy': 'BUY', 'Sell': 'SELL', 'CDIV': 'DIV', 'DIV': 'DIV', 'SPLIT': 'SPLIT', 'ACH': 'TRANSFER', 'STO': 'OTHER', 'BTO': 'BUY', 'STC': 'SELL', 'BTC': 'BUY' },
+    descField:   ['Description'],  // extra: human label for the transaction
+    typeMap: {
+      // Equity trades
+      'Buy': 'BUY', 'Sell': 'SELL',
+      // Options
+      'BTO': 'BUY', 'STO': 'OTHER', 'BTC': 'BUY', 'STC': 'SELL',
+      'OEXP': 'OTHER', 'OCA': 'OTHER', 'OEX': 'OTHER',
+      // Dividends
+      'CDIV': 'DIV', 'DIV': 'DIV', 'SDIV': 'DIV', 'REIN': 'DIV',
+      // Transfers / cash
+      'ACH':   'TRANSFER', 'ACATS': 'TRANSFER', 'JNLC': 'TRANSFER',
+      'JNLS':  'TRANSFER', 'RTP':   'TRANSFER', 'WIRE': 'TRANSFER',
+      // Fees / misc
+      'GOLD': 'OTHER', 'MISC': 'OTHER', 'SLIP': 'OTHER',
+      'REORG': 'OTHER', 'SPL': 'SPLIT', 'SPLIT': 'SPLIT',
+    },
   },
   fidelity: {
     name: 'Fidelity',
@@ -137,18 +152,42 @@ function normalizeTransactions(rows, brokerKey) {
   const profile = BROKER_PROFILES[brokerKey] || BROKER_PROFILES.generic;
   const txs = [];
   for (const row of rows) {
-    const rawType = getField(row, profile.typeField);
+    const rawType = getField(row, profile.typeField).trim();
     const type    = profile.typeMap[rawType] || profile.typeMap[rawType?.toLowerCase()] || 'OTHER';
-    const symbol  = getField(row, profile.symbolField)?.toUpperCase()?.replace(/[^A-Z]/g, '') || null;
+
+    // Symbol: use Instrument field (ticker only), NOT Description (which has long names)
+    let symbol = getField(row, profile.symbolField).trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '') || null;
+    // If symbol looks like a description (>6 chars, no dot), clear it
+    if (symbol && symbol.length > 6 && !symbol.includes('.')) symbol = null;
+
     const dateRaw = getField(row, profile.dateField);
     const date    = parseDateSafe(dateRaw);
     if (!date) continue;
-    const quantity = parseFloat(getField(row, profile.qtyField)) || null;
-    const price    = parseFloat(getField(row, profile.priceField)?.replace(/[^0-9.]/g, '')) || null;
-    const amount   = parseFloat(getField(row, profile.amountField)?.replace(/[^0-9.-]/g, '')) || null;
-    txs.push({ date, type, symbol, quantity, price, amount, description: rawType, raw: JSON.stringify(row) });
+
+    const qtyRaw    = getField(row, profile.qtyField).replace(/[^0-9.-]/g, '');
+    const priceRaw  = getField(row, profile.priceField).replace(/[^0-9.-]/g, '');
+    const amountRaw = getField(row, profile.amountField).replace(/[^0-9.-]/g, '');
+
+    const quantity = qtyRaw    ? parseFloat(qtyRaw)    : null;
+    const price    = priceRaw  ? parseFloat(priceRaw)  : null;
+    const amount   = amountRaw ? parseFloat(amountRaw) : null;
+
+    // Description for display — use descField if available, else rawType
+    const description = profile.descField
+      ? (getField(row, profile.descField).trim() || rawType)
+      : rawType;
+
+    // Skip rows with no useful data
+    if (!symbol && type === 'OTHER' && !amount) continue;
+
+    txs.push({ date, type, symbol, quantity, price, amount, description, raw: JSON.stringify(row) });
   }
-  return txs.filter(t => t.date && (t.symbol || t.type === 'TRANSFER'));
+  // Keep: trades with symbol, dividends, transfers with amount
+  return txs.filter(t => t.date && (
+    (t.symbol && (t.type === 'BUY' || t.type === 'SELL' || t.type === 'DIV' || t.type === 'SPLIT')) ||
+    (t.type === 'TRANSFER' && t.amount) ||
+    (t.type === 'DIV' && t.amount)
+  ));
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -302,13 +341,26 @@ function TxRow({ tx }) {
   const typeColors = { BUY:'#00ff88', SELL:'#ff4444', DIV:'#ffaa00', SPLIT:'#4488ff', TRANSFER:'#8899bb', OTHER:'#556677' };
   const c = typeColors[tx.type] || '#8899bb';
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', borderBottom:'1px solid #12121e', fontSize:'var(--fs-sm)' }}>
-      <div style={{ color:'#7788aa', width:88, flexShrink:0 }}>{tx.date}</div>
-      <div style={{ background:c+'18', border:`1px solid ${c}33`, borderRadius:3, padding:'1px 7px', fontSize:'var(--fs-xs)', color:c, fontWeight:700, width:60, textAlign:'center', flexShrink:0 }}>{tx.type}</div>
-      <div style={{ color:'#ffaa00', fontFamily:"'Bebas Neue',sans-serif", fontSize:'var(--fs-body)', width:56, flexShrink:0 }}>{tx.symbol || '—'}</div>
-      <div style={{ color:'#c8d8f0', width:72, flexShrink:0 }}>{tx.quantity ? fmtN(tx.quantity) : '—'}</div>
-      <div style={{ color:'#c8d8f0', width:72, flexShrink:0 }}>{tx.price ? fmtD(tx.price) : '—'}</div>
-      <div style={{ color: tx.amount >= 0 ? '#00ff88' : '#ff4444', flex:1, textAlign:'right', fontWeight:600 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', borderBottom:'1px solid #12121e', fontSize:'var(--fs-sm)' }}>
+      <div style={{ color:'#7788aa', width:84, flexShrink:0 }}>{tx.date}</div>
+      <div style={{ background:c+'18', border:`1px solid ${c}33`, borderRadius:3, padding:'1px 6px',
+        fontSize:'var(--fs-xs)', color:c, fontWeight:700, width:56, textAlign:'center', flexShrink:0 }}>
+        {tx.type}
+      </div>
+      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'var(--fs-body)', color:'#ffaa00',
+        width:60, flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        {tx.symbol || '—'}
+      </div>
+      {/* Description for non-trade rows */}
+      {!tx.symbol && tx.description && (
+        <div style={{ flex:1, fontSize:'var(--fs-xs)', color:'#7788aa', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>
+          {tx.description.length > 28 ? tx.description.slice(0,28)+'…' : tx.description}
+        </div>
+      )}
+      {tx.symbol && <div style={{ flex:1 }} />}
+      <div style={{ color:'#c8d8f0', width:68, flexShrink:0 }}>{tx.quantity ? fmtN(tx.quantity) : '—'}</div>
+      <div style={{ color:'#c8d8f0', width:68, flexShrink:0 }}>{tx.price ? fmtD(tx.price) : '—'}</div>
+      <div style={{ color: tx.amount >= 0 ? '#00ff88' : '#ff4444', width:84, textAlign:'right', fontWeight:600, flexShrink:0 }}>
         {tx.amount != null ? (tx.amount >= 0 ? '+' : '') + fmtD(tx.amount) : '—'}
       </div>
     </div>
@@ -535,13 +587,14 @@ export default function PortfolioTab({ macro }) {
               </div>
               {/* Sample rows */}
               <div style={{ overflowX:'auto' }}>
-                <div style={{ display:'flex', padding:'8px 16px', borderBottom:'1px solid #1a1a2e', fontSize:'var(--fs-xs)', color:'#7788aa', gap:10, minWidth:500 }}>
-                  <div style={{ width:88 }}>DATE</div>
-                  <div style={{ width:60 }}>TYPE</div>
-                  <div style={{ width:56 }}>SYMBOL</div>
-                  <div style={{ width:72 }}>QTY</div>
-                  <div style={{ width:72 }}>PRICE</div>
-                  <div style={{ flex:1, textAlign:'right' }}>AMOUNT</div>
+                <div style={{ display:'flex', padding:'8px 14px', borderBottom:'1px solid #1a1a2e', fontSize:'var(--fs-xs)', color:'#7788aa', gap:8, minWidth:500 }}>
+                  <div style={{ width:84 }}>DATE</div>
+                  <div style={{ width:56 }}>TYPE</div>
+                  <div style={{ width:60 }}>SYMBOL</div>
+                  <div style={{ flex:1 }}>DESCRIPTION</div>
+                  <div style={{ width:68 }}>QTY</div>
+                  <div style={{ width:68 }}>PRICE</div>
+                  <div style={{ width:84, textAlign:'right' }}>AMOUNT</div>
                 </div>
                 {preview.txs.slice(0, 8).map((t, i) => <TxRow key={i} tx={t} />)}
                 {preview.txs.length > 8 && (
