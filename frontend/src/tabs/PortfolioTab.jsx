@@ -391,14 +391,17 @@ export default function PortfolioTab({ macro }) {
 
   const loadPortfolio = async () => {
     if (!user?.id) return;
+    console.log('[portfolio] loading for user:', user.id);
     setLoading(true);
     try {
       const res  = await fetch(`${BASE}/portfolio/${user.id}`);
       const data = await res.json();
+      console.log('[portfolio] loaded:', data?.positions?.length, 'positions');
       if (!res.ok) throw new Error(data.error);
       setPortfolio(data);
       setError('');
     } catch (e) {
+      console.error('[portfolio] load error:', e.message);
       setError(e.message);
     } finally {
       setLoading(false);
@@ -437,7 +440,11 @@ export default function PortfolioTab({ macro }) {
   };
 
   const handleImport = async () => {
-    if (!preview || !user?.id) return;
+    console.log('[import] start — user:', user?.id, 'txs:', preview?.txs?.length);
+    if (!preview || !user?.id) {
+      setError(!user?.id ? 'Not signed in' : 'No transactions to import');
+      return;
+    }
     setImporting(true); setError('');
     try {
       const res  = await fetch(`${BASE}/portfolio/${user.id}/import`, {
@@ -445,15 +452,20 @@ export default function PortfolioTab({ macro }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: preview.txs, broker: preview.broker }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const text = await res.text();
+      console.log('[import] server response:', res.status, text.slice(0, 200));
+      let data;
+      try { data = JSON.parse(text); } catch { data = { error: text }; }
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+      console.log('[import] success — imported:', data.imported);
       setPreview(null);
-      setImporting(false);
       setShowUpload(false);
+      setImporting(false);
       await loadPortfolio();
       setTab('positions');
     } catch (e) {
-      setError(e.message);
+      console.error('[import] error:', e.message);
+      setError(e.message || 'Import failed — check console for details');
       setImporting(false);
     }
   };
