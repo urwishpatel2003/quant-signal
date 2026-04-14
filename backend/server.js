@@ -3978,7 +3978,10 @@ app.get('/us-portfolio/:userId', async (req, res) => {
       .select('result, monthly_budget, pay_frequency, updated_at')
       .eq('user_id', req.params.userId)
       .single();
-    if (error && error.code === 'PGRST116') return res.json({ portfolio: null });
+    // PGRST116 = no rows, 42P01 = table doesn't exist yet
+    if (error && (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('does not exist'))) {
+      return res.json({ portfolio: null });
+    }
     if (error) throw error;
     res.json({
       portfolio: data?.result ? {
@@ -3990,6 +3993,10 @@ app.get('/us-portfolio/:userId', async (req, res) => {
     });
   } catch (e) {
     console.error('[us-portfolio GET]', e.message);
+    // Return null instead of 500 if table missing — migration not run yet
+    if (e.message?.includes('does not exist') || e.message?.includes('42P01')) {
+      return res.json({ portfolio: null });
+    }
     res.status(500).json({ error: e.message });
   }
 });
@@ -4370,7 +4377,7 @@ app.get('/sectors/us', async (req, res) => {
 });
 
 // ─── Portfolio recommendation persistence ─────────────────────────────────────
-app.get('/portfolio-rec/:userId', async (req, res) => {
+app.get('/portfolio/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('portfolio_recommendations')
@@ -4386,7 +4393,7 @@ app.get('/portfolio-rec/:userId', async (req, res) => {
   }
 });
 
-app.post('/portfolio-rec/:userId', async (req, res) => {
+app.post('/portfolio/:userId', async (req, res) => {
   const { result, sipAmount, language = 'en' } = req.body;
   if (!result) return res.status(400).json({ error: 'result required' });
   try {
@@ -4408,7 +4415,7 @@ app.post('/portfolio-rec/:userId', async (req, res) => {
   }
 });
 
-app.delete('/portfolio-rec/:userId', async (req, res) => {
+app.delete('/tracker/:userId', async (req, res) => {
   try {
     const { error } = await supabase
       .from('portfolio_recommendations')
@@ -6955,7 +6962,7 @@ app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /portfolio/:userId/import — receive parsed transactions from frontend
-app.post('/portfolio/:userId/import', async (req, res) => {
+app.post('/tracker/:userId/import', async (req, res) => {
   try {
     const { userId } = req.params;
     const { transactions, broker = 'unknown' } = req.body;
@@ -6995,7 +7002,7 @@ app.post('/portfolio/:userId/import', async (req, res) => {
 });
 
 // GET /portfolio/:userId — return positions + transactions
-app.get('/portfolio/:userId', async (req, res) => {
+app.get('/tracker/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const [posRes, txRes] = await Promise.all([
@@ -7051,7 +7058,7 @@ app.get('/portfolio/:userId', async (req, res) => {
 });
 
 // DELETE /portfolio/:userId — clear all data
-app.delete('/portfolio/:userId', async (req, res) => {
+app.delete('/tracker/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     await Promise.all([
@@ -7077,18 +7084,26 @@ async function rebuildPositions(userId, broker) {
   const posMap = {}; // ticker → { shares, totalCost, lots: [{qty, price}] }
   for (const tx of (txs || [])) {
     if (!tx.symbol) continue;
+    // Skip options transactions — they don't affect stock share count
+    if (tx.type === 'OPTION') continue;
     const sym = tx.symbol.toUpperCase();
     if (!posMap[sym]) posMap[sym] = { shares: 0, totalCost: 0, lots: [], dividends: 0 };
     const p = posMap[sym];
 
-    if (tx.type === 'BUY') {
+    // Treat OTHER rows with qty+price as trades based on amount sign
+    const effectiveType = tx.type === 'OTHER' && tx.quantity && tx.price
+      ? (tx.amount < 0 ? 'BUY' : tx.amount > 0 ? 'SELL' : tx.type)
+      : tx.type;
+
+    if (effectiveType === 'BUY') {
       const qty   = Math.abs(tx.quantity || 0);
       const price = Math.abs(tx.price || 0);
+      if (!qty || !price) continue;
       p.shares    += qty;
       p.totalCost += qty * price;
       p.lots.push({ qty, price });
 
-    } else if (tx.type === 'SELL') {
+    } else if (effectiveType === 'SELL') {
       const qty = Math.abs(tx.quantity || 0);
       // FIFO: remove from oldest lots first
       let remaining = qty;

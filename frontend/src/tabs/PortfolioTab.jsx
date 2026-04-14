@@ -58,9 +58,9 @@ const BROKER_PROFILES = {
     typeMap: {
       // Equity trades
       'Buy': 'BUY', 'Sell': 'SELL',
-      // Options
-      'BTO': 'BUY', 'STO': 'OTHER', 'BTC': 'BUY', 'STC': 'SELL',
-      'OEXP': 'OTHER', 'OCA': 'OTHER', 'OEX': 'OTHER',
+      // Options — mapped to OPTION type, excluded from stock position building
+      'BTO': 'OPTION', 'STO': 'OPTION', 'BTC': 'OPTION', 'STC': 'OPTION',
+      'OEXP': 'OPTION', 'OCA': 'OPTION', 'OEX': 'OPTION',
       // Dividends & interest
       'CDIV': 'DIV', 'DIV': 'DIV', 'SDIV': 'DIV', 'REIN': 'DIV',
       'BIR': 'DIV', 'INT': 'DIV', 'DCF': 'DIV',
@@ -245,7 +245,11 @@ function normalizeTransactions(rows, brokerKey) {
   // Keep: anything with a symbol, or cash movements with an amount
   // Send generously — server-side rebuildPositions handles the logic
   return txs.filter(t => t.date && (
-    t.symbol ||                              // has a ticker
+    (t.symbol && t.type === 'BUY')      ||   // stock buy
+    (t.symbol && t.type === 'SELL')     ||   // stock sell
+    (t.symbol && t.type === 'DIV')      ||   // dividend
+    (t.symbol && t.type === 'SPLIT')    ||   // split
+    (t.symbol && t.type === 'OPTION')   ||   // options (history only, skip positions)
     (t.amount && t.type === 'TRANSFER') ||   // cash deposit/withdrawal
     (t.amount && t.type === 'DIV')           // dividend with no symbol
   ));
