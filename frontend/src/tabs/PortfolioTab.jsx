@@ -405,7 +405,7 @@ export default function PortfolioTab({ macro }) {
     console.log('[portfolio] loading for user:', user.id);
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/tracker/${user.id}`);
+      const res  = await fetch(`${BASE}/portfolio/${user.id}`);
       const data = await res.json();
       console.log('[portfolio] loaded:', data?.positions?.length, 'positions');
       if (!res.ok) throw new Error(data.error);
@@ -483,7 +483,7 @@ export default function PortfolioTab({ macro }) {
 
   const handleClear = async () => {
     if (!confirm('Clear all portfolio data?')) return;
-    await fetch(`${BASE}/tracker/${user.id}`, { method: 'DELETE' });
+    await fetch(`${BASE}/portfolio/${user.id}`, { method: 'DELETE' });
     setPortfolio(null); setAiCache({}); setShowUpload(false);
   };
 
