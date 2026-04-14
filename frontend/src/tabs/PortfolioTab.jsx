@@ -61,14 +61,16 @@ const BROKER_PROFILES = {
       // Options
       'BTO': 'BUY', 'STO': 'OTHER', 'BTC': 'BUY', 'STC': 'SELL',
       'OEXP': 'OTHER', 'OCA': 'OTHER', 'OEX': 'OTHER',
-      // Dividends
+      // Dividends & interest
       'CDIV': 'DIV', 'DIV': 'DIV', 'SDIV': 'DIV', 'REIN': 'DIV',
+      'BIR': 'DIV', 'INT': 'DIV', 'DCF': 'DIV',
       // Transfers / cash
       'ACH':   'TRANSFER', 'ACATS': 'TRANSFER', 'JNLC': 'TRANSFER',
       'JNLS':  'TRANSFER', 'RTP':   'TRANSFER', 'WIRE': 'TRANSFER',
       // Fees / misc
       'GOLD': 'OTHER', 'MISC': 'OTHER', 'SLIP': 'OTHER',
-      'REORG': 'OTHER', 'SPL': 'SPLIT', 'SPLIT': 'SPLIT',
+      'FUTSWP': 'OTHER', 'REORG': 'OTHER',
+      'SPL': 'SPLIT', 'SPLIT': 'SPLIT',
     },
   },
   fidelity: {
@@ -115,20 +117,65 @@ const BROKER_PROFILES = {
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
 function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (!lines.length) return [];
-  // Find header row (first row with recognizable field names)
-  let headerIdx = 0;
-  for (let i = 0; i < Math.min(5, lines.length); i++) {
-    if (/date|symbol|amount|quantity|type|action|trans/i.test(lines[i])) { headerIdx = i; break; }
-  }
-  const headers = lines[headerIdx].split(',').map(h => h.replace(/['"]/g, '').trim());
+  // Proper CSV parser that handles quoted fields with embedded newlines and commas
   const rows = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map(c => c.replace(/['"$, ]/g, '').trim());
-    if (cols.length < 2 || cols.every(c => !c)) continue;
+  let pos = 0, len = text.length;
+
+  function parseField() {
+    if (pos >= len) return '';
+    if (text[pos] === '"') {
+      pos++; // skip opening quote
+      let val = '';
+      while (pos < len) {
+        if (text[pos] === '"' && text[pos+1] === '"') { val += '"'; pos += 2; } // escaped quote
+        else if (text[pos] === '"') { pos++; break; } // closing quote
+        else { val += text[pos++]; }
+      }
+      return val.trim();
+    }
+    let val = '';
+    while (pos < len && text[pos] !== ',' && text[pos] !== '\n' && text[pos] !== '\r') {
+      val += text[pos++];
+    }
+    return val.trim();
+  }
+
+  function parseLine() {
+    const cols = [];
+    while (pos < len && text[pos] !== '\n' && text[pos] !== '\r') {
+      cols.push(parseField());
+      if (pos < len && text[pos] === ',') pos++; // skip comma
+      else break;
+    }
+    // skip \r\n or \n
+    if (pos < len && text[pos] === '\r') pos++;
+    if (pos < len && text[pos] === '\n') pos++;
+    return cols;
+  }
+
+  // Skip BOM if present
+  if (text.charCodeAt(0) === 0xFEFF) pos++;
+
+  // Find header row
+  let headers = [];
+  while (pos < len) {
+    const startPos = pos;
+    const line = parseLine();
+    if (line.some(c => /date|symbol|amount|quantity|type|action|trans|instrument/i.test(c))) {
+      headers = line;
+      break;
+    }
+    if (pos === startPos) break; // safety
+  }
+  if (!headers.length) return [];
+
+  while (pos < len) {
+    const startPos = pos;
+    const cols = parseLine();
+    if (!cols.length || cols.every(c => !c)) continue;
+    if (pos === startPos) { pos++; continue; } // safety
     const row = {};
-    headers.forEach((h, j) => { row[h] = cols[j] || ''; });
+    headers.forEach((h, j) => { row[h] = cols[j] !== undefined ? cols[j] : ''; });
     rows.push(row);
   }
   return rows;
@@ -175,12 +222,15 @@ function normalizeTransactions(rows, brokerKey) {
     if (!date) continue;
 
     const qtyRaw    = getField(row, profile.qtyField).replace(/[^0-9.-]/g, '');
-    const priceRaw  = getField(row, profile.priceField).replace(/[^0-9.-]/g, '');
-    const amountRaw = getField(row, profile.amountField).replace(/[^0-9.-]/g, '');
+    const priceRaw  = getField(row, profile.priceField).replace(/[^0-9.]/g, ''); // strip $, commas
+    // Handle ($125.00) Robinhood negative format — parens = negative
+    const rawAmt   = getField(row, profile.amountField).trim();
+    const isNeg    = rawAmt.startsWith('(') || rawAmt.startsWith('-');
+    const amountRaw = rawAmt.replace(/[^0-9.]/g, '');
 
     const quantity = qtyRaw    ? parseFloat(qtyRaw)    : null;
     const price    = priceRaw  ? parseFloat(priceRaw)  : null;
-    const amount   = amountRaw ? parseFloat(amountRaw) : null;
+    const amount   = amountRaw ? (isNeg ? -parseFloat(amountRaw) : parseFloat(amountRaw)) : null;
 
     // Description for display — use descField if available, else rawType
     const description = profile.descField
@@ -405,10 +455,22 @@ export default function PortfolioTab({ macro }) {
     console.log('[portfolio] loading for user:', user.id);
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/portfolio/${user.id}`);
-      const data = await res.json();
-      console.log('[portfolio] loaded:', data?.positions?.length, 'positions');
-      if (!res.ok) throw new Error(data.error);
+      const res  = await fetch(`${BASE}/tracker/${user.id}`);
+      const text = await res.text();
+      console.log('[portfolio] status:', res.status, text.slice(0, 100));
+      // Guard against HTML error pages
+      if (text.trim().startsWith('<')) {
+        throw new Error(`Server returned HTML (status ${res.status}) — route may not be deployed yet`);
+      }
+      const data = JSON.parse(text);
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      // If no data yet (new user), show upload screen
+      if (!data.positions) {
+        setPortfolio(null);
+        setLoading(false);
+        return;
+      }
+      console.log('[portfolio] loaded:', data.positions.length, 'positions');
       setPortfolio(data);
       setError('');
     } catch (e) {
@@ -458,13 +520,16 @@ export default function PortfolioTab({ macro }) {
     }
     setImporting(true); setError('');
     try {
-      const res  = await fetch(`${BASE}/portfolio/${user.id}/import`, {
+      const res  = await fetch(`${BASE}/tracker/${user.id}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: preview.txs, broker: preview.broker }),
       });
       const text = await res.text();
       console.log('[import] server response:', res.status, text.slice(0, 200));
+      if (text.trim().startsWith('<')) {
+        throw new Error(`Route not found (status ${res.status}) — please redeploy backend`);
+      }
       let data;
       try { data = JSON.parse(text); } catch { data = { error: text }; }
       if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
@@ -483,7 +548,7 @@ export default function PortfolioTab({ macro }) {
 
   const handleClear = async () => {
     if (!confirm('Clear all portfolio data?')) return;
-    await fetch(`${BASE}/portfolio/${user.id}`, { method: 'DELETE' });
+    await fetch(`${BASE}/tracker/${user.id}`, { method: 'DELETE' });
     setPortfolio(null); setAiCache({}); setShowUpload(false);
   };
 
