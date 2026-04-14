@@ -4370,7 +4370,7 @@ app.get('/sectors/us', async (req, res) => {
 });
 
 // ─── Portfolio recommendation persistence ─────────────────────────────────────
-app.get('/portfolio/:userId', async (req, res) => {
+app.get('/portfolio-rec/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('portfolio_recommendations')
@@ -4386,7 +4386,7 @@ app.get('/portfolio/:userId', async (req, res) => {
   }
 });
 
-app.post('/portfolio/:userId', async (req, res) => {
+app.post('/portfolio-rec/:userId', async (req, res) => {
   const { result, sipAmount, language = 'en' } = req.body;
   if (!result) return res.status(400).json({ error: 'result required' });
   try {
@@ -4408,7 +4408,7 @@ app.post('/portfolio/:userId', async (req, res) => {
   }
 });
 
-app.delete('/portfolio/:userId', async (req, res) => {
+app.delete('/portfolio-rec/:userId', async (req, res) => {
   try {
     const { error } = await supabase
       .from('portfolio_recommendations')
