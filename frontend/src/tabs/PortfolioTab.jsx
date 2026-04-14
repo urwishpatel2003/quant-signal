@@ -155,10 +155,20 @@ function normalizeTransactions(rows, brokerKey) {
     const rawType = getField(row, profile.typeField).trim();
     const type    = profile.typeMap[rawType] || profile.typeMap[rawType?.toLowerCase()] || 'OTHER';
 
-    // Symbol: use Instrument field (ticker only), NOT Description (which has long names)
+    // Symbol: use Instrument field (ticker only)
     let symbol = getField(row, profile.symbolField).trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '') || null;
     // If symbol looks like a description (>6 chars, no dot), clear it
     if (symbol && symbol.length > 6 && !symbol.includes('.')) symbol = null;
+    // Robinhood: if Instrument is blank but Trans Code is Buy/Sell, try extracting from Description
+    if (!symbol && (rawType === 'Buy' || rawType === 'Sell' || rawType === 'BTO' || rawType === 'STC')) {
+      const desc = getField(row, ['Description', 'description']).trim().toUpperCase();
+      // Description format: "Bought 10 AAPL at $185.00" or just "AAPL"
+      const tickerMatch = desc.match(/([A-Z]{1,5})/g);
+      if (tickerMatch) {
+        // Take the shortest match that looks like a ticker (1-5 caps)
+        symbol = tickerMatch.find(t => t.length <= 5 && t.length >= 1) || null;
+      }
+    }
 
     const dateRaw = getField(row, profile.dateField);
     const date    = parseDateSafe(dateRaw);
@@ -177,16 +187,17 @@ function normalizeTransactions(rows, brokerKey) {
       ? (getField(row, profile.descField).trim() || rawType)
       : rawType;
 
-    // Skip rows with no useful data
-    if (!symbol && type === 'OTHER' && !amount) continue;
+    // Skip completely empty rows
+    if (!symbol && !amount && !quantity) continue;
 
     txs.push({ date, type, symbol, quantity, price, amount, description, raw: JSON.stringify(row) });
   }
-  // Keep: trades with symbol, dividends, transfers with amount
+  // Keep: anything with a symbol, or cash movements with an amount
+  // Send generously — server-side rebuildPositions handles the logic
   return txs.filter(t => t.date && (
-    (t.symbol && (t.type === 'BUY' || t.type === 'SELL' || t.type === 'DIV' || t.type === 'SPLIT')) ||
-    (t.type === 'TRANSFER' && t.amount) ||
-    (t.type === 'DIV' && t.amount)
+    t.symbol ||                              // has a ticker
+    (t.amount && t.type === 'TRANSFER') ||   // cash deposit/withdrawal
+    (t.amount && t.type === 'DIV')           // dividend with no symbol
   ));
 }
 
@@ -394,7 +405,7 @@ export default function PortfolioTab({ macro }) {
     console.log('[portfolio] loading for user:', user.id);
     setLoading(true);
     try {
-      const res  = await fetch(`${BASE}/portfolio/${user.id}`);
+      const res  = await fetch(`${BASE}/tracker/${user.id}`);
       const data = await res.json();
       console.log('[portfolio] loaded:', data?.positions?.length, 'positions');
       if (!res.ok) throw new Error(data.error);
@@ -447,7 +458,7 @@ export default function PortfolioTab({ macro }) {
     }
     setImporting(true); setError('');
     try {
-      const res  = await fetch(`${BASE}/portfolio/${user.id}/import`, {
+      const res  = await fetch(`${BASE}/tracker/${user.id}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: preview.txs, broker: preview.broker }),
@@ -472,7 +483,7 @@ export default function PortfolioTab({ macro }) {
 
   const handleClear = async () => {
     if (!confirm('Clear all portfolio data?')) return;
-    await fetch(`${BASE}/portfolio/${user.id}`, { method: 'DELETE' });
+    await fetch(`${BASE}/tracker/${user.id}`, { method: 'DELETE' });
     setPortfolio(null); setAiCache({}); setShowUpload(false);
   };
 
@@ -596,6 +607,7 @@ export default function PortfolioTab({ macro }) {
                   </div>
                   <div style={{ fontSize:'var(--fs-xs)', color:'#b0c0dd' }}>
                     {preview.txs.length} transactions parsed · {[...new Set(preview.txs.map(t=>t.symbol).filter(Boolean))].length} tickers
+                  {' · '}{preview.txs.filter(t=>t.type==='BUY').length} buys · {preview.txs.filter(t=>t.type==='SELL').length} sells
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
