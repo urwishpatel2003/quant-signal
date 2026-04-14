@@ -458,7 +458,7 @@ export default function PortfolioTab({ macro }) {
     }
     setImporting(true); setError('');
     try {
-      const res  = await fetch(`${BASE}/tracker/${user.id}/import`, {
+      const res  = await fetch(`${BASE}/portfolio/${user.id}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: preview.txs, broker: preview.broker }),
