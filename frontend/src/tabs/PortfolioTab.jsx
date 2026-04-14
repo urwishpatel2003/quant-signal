@@ -557,21 +557,26 @@ export default function PortfolioTab({ macro }) {
       if (tickers.length) {
         try {
           const r = await fetch(`${BASE}/portfolio/quotes?symbols=${tickers.join(',')}`);
-          if (r.ok) {
-            const raw = await r.json();
-            // Ensure prices is always a plain object, never null/array
-            prices = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
-          }
-        } catch {}
+          const raw = await r.json();
+          console.log('[portfolio] price fetch status:', r.status, 'raw:', JSON.stringify(raw).slice(0, 200));
+          prices = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+        } catch (e) {
+          console.warn('[portfolio] price fetch failed:', e.message);
+        }
       }
+      console.log('[portfolio] prices:', prices);
+      console.log('[portfolio] savedPositions:', savedPositions.map(p => ({ticker: p.ticker, shares: p.shares, avg_cost: p.avg_cost})));
 
       const positions = savedPositions.map(p => {
         const quote     = prices[p.ticker];
-        const livePrice = (typeof quote === 'number' ? quote : quote?.last || quote?.price || 0) || p.avg_cost || 0;
+        const livePrice = typeof quote === 'number' && quote > 0
+          ? quote
+          : (quote?.last || quote?.price || p.avg_cost || 0);
         const mktValue  = livePrice * p.shares;
         const costBasis = p.avg_cost * p.shares;
         const unrealPnl = mktValue - costBasis;
         const unrealPct = costBasis > 0 ? (unrealPnl / costBasis) * 100 : 0;
+        console.log(`[portfolio] ${p.ticker}: quote=${quote} livePrice=${livePrice} shares=${p.shares} avg_cost=${p.avg_cost} mktValue=${mktValue} costBasis=${costBasis} unrealPnl=${unrealPnl}`);
         return { ...p, livePrice, mktValue, costBasis, unrealPnl, unrealPct };
       });
 
