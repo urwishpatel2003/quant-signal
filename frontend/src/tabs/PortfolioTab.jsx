@@ -557,12 +557,17 @@ export default function PortfolioTab({ macro }) {
       if (tickers.length) {
         try {
           const r = await fetch(`${BASE}/portfolio/quotes?symbols=${tickers.join(',')}`);
-          if (r.ok) prices = await r.json();
+          if (r.ok) {
+            const raw = await r.json();
+            // Ensure prices is always a plain object, never null/array
+            prices = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+          }
         } catch {}
       }
 
       const positions = savedPositions.map(p => {
-        const livePrice = prices[p.ticker] || p.avg_cost || 0;
+        const quote     = prices[p.ticker];
+        const livePrice = (typeof quote === 'number' ? quote : quote?.last || quote?.price || 0) || p.avg_cost || 0;
         const mktValue  = livePrice * p.shares;
         const costBasis = p.avg_cost * p.shares;
         const unrealPnl = mktValue - costBasis;
