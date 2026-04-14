@@ -6855,7 +6855,6 @@ app.get('/portfolio/quotes', async (req, res) => {
     const symbols = (req.query.symbols || '').split(',').map(s => s.trim()).filter(Boolean);
     if (!symbols.length) return res.json({});
 
-    // Chunk into batches of 30 (Tradier limit)
     const chunks = [];
     for (let i = 0; i < symbols.length; i += 30) chunks.push(symbols.slice(i, i + 30));
 
@@ -6863,16 +6862,40 @@ app.get('/portfolio/quotes', async (req, res) => {
     await Promise.allSettled(chunks.map(async chunk => {
       try {
         const data = await tradierGet(`/v1/markets/quotes?symbols=${chunk.join(',')}&greeks=false`);
-        const quotes = Array.isArray(data?.quotes?.quote) ? data.quotes.quote
-          : data?.quotes?.quote ? [data.quotes.quote] : [];
+        console.log('[portfolio/quotes] raw:', JSON.stringify(data?.quotes).slice(0, 200));
+        const raw    = data?.quotes?.quote;
+        const quotes = Array.isArray(raw) ? raw : raw ? [raw] : [];
         quotes.forEach(q => {
-          if (q.symbol) priceMap[q.symbol] = q.last || q.prevclose || 0;
+          if (!q.symbol) return;
+          // Use last, fallback to prevclose, fallback to ask/bid midpoint
+          const price = q.last || q.prevclose || q.close ||
+            (q.ask && q.bid ? (q.ask + q.bid) / 2 : null) || q.ask || q.bid || 0;
+          if (price > 0) priceMap[q.symbol] = parseFloat(price.toFixed(4));
+          console.log(`[portfolio/quotes] ${q.symbol}: last=${q.last} prev=${q.prevclose} → ${price}`);
         });
-      } catch {}
+      } catch (e) {
+        console.error('[portfolio/quotes] chunk error:', e.message);
+        // Fallback: try Yahoo Finance for each symbol individually
+        for (const sym of chunk) {
+          try {
+            for (const host of YAHOO_HOSTS) {
+              const d = await httpsGet(host,
+                `/v8/finance/chart/${sym}?interval=1d&range=5d&includePrePost=false`,
+                YAHOO_HEADERS, 5000
+              );
+              const meta = d?.chart?.result?.[0]?.meta;
+              const price = meta?.regularMarketPrice || meta?.previousClose || meta?.chartPreviousClose;
+              if (price > 0) { priceMap[sym] = parseFloat(price.toFixed(4)); break; }
+            }
+          } catch {}
+        }
+      }
     }));
 
+    console.log('[portfolio/quotes] final priceMap:', priceMap);
     res.json(priceMap);
   } catch (e) {
+    console.error('[portfolio/quotes] error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
