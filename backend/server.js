@@ -6965,38 +6965,18 @@ app.listen(process.env.PORT || 3001, '0.0.0.0', () => {
 app.post('/tracker/:userId/import', async (req, res) => {
   try {
     const { userId } = req.params;
-    const { transactions, broker = 'unknown' } = req.body;
-    if (!transactions?.length) return res.status(400).json({ error: 'No transactions provided' });
+    const { encrypted } = req.body;
+    if (!encrypted) return res.status(400).json({ error: 'encrypted payload required' });
 
-    // Upsert transactions (dedupe by userId+date+type+symbol+quantity)
-    const rows = transactions.map(t => ({
-      user_id:     userId,
-      broker,
-      date:        t.date,
-      type:        t.type,        // BUY | SELL | DIV | SPLIT | TRANSFER
-      symbol:      t.symbol || null,
-      quantity:    t.quantity || null,
-      price:       t.price || null,
-      amount:      t.amount || null,
-      description: t.description || null,
-      raw:         t.raw || null,
-    }));
-
-    // Delete existing for this broker+user then re-insert (clean reimport)
-    await supabase.from('portfolio_transactions')
-      .delete()
-      .eq('user_id', userId)
-      .eq('broker', broker);
-
-    const { error } = await supabase.from('portfolio_transactions').insert(rows);
+    // Store ciphertext only — server never sees plaintext holdings
+    const { error } = await supabase.from('portfolio_encrypted')
+      .upsert({ user_id: userId, encrypted, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
     if (error) throw new Error(error.message);
 
-    // Rebuild positions from transactions
-    await rebuildPositions(userId, broker);
-
-    res.json({ ok: true, imported: rows.length });
+    console.log(`[tracker] stored encrypted portfolio for ${userId} (${encrypted.length} bytes)`);
+    res.json({ ok: true });
   } catch (e) {
-    console.error('[portfolio/import]', e.message);
+    console.error('[tracker/import]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -7005,54 +6985,18 @@ app.post('/tracker/:userId/import', async (req, res) => {
 app.get('/tracker/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const [posRes, txRes] = await Promise.all([
-      supabase.from('portfolio_positions').select('*').eq('user_id', userId).order('ticker'),
-      supabase.from('portfolio_transactions').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(200),
-    ]);
-    if (posRes.error) throw new Error(posRes.error.message);
-    if (txRes.error)  throw new Error(txRes.error.message);
-
-    // Fetch live prices for all positions
-    const tickers = (posRes.data || []).map(p => p.ticker).filter(Boolean);
-    let prices = {};
-    if (tickers.length) {
-      try {
-        const chunks = [];
-        for (let i = 0; i < tickers.length; i += 30) chunks.push(tickers.slice(i, i + 30));
-        await Promise.allSettled(chunks.map(async chunk => {
-          const data = await tradierGet(`/v1/markets/quotes?symbols=${chunk.join(',')}&greeks=false`);
-          const quotes = Array.isArray(data?.quotes?.quote) ? data.quotes.quote
-            : data?.quotes?.quote ? [data.quotes.quote] : [];
-          quotes.forEach(q => { if (q.symbol) prices[q.symbol] = { last: q.last, prevClose: q.prevclose, change: q.change, changePct: q.change_percentage }; });
-        }));
-      } catch {}
+    const { data, error } = await supabase
+      .from('portfolio_encrypted')
+      .select('encrypted, updated_at')
+      .eq('user_id', userId)
+      .single();
+    if (error && (error.code === 'PGRST116' || error.message?.includes('does not exist'))) {
+      return res.json({ encrypted: null });
     }
-
-    // Enrich positions with live price data
-    const positions = (posRes.data || []).map(p => {
-      const q = prices[p.ticker] || {};
-      const livePrice  = q.last || p.avg_cost || 0;
-      const mktValue   = livePrice * p.shares;
-      const costBasis  = p.avg_cost * p.shares;
-      const unrealPnl  = mktValue - costBasis;
-      const unrealPct  = costBasis > 0 ? (unrealPnl / costBasis) * 100 : 0;
-      const dayChange  = (q.change || 0) * p.shares;
-      return { ...p, livePrice, mktValue, costBasis, unrealPnl, unrealPct, dayChange, changePct: q.changePct };
-    });
-
-    const totalValue   = positions.reduce((s, p) => s + p.mktValue, 0);
-    const totalCost    = positions.reduce((s, p) => s + p.costBasis, 0);
-    const totalPnl     = totalValue - totalCost;
-    const totalPnlPct  = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
-    const dayChange    = positions.reduce((s, p) => s + (p.dayChange || 0), 0);
-
-    res.json({
-      positions,
-      transactions: txRes.data || [],
-      summary: { totalValue, totalCost, totalPnl, totalPnlPct, dayChange, positionCount: positions.length },
-    });
+    if (error) throw new Error(error.message);
+    res.json({ encrypted: data?.encrypted || null, updatedAt: data?.updated_at });
   } catch (e) {
-    console.error('[portfolio/get]', e.message);
+    console.error('[tracker/get]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -7061,10 +7005,8 @@ app.get('/tracker/:userId', async (req, res) => {
 app.delete('/tracker/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    await Promise.all([
-      supabase.from('portfolio_positions').delete().eq('user_id', userId),
-      supabase.from('portfolio_transactions').delete().eq('user_id', userId),
-    ]);
+    await supabase.from('portfolio_encrypted').delete().eq('user_id', userId);
+    console.log(`[tracker] deleted encrypted portfolio for ${userId}`);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

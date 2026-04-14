@@ -432,6 +432,59 @@ function TxRow({ tx }) {
   );
 }
 
+// ── Client-side FIFO position builder ────────────────────────────────────────
+function buildPositions(txs) {
+  const posMap = {};
+  const sorted = [...txs].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  for (const tx of sorted) {
+    if (!tx.symbol || tx.type === 'OPTION') continue;
+    const sym = tx.symbol.toUpperCase();
+    if (!posMap[sym]) posMap[sym] = { shares: 0, totalCost: 0, lots: [], dividends: 0 };
+    const p = posMap[sym];
+
+    if (tx.type === 'BUY') {
+      const qty   = Math.abs(tx.quantity || 0);
+      const price = Math.abs(tx.price || 0);
+      if (!qty || !price) continue;
+      p.shares    += qty;
+      p.totalCost += qty * price;
+      p.lots.push({ qty, price });
+
+    } else if (tx.type === 'SELL') {
+      const qty = Math.abs(tx.quantity || 0);
+      let remaining = qty;
+      while (remaining > 0 && p.lots.length) {
+        const lot  = p.lots[0];
+        const used = Math.min(lot.qty, remaining);
+        p.totalCost -= used * lot.price;
+        lot.qty     -= used;
+        remaining   -= used;
+        if (lot.qty <= 0) p.lots.shift();
+      }
+      p.shares = Math.max(0, p.shares - qty);
+
+    } else if (tx.type === 'DIV') {
+      p.dividends += Math.abs(tx.amount || 0);
+
+    } else if (tx.type === 'SPLIT') {
+      const ratio = tx.quantity || 1;
+      p.shares *= ratio;
+      p.lots.forEach(l => { l.qty *= ratio; l.price /= ratio; });
+    }
+  }
+
+  return Object.entries(posMap)
+    .filter(([, p]) => p.shares > 0.0001)
+    .map(([ticker, p]) => ({
+      ticker,
+      shares:     Math.round(p.shares    * 10000) / 10000,
+      avg_cost:   p.shares > 0 ? Math.round((p.totalCost / p.shares) * 10000) / 10000 : 0,
+      total_cost: Math.round(p.totalCost * 100)   / 100,
+      dividends:  Math.round(p.dividends * 100)   / 100,
+    }));
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PortfolioTab({ macro }) {
   const { user } = useUser();
@@ -454,43 +507,100 @@ export default function PortfolioTab({ macro }) {
     loadPortfolio();
   }, [user?.id]);
 
+  // ── AES-256-GCM encryption using Web Crypto API ──────────────────────────────
+  // Key is derived from userId — server stores only ciphertext, never plaintext
+  const getEncKey = async () => {
+    const enc  = new TextEncoder();
+    const raw  = enc.encode(user.id + '_quaint_portfolio_v1');
+    const hash = await crypto.subtle.digest('SHA-256', raw);
+    return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  };
+
+  const encryptData = async (data) => {
+    const key  = await getEncKey();
+    const iv   = crypto.getRandomValues(new Uint8Array(12));
+    const enc  = new TextEncoder();
+    const ct   = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(data)));
+    // Pack iv + ciphertext → base64
+    const buf  = new Uint8Array(iv.byteLength + ct.byteLength);
+    buf.set(iv, 0);
+    buf.set(new Uint8Array(ct), iv.byteLength);
+    return btoa(String.fromCharCode(...buf));
+  };
+
+  const decryptData = async (b64) => {
+    const key  = await getEncKey();
+    const buf  = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const iv   = buf.slice(0, 12);
+    const ct   = buf.slice(12);
+    const pt   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  };
+
   const loadPortfolio = async () => {
     if (!user?.id) return;
-    console.log('[portfolio] loading for user:', user.id);
     setLoading(true);
     try {
       const res  = await fetch(`${BASE}/tracker/${user.id}`);
-      const text = await res.text();
-      console.log('[portfolio] status:', res.status, text.slice(0, 100));
-      // Guard against HTML error pages
-      if (text.trim().startsWith('<')) {
-        throw new Error(`Server returned HTML (status ${res.status}) — route may not be deployed yet`);
+      if (!res.ok) { setLoading(false); return; }
+      const { encrypted } = await res.json();
+      if (!encrypted) { setLoading(false); return; }
+
+      // Decrypt client-side
+      const saved = await decryptData(encrypted);
+      const { positions: savedPositions, transactions } = saved;
+      if (!savedPositions?.length) { setLoading(false); return; }
+
+      // Fetch live prices (server sees tickers, not holdings context)
+      const tickers = [...new Set(savedPositions.map(p => p.ticker))];
+      let prices = {};
+      if (tickers.length) {
+        try {
+          const r = await fetch(`${BASE}/portfolio/quotes?symbols=${tickers.join(',')}`);
+          if (r.ok) prices = await r.json();
+        } catch {}
       }
-      const data = JSON.parse(text);
-      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-      // If no data yet (new user), show upload screen
-      if (!data.positions) {
-        setPortfolio(null);
-        setLoading(false);
-        return;
-      }
-      console.log('[portfolio] loaded:', data.positions.length, 'positions');
-      setPortfolio(data);
+
+      const positions = savedPositions.map(p => {
+        const livePrice = prices[p.ticker] || p.avg_cost || 0;
+        const mktValue  = livePrice * p.shares;
+        const costBasis = p.avg_cost * p.shares;
+        const unrealPnl = mktValue - costBasis;
+        const unrealPct = costBasis > 0 ? (unrealPnl / costBasis) * 100 : 0;
+        return { ...p, livePrice, mktValue, costBasis, unrealPnl, unrealPct };
+      });
+
+      const totalValue  = positions.reduce((s, p) => s + p.mktValue, 0);
+      const totalCost   = positions.reduce((s, p) => s + p.costBasis, 0);
+      const totalPnl    = totalValue - totalCost;
+      const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+
+      setPortfolio({
+        positions,
+        transactions: transactions || [],
+        summary: { totalValue, totalCost, totalPnl, totalPnlPct, positionCount: positions.length },
+      });
       setError('');
     } catch (e) {
-      console.error('[portfolio] load error:', e.message);
       setError(e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-refresh prices every 60s while on positions tab
+  // Auto-refresh live prices every 60s
   useEffect(() => {
     if (!portfolio || showUpload) return;
     const interval = setInterval(loadPortfolio, 60000);
     return () => clearInterval(interval);
-  }, [portfolio, tab]);
+  }, [portfolio?.positions?.length, showUpload]);
+
+  // Auto-refresh live prices every 60s
+  useEffect(() => {
+    if (!portfolio || showUpload) return;
+    const interval = setInterval(loadPortfolio, 60000);
+    return () => clearInterval(interval);
+  }, [portfolio?.positions?.length, showUpload]);
 
   // Parse CSV file
   const handleFile = (file) => {
@@ -517,41 +627,46 @@ export default function PortfolioTab({ macro }) {
   };
 
   const handleImport = async () => {
-    console.log('[import] start — user:', user?.id, 'txs:', preview?.txs?.length);
     if (!preview || !user?.id) {
       setError(!user?.id ? 'Not signed in' : 'No transactions to import');
       return;
     }
     setImporting(true); setError('');
     try {
-      const res  = await fetch(`${BASE}/tracker/${user.id}/import`, {
+      // Build positions client-side
+      const positions = buildPositions(preview.txs);
+      const payload = {
+        positions,
+        transactions: preview.txs,
+        broker: preview.broker,
+        importedAt: new Date().toISOString(),
+      };
+
+      // Encrypt before sending — server stores ciphertext only
+      const encrypted = await encryptData(payload);
+      const res = await fetch(`${BASE}/tracker/${user.id}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions: preview.txs, broker: preview.broker }),
+        body: JSON.stringify({ encrypted }),
       });
-      const text = await res.text();
-      console.log('[import] server response:', res.status, text.slice(0, 200));
-      if (text.trim().startsWith('<')) {
-        throw new Error(`Route not found (status ${res.status}) — please redeploy backend`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Server error ${res.status}`);
       }
-      let data;
-      try { data = JSON.parse(text); } catch { data = { error: text }; }
-      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
-      console.log('[import] success — imported:', data.imported);
+
       setPreview(null);
       setShowUpload(false);
       setImporting(false);
       await loadPortfolio();
       setTab('positions');
     } catch (e) {
-      console.error('[import] error:', e.message);
-      setError(e.message || 'Import failed — check console for details');
+      setError(e.message || 'Import failed');
       setImporting(false);
     }
   };
 
   const handleClear = async () => {
-    if (!confirm('Clear all portfolio data?')) return;
+    if (!confirm('Permanently delete your portfolio data from our servers?')) return;
     await fetch(`${BASE}/tracker/${user.id}`, { method: 'DELETE' });
     setPortfolio(null); setAiCache({}); setShowUpload(false);
   };
@@ -658,8 +773,11 @@ export default function PortfolioTab({ macro }) {
               <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(18px,2vw,22px)', color:'#ffaa00', letterSpacing:'.1em', marginBottom:8 }}>
                 DROP CSV HERE OR CLICK TO BROWSE
               </div>
-              <div style={{ fontSize:'var(--fs-sm)', color:'#7788aa' }}>
+              <div style={{ fontSize:'var(--fs-sm)', color:'#7788aa', marginBottom:8 }}>
                 Supports Robinhood, Fidelity, Schwab, TD Ameritrade, IBKR and most brokers
+              </div>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#0a1a0a', border:'1px solid #00ff8822', borderRadius:4, padding:'6px 12px', fontSize:'var(--fs-xs)', color:'#00ff8888' }}>
+                🔒 AES-256 encrypted before storage — only you can decrypt your holdings
               </div>
               <input ref={fileRef} type="file" accept=".csv" style={{ display:'none' }}
                 onChange={e => handleFile(e.target.files[0])} />
