@@ -5674,7 +5674,7 @@ app.get('/signal-history/:userId', async (req, res) => {
         total:           resolved.length,
         wins, losses,
         winRate:         resolved.length ? Math.round(wins/resolved.length*100) : null,
-        avgOutcomePct:   resolved.length ? parseFloat((resolved.reduce((s,x)=>s+(x.outcome_pct||0),0)/resolved.length).toFixed(1)) : null,
+        avgOutcomePct: stockResolved.length ? parseFloat((stockResolved.reduce((s,x)=>s+(x.outcome_pct||0),0)/stockResolved.length).toFixed(1)) : null,
         bySignal,
         highConfWinRate: highConf.length ? Math.round(highConfWins/highConf.length*100) : null,
         highConfTotal:   highConf.length,
