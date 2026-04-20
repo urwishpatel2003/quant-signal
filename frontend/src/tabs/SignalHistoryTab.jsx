@@ -31,12 +31,12 @@ function StatBox({ label, value, sub, color = '#e8e8f0', border = '#2a2a40' }) {
 
 export default function SignalHistoryTab({ market = 'US' }) {
   const { user, isLoaded } = useUser();
-  const [data,       setData]       = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [checking,   setChecking]   = useState(false);
-  const [resolving,  setResolving]  = useState({});
-  const [filter,     setFilter]     = useState('ALL'); // ALL | BUY | SELL | HOLD
-  const [error,      setError]      = useState('');
+  const [data,      setData]      = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [checking,  setChecking]  = useState(false);
+  const [resolving, setResolving] = useState({});
+  const [filter,    setFilter]    = useState('ALL');
+  const [error,     setError]     = useState('');
 
   const load = async () => {
     if (!user?.id) { setLoading(false); return; }
@@ -71,14 +71,12 @@ export default function SignalHistoryTab({ market = 'US' }) {
     setResolving(r => { const n = { ...r }; delete n[signalId]; return n; });
   };
 
-  // Reload when tab becomes visible + auto-refresh every 30s
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
-    // Auto-check outcomes on load (resolves expired options immediately)
     load().then(() => checkOutcomes());
     const onFocus = () => load();
     window.addEventListener('focus', onFocus);
-    const interval = setInterval(load, 30000); // refresh every 30s
+    const interval = setInterval(load, 30000);
     return () => {
       window.removeEventListener('focus', onFocus);
       clearInterval(interval);
@@ -94,8 +92,23 @@ export default function SignalHistoryTab({ market = 'US' }) {
 
   const stats   = data?.stats || {};
   const signals = (data?.signals || []).filter(s => filter === 'ALL' || s.signal === filter);
-
   const sigColor = (s) => s === 'BUY' ? '#00ff88' : s === 'SELL' ? '#ff4444' : '#ffaa00';
+
+  // ── Stock-only stats (exclude options) ──────────────────────────────────────
+  const optTotal   = (stats.options?.total   || 0) + (stats.options?.pending || 0);
+  const optWins    =  stats.options?.wins    || 0;
+  const optLosses  =  stats.options?.losses  || 0;
+
+  const stockTotal   = (stats.total   || 0) + (stats.pending || 0) - optTotal;
+  const stockPending = (stats.pending || 0) - (stats.options?.pending || 0);
+  const stockWins    = (stats.wins    || 0) - optWins;
+  const stockLosses  = (stats.losses  || 0) - optLosses;
+  const stockResolved = stockWins + stockLosses + (stats.scratches || 0);
+  const stockWinRate  = stockResolved > 0
+    ? Math.round(stockWins / stockResolved * 100)
+    : stats.winRate ?? null;
+
+  const hasStockStats = stockTotal > 0 || stockPending > 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 40 }}>
@@ -125,18 +138,51 @@ export default function SignalHistoryTab({ market = 'US' }) {
         </div>
       )}
 
-      {/* Stats grid — show even when pending */}
-      {(stats.total > 0 || stats.pending > 0) ? (
+      {/* ── Stock signal stats (options excluded) ── */}
+      {hasStockStats ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
-          <StatBox label="TOTAL SCANS"     value={stats.total + (stats.pending||0)} sub={`${stats.pending||0} pending`} color="#e8e8f0" />
-          <StatBox label="WIN RATE"        value={stats.winRate != null ? `${stats.winRate}%` : '—'} sub={`${stats.wins||0}W · ${stats.losses||0}L`} color={stats.winRate >= 50 ? '#00ff88' : '#ff4444'} border={stats.winRate >= 50 ? '#00ff8833' : '#ff444433'} />
-          <StatBox label="AVG RETURN"      value={fmtPct(stats.avgOutcomePct)} color={(stats.avgOutcomePct||0) >= 0 ? '#00ff88' : '#ff4444'} />
-          <StatBox label="70%+ CONF RATE"  value={stats.highConfWinRate != null ? `${stats.highConfWinRate}%` : '—'} sub={`${stats.highConfTotal} trades`} color={stats.highConfWinRate >= 60 ? '#00ff88' : '#ffaa00'} border="#ffaa0033" />
+          <StatBox
+            label="STOCK SCANS"
+            value={stockTotal}
+            sub={`${stockPending} pending`}
+            color="#e8e8f0"
+          />
+          <StatBox
+            label="WIN RATE"
+            value={stockWinRate != null ? `${stockWinRate}%` : '—'}
+            sub={`${stockWins}W · ${stockLosses}L`}
+            color={stockWinRate >= 50 ? '#00ff88' : '#ff4444'}
+            border={stockWinRate >= 50 ? '#00ff8833' : '#ff444433'}
+          />
+          <StatBox
+            label="AVG RETURN"
+            value={fmtPct(stats.avgOutcomePct)}
+            color={(stats.avgOutcomePct || 0) >= 0 ? '#00ff88' : '#ff4444'}
+          />
+          <StatBox
+            label="70%+ CONF RATE"
+            value={stats.highConfWinRate != null ? `${stats.highConfWinRate}%` : '—'}
+            sub={`${stats.highConfTotal || 0} trades`}
+            color={stats.highConfWinRate >= 60 ? '#00ff88' : '#ffaa00'}
+            border="#ffaa0033"
+          />
           {stats.bySignal?.BUY?.total > 0 && (
-            <StatBox label="BUY ACCURACY"  value={`${Math.round(stats.bySignal.BUY.wins / stats.bySignal.BUY.total * 100)}%`} sub={`${stats.bySignal.BUY.total} signals`} color="#00ff88" border="#00ff8833" />
+            <StatBox
+              label="BUY ACCURACY"
+              value={`${Math.round(stats.bySignal.BUY.wins / stats.bySignal.BUY.total * 100)}%`}
+              sub={`${stats.bySignal.BUY.total} signals`}
+              color="#00ff88"
+              border="#00ff8833"
+            />
           )}
           {stats.bySignal?.SELL?.total > 0 && (
-            <StatBox label="SELL ACCURACY" value={`${Math.round(stats.bySignal.SELL.wins / stats.bySignal.SELL.total * 100)}%`} sub={`${stats.bySignal.SELL.total} signals`} color="#ff4444" border="#ff444433" />
+            <StatBox
+              label="SELL ACCURACY"
+              value={`${Math.round(stats.bySignal.SELL.wins / stats.bySignal.SELL.total * 100)}%`}
+              sub={`${stats.bySignal.SELL.total} signals`}
+              color="#ff4444"
+              border="#ff444433"
+            />
           )}
         </div>
       ) : (
@@ -145,19 +191,45 @@ export default function SignalHistoryTab({ market = 'US' }) {
         </div>
       )}
 
-      {/* Options stats */}
+      {/* ── Options stats (separate section) ── */}
       {stats.options?.total > 0 && (
         <div style={{ background: '#0a0a14', border: '1px solid #2a2a3e', borderRadius: 8, padding: '14px 16px' }}>
           <div style={{ fontSize: 'var(--fs-sm)', color: '#ffaa0088', letterSpacing: '.15em', marginBottom: 12 }}>⚡ OPTIONS SIGNAL ACCURACY</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: 10 }}>
-            <StatBox label="OPTIONS TOTAL"  value={stats.options.total + (stats.options.pending||0)} sub={`${stats.options.pending||0} pending`} color="#ffaa00" />
-            <StatBox label="WIN RATE"       value={stats.options.winRate != null ? `${stats.options.winRate}%` : '—'} sub={`${stats.options.wins||0}W · ${stats.options.total - stats.options.wins||0}L`} color={stats.options.winRate >= 50 ? '#00ff88' : '#ff4444'} />
-            <StatBox label="AVG P&L"        value={stats.options.avgPnl != null ? `${stats.options.avgPnl > 0 ? '+' : ''}${stats.options.avgPnl}%` : '—'} color={(stats.options.avgPnl||0) >= 0 ? '#00ff88' : '#ff4444'} />
+            <StatBox
+              label="OPTIONS TOTAL"
+              value={stats.options.total + (stats.options.pending || 0)}
+              sub={`${stats.options.pending || 0} pending`}
+              color="#ffaa00"
+            />
+            <StatBox
+              label="WIN RATE"
+              value={stats.options.winRate != null ? `${stats.options.winRate}%` : '—'}
+              sub={`${stats.options.wins || 0}W · ${(stats.options.total - stats.options.wins) || 0}L`}
+              color={stats.options.winRate >= 50 ? '#00ff88' : '#ff4444'}
+            />
+            <StatBox
+              label="AVG P&L"
+              value={stats.options.avgPnl != null ? `${stats.options.avgPnl > 0 ? '+' : ''}${stats.options.avgPnl}%` : '—'}
+              color={(stats.options.avgPnl || 0) >= 0 ? '#00ff88' : '#ff4444'}
+            />
             {stats.options.byType?.CALL?.total > 0 && (
-              <StatBox label="CALL ACCURACY" value={`${Math.round(stats.options.byType.CALL.wins / stats.options.byType.CALL.total * 100)}%`} sub={`${stats.options.byType.CALL.total} calls · avg ${stats.options.byType.CALL.avgPnl > 0 ? '+' : ''}${stats.options.byType.CALL.avgPnl}%`} color="#00ff88" border="#00ff8833" />
+              <StatBox
+                label="CALL ACCURACY"
+                value={`${Math.round(stats.options.byType.CALL.wins / stats.options.byType.CALL.total * 100)}%`}
+                sub={`${stats.options.byType.CALL.total} calls · avg ${stats.options.byType.CALL.avgPnl > 0 ? '+' : ''}${stats.options.byType.CALL.avgPnl}%`}
+                color="#00ff88"
+                border="#00ff8833"
+              />
             )}
             {stats.options.byType?.PUT?.total > 0 && (
-              <StatBox label="PUT ACCURACY"  value={`${Math.round(stats.options.byType.PUT.wins / stats.options.byType.PUT.total * 100)}%`} sub={`${stats.options.byType.PUT.total} puts · avg ${stats.options.byType.PUT.avgPnl > 0 ? '+' : ''}${stats.options.byType.PUT.avgPnl}%`} color="#ff4444" border="#ff444433" />
+              <StatBox
+                label="PUT ACCURACY"
+                value={`${Math.round(stats.options.byType.PUT.wins / stats.options.byType.PUT.total * 100)}%`}
+                sub={`${stats.options.byType.PUT.total} puts · avg ${stats.options.byType.PUT.avgPnl > 0 ? '+' : ''}${stats.options.byType.PUT.avgPnl}%`}
+                color="#ff4444"
+                border="#ff444433"
+              />
             )}
           </div>
           <div style={{ fontSize: 'var(--fs-xs)', color: '#556677', lineHeight: 1.7 }}>
@@ -166,10 +238,10 @@ export default function SignalHistoryTab({ market = 'US' }) {
         </div>
       )}
 
-      {/* How it works */}
-      {stats.pending > 0 && (
+      {/* Pending notice */}
+      {stockPending > 0 && (
         <div style={{ background: '#ffaa0011', border: '1px solid #ffaa0022', borderRadius: 6, padding: '10px 14px', fontSize: 'var(--fs-lg)', color: '#c8d8f0' }}>
-          ⏳ <strong style={{ color: '#ffaa00' }}>{stats.pending} pending signals</strong> — outcomes are checked after the signal's timeframe elapses (5 days for short-term, 4 weeks for swing, etc). Click ↻ CHECK OUTCOMES to update.
+          ⏳ <strong style={{ color: '#ffaa00' }}>{stockPending} pending signals</strong> — outcomes are checked after the signal's timeframe elapses (5 days for short-term, 4 weeks for swing, etc). Click ↻ CHECK OUTCOMES to update.
         </div>
       )}
 
@@ -202,7 +274,7 @@ export default function SignalHistoryTab({ market = 'US' }) {
             borderRadius: 8, padding: '12px 14px',
             display: 'flex', alignItems: 'flex-start', gap: 10,
           }}>
-            {/* Left: ticker + signal — fixed width */}
+            {/* Left: ticker + signal */}
             <div style={{ flexShrink: 0, width: 88 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
                 <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 15, color: '#e8e8f0' }}>{s.ticker}</div>
@@ -215,7 +287,7 @@ export default function SignalHistoryTab({ market = 'US' }) {
               <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: sigColor(s.signal) }}>{s.signal} · {s.confidence}%</div>
             </div>
 
-            {/* Middle: prices + details — grows to fill */}
+            {/* Middle: prices + details */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 'var(--fs-sm)', color: '#c8d8f0' }}>
                 Entry: {market === 'INDIA' ? '₹' : '$'}{s.price_at_signal?.toFixed(2)}
@@ -231,13 +303,13 @@ export default function SignalHistoryTab({ market = 'US' }) {
               </div>
             </div>
 
-            {/* Right: outcome — fixed width */}
+            {/* Right: outcome */}
             <div style={{ flexShrink: 0, textAlign: 'right' }}>
               <OutcomeBadge result={s.outcome_result} />
               {s.outcome_result === 'PENDING' && s.signal_type === 'OPTION' && s.expiry && (() => {
-                const etNow     = new Date(Date.now() - 4 * 3600 * 1000);
-                const todayET   = etNow.toISOString().split('T')[0];
-                const etHour    = etNow.getUTCHours();
+                const etNow   = new Date(Date.now() - 4 * 3600 * 1000);
+                const todayET = etNow.toISOString().split('T')[0];
+                const etHour  = etNow.getUTCHours();
                 const isExpired = s.expiry < todayET || (s.expiry === todayET && etHour >= 16);
                 if (!isExpired) return null;
                 return (
