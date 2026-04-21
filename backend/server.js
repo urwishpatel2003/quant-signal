@@ -5838,7 +5838,7 @@ app.post('/signal-history/:userId/check-outcomes', async (req, res) => {
         // WIN = option profitable (intrinsic > premium paid)
         // LOSS = option expired worthless or below breakeven
         // SCRATCH = within 10% of breakeven
-        result = pct > 10 ? 'WIN' : pct < -10 ? 'LOSS' : 'SCRATCH';
+        result = pct > 30 ? 'WIN' : pct < -60 ? 'LOSS' : 'SCRATCH';
         console.log(`[options outcome] ${sig.ticker} ${sig.option_type} $${sig.strike}: spot=$${cur} intrinsic=$${intrinsic.toFixed(2)} entry=$${sig.entry_premium} pnl=${pct}% → ${result}`);
       } else {
         // ── Stock outcome: original logic ─────────────────────────────────────
@@ -5888,7 +5888,7 @@ app.post('/signal-history/:userId/resolve/:signalId', async (req, res) => {
         ? Math.max(0, cur - sig.strike)
         : Math.max(0, sig.strike - cur);
       pct    = parseFloat(((intrinsic - sig.entry_premium) / sig.entry_premium * 100).toFixed(2));
-      result = pct > 10 ? 'WIN' : pct < -10 ? 'LOSS' : 'SCRATCH';
+       result = pct > 30 ? 'WIN' : pct < -60 ? 'LOSS' : 'SCRATCH';
     } else {
       pct = parseFloat(((cur - sig.price_at_signal) / sig.price_at_signal * 100).toFixed(2));
       if (sig.signal==='BUY')  result = pct>2?'WIN':pct<-2?'LOSS':'SCRATCH';
@@ -6807,12 +6807,12 @@ async function runSimAutoClose() {
             : Math.max(0, pos.strike - (stockPrice || 0));
           exitReason = 'EXPIRED'; exitPrice = intrinsic;
         }
-        // 2. 50% premium stop (hard stop for options)
-        else if (curPremium && pos.premium && curPremium <= pos.premium * 0.5) {
+        // 2. 30% premium stop (hard stop for options)
+        else if (curPremium && pos.premium && curPremium <= pos.premium * 0.7) {
           exitReason = 'STOP'; exitPrice = curPremium;
         }
-        // 3. 2x premium target
-        else if (curPremium && pos.premium && curPremium >= pos.premium * 2.0) {
+        // 3. 60% premium target
+        else if (curPremium && pos.premium && curPremium >= pos.premium * 1.6) {
           exitReason = 'TARGET'; exitPrice = curPremium;
         }
       } else {
