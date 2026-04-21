@@ -86,33 +86,51 @@ export default function SignalHistoryTab({ market = 'US' }) {
   };
 
   // Fetch live prices for pending stock signals
-  const fetchLivePrices = async (signals) => {
-    const pending = (signals || []).filter(s =>
-      s.outcome_result === 'PENDING' &&
-      (!s.signal_type || s.signal_type === 'STOCK') &&
-      s.ticker
-    );
-    if (!pending.length) return;
+ const fetchLivePrices = async (signals) => {
+  const pending = (signals || []).filter(s =>
+    s.outcome_result === 'PENDING' &&
+    (!s.signal_type || s.signal_type === 'STOCK') &&
+    s.ticker
+  );
+  if (!pending.length) return;
 
-    const tickers = [...new Set(pending.map(s => s.ticker))];
-    try {
-      if (market === 'INDIA') {
-        const results = await Promise.allSettled(
-          tickers.map(t => fetch(`${BASE}/india/quote/${t}`).then(r => r.json()))
-        );
-        const prices = {};
-        results.forEach((r, i) => {
-          if (r.status === 'fulfilled' && r.value?.price) prices[tickers[i]] = r.value.price;
-        });
-        setLivePrices(prices);
-      } else {
-        const res  = await fetch(`${BASE}/portfolio/quotes?symbols=${tickers.join(',')}`);
-        const data = await res.json();
-        setLivePrices(data || {});
-      }
-    } catch {}
-  };
-
+  const tickers = [...new Set(pending.map(s => s.ticker))];
+  try {
+    if (market === 'INDIA') {
+      const results = await Promise.allSettled(
+        tickers.map(t => fetch(`${BASE}/india/quote/${t}`).then(r => r.json()))
+      );
+      const prices = {};
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value?.price) prices[tickers[i]] = r.value.price;
+      });
+      setLivePrices(prices);
+    } else {
+      // Fetch each ticker individually — handles closed market via prevclose fallback
+      const results = await Promise.allSettled(
+        tickers.map(t =>
+          fetch(`${BASE}/tradier/quote/${t}`)
+            .then(r => r.json())
+            .then(d => {
+              const q = d?.quotes?.quote;
+              // Use last, fallback to prevclose when market closed
+              const price = q?.last || q?.prevclose || q?.close || null;
+              return { ticker: t, price };
+            })
+        )
+      );
+      const prices = {};
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value?.price) {
+          prices[r.value.ticker] = r.value.price;
+        }
+      });
+      setLivePrices(prices);
+    }
+  } catch (e) {
+    console.warn('[livePrices] failed:', e.message);
+  }
+};
   useEffect(() => {
     if (!isLoaded || !user?.id) { setLoading(false); return; }
     load().then(() => checkOutcomes());
