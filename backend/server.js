@@ -2105,37 +2105,27 @@ app.post('/api/analyze/price', async (req, res) => {
     let enhancedCtx = '';
     if (enhanced && !isIndia) {
       const { shortInterest, insiderSummary, institutionalOwnership, earningsQuality, metrics } = enhanced;
-
       if (shortInterest?.shortPct != null)
         enhancedCtx += `SHORT INTEREST: ${shortInterest.shortPct}% float | Days to cover: ${shortInterest.daysToCover ?? 'N/A'} | ${shortInterest.shortPct > 20 ? '⚠ HIGH SHORT — squeeze risk' : shortInterest.shortPct < 5 ? 'Low short' : 'Moderate short'}\n`;
-
       if (insiderSummary)
         enhancedCtx += `INSIDER ACTIVITY (90d): ${insiderSummary.buys} buys, ${insiderSummary.sells} sells | Net shares: ${insiderSummary.netShares > 0 ? '+' : ''}${insiderSummary.netShares?.toLocaleString()} | ${insiderSummary.buys > insiderSummary.sells ? '🟢 Net buying' : insiderSummary.sells > insiderSummary.buys ? '🔴 Net selling' : 'Neutral'}\n`;
-
       if (institutionalOwnership?.totalPct)
         enhancedCtx += `INSTITUTIONAL OWNERSHIP: ${institutionalOwnership.totalPct}% | Top: ${institutionalOwnership.topHolders?.slice(0,3).map(h => `${h.name} ${h.pct}% ${h.change > 0 ? '↑' : h.change < 0 ? '↓' : '→'}`).join(', ')}\n`;
-
       if (metrics?.fcfYield != null)
         enhancedCtx += `FCF YIELD: ${metrics.fcfYield?.toFixed(1)}% | ROIC: ${metrics.roic?.toFixed(1) ?? 'N/A'}% | Rev Growth 5Y: ${metrics.revenueGrowth5Y?.toFixed(1) ?? 'N/A'}% | EPS Growth 5Y: ${metrics.epsGrowth5Y?.toFixed(1) ?? 'N/A'}%\n`;
-
       if (earningsQuality?.length) {
         const q = earningsQuality[0];
         const fcfVsEarnings = q.fcf != null && q.netIncome != null
-          ? q.fcf >= q.netIncome * 0.8 ? '✓ FCF confirms earnings' : '⚠ FCF below earnings — quality concern'
-          : '';
+          ? q.fcf >= q.netIncome * 0.8 ? '✓ FCF confirms earnings' : '⚠ FCF below earnings — quality concern' : '';
         enhancedCtx += `EARNINGS QUALITY: FCF Margin=${q.fcfMargin ?? 'N/A'}% | Accruals=${q.accrualsRatio ?? 'N/A'}% | ${fcfVsEarnings}\n`;
       }
     }
-
     if (enhanced && isIndia) {
       const { shareholding, delivery, fiiDii } = enhanced;
-
       if (shareholding)
         enhancedCtx += `SHAREHOLDING: Promoter=${shareholding.promoter ?? 'N/A'}% ${shareholding.promoterChange != null ? `(${shareholding.promoterChange > 0 ? '+' : ''}${shareholding.promoterChange}% QoQ)` : ''} | FII=${shareholding.fii ?? 'N/A'}% | DII=${shareholding.dii ?? 'N/A'}% | ${shareholding.promoter > 50 ? '✓ High promoter confidence' : shareholding.promoter < 25 ? '⚠ Low promoter holding' : ''}\n`;
-
       if (delivery?.deliveryPct)
         enhancedCtx += `DELIVERY %: ${delivery.deliveryPct}% ${parseFloat(delivery.deliveryPct) > 60 ? '✓ High conviction buying' : parseFloat(delivery.deliveryPct) < 25 ? '⚠ Mostly speculative trading' : 'Moderate'}\n`;
-
       if (fiiDii?.fiiNetBuy != null)
         enhancedCtx += `FII/DII TODAY: FII Net ${fiiDii.fiiNetBuy > 0 ? '🟢 +' : '🔴 '}₹${Math.abs(fiiDii.fiiNetBuy).toLocaleString()}Cr | DII Net ${fiiDii.diiNetBuy > 0 ? '🟢 +' : '🔴 '}₹${Math.abs(fiiDii.diiNetBuy ?? 0).toLocaleString()}Cr\n`;
     }
@@ -2155,13 +2145,10 @@ app.post('/api/analyze/price', async (req, res) => {
         if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`;
         return isMoney ? `$${n.toFixed(0)}` : n.toFixed(2);
       };
-      const latest = q[0];
-      const prev   = q[1];
+      const latest = q[0], prev = q[1];
       const yoy    = financials.yoy || {};
       const revenueGrowthQoQ = prev?.revenue && latest?.revenue
-        ? (((latest.revenue - prev.revenue) / Math.abs(prev.revenue)) * 100).toFixed(1)
-        : null;
-
+        ? (((latest.revenue - prev.revenue) / Math.abs(prev.revenue)) * 100).toFixed(1) : null;
       financialsCtx = `QUARTERLY FINANCIALS (latest ${latest?.period || ''}):
 Revenue: ${fmt(latest?.revenue)} ${revenueGrowthQoQ != null ? `(${revenueGrowthQoQ > 0 ? '+' : ''}${revenueGrowthQoQ}% QoQ)` : ''} | YoY: ${yoy.revenueYoY != null ? `${yoy.revenueYoY > 0 ? '+' : ''}${yoy.revenueYoY.toFixed(1)}%` : 'N/A'}
 Net Income: ${fmt(latest?.netIncome)} | YoY: ${yoy.netIncomeYoY != null ? `${yoy.netIncomeYoY > 0 ? '+' : ''}${yoy.netIncomeYoY.toFixed(1)}%` : 'N/A'}
@@ -2170,6 +2157,7 @@ EPS: ${latest?.epsDiluted != null ? fmt(latest.epsDiluted, false) : 'N/A'} | YoY
 ${financials.epsHistory?.length ? `EPS BEAT/MISS: ${financials.epsHistory.slice(0,3).map(e => e.beat != null ? (e.beat ? '✓BEAT' : '✗MISS') + (e.surprisePct != null ? `(${e.surprisePct > 0 ? '+' : ''}${e.surprisePct}%)` : '') : '?').join(' | ')}` : ''}
 Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     }
+
     const categorized = categorizeNews(news).slice(0, 8);
     const hasUpgrade   = categorized.some(n => n.startsWith('[UPGRADE]'));
     const hasDowngrade = categorized.some(n => n.startsWith('[DOWNGRADE]'));
@@ -2177,72 +2165,55 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
     const hasShort     = categorized.some(n => n.startsWith('[SHORT ATTACK]'));
     const hasEarnings  = categorized.some(n => n.startsWith('[EARNINGS]'));
 
-    // Timeframe-specific price history context
-    const priceSlice = {
-      short:    ohlcv?.close?.slice(-10),   // 10 days — intraday momentum
-      swing:    ohlcv?.close?.slice(-20),   // 20 days — trend context
-      position: ohlcv?.close?.slice(-30),   // 30 days — position context
-      longterm: ohlcv?.close?.slice(-52),   // 52 weeks — long term view
-    };
-    const closes = priceSlice[timeframeKey] || ohlcv?.close?.slice(-10);
-
-    // Intraday context for short term
-    const prevClose = ohlcv?.prev;
-    const dayChangePct = price && prevClose ? ((price - prevClose) / prevClose * 100).toFixed(2) : null;
-
     const tfMeta = {
       short: {
-        label:      'Short Term (1-5 days)',
-        focus:      'momentum, RSI, StochRSI, volume spikes, news catalysts, intraday price action.',
+        label: 'Short Term (1-5 days)',
+        focus: 'momentum, RSI, StochRSI, volume spikes, news catalysts, intraday price action.',
         indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | StochRSI K=${ta?.stochRSI?.k} [${ta?.stochRSI?.signal}] | SMA20=$${ta?.sma20} | ATR=${ta?.atr?.atr} (${ta?.atr?.volatility}) | Vol=${ta?.volumeSignal} (${ta?.volumeRatio}x avg)`,
-        targetRule: `Use 1x ATR ($${ta?.atr?.atr1Target}) as target, 1x ATR stop ($${ta?.atr?.atr1Stop}). Tight risk management.`,
+        targetRule: `Use 1x ATR ($${ta?.atr?.atr1Target}) as target, 1x ATR stop ($${ta?.atr?.atr1Stop}).`,
         bullFactorFocus: 'momentum signals, volume confirmation, news catalyst, intraday breakout',
         bearFactorFocus: 'overbought readings, volume dry-up, negative news, resistance levels',
       },
       swing: {
-        label:      'Swing Trade (1-4 weeks)',
-        focus:      'trend direction, SMA20/50 alignment, MACD cross, BB position, S/R levels, ATR-based stops.',
+        label: 'Swing Trade (1-4 weeks)',
+        focus: 'trend direction, SMA20/50 alignment, MACD cross, BB position, S/R levels, ATR-based stops.',
         indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} (${ta?.macd?.trend}) | SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | BB=${ta?.bb?.position} (${ta?.bb?.bWidth}% width) | ATR=${ta?.atr?.atr} | Trend=${ta?.trendSignal} | S=${ta?.sr?.nearestSupport} R=${ta?.sr?.nearestResistance}`,
-        targetRule: `Use nearest resistance ($${ta?.sr?.nearestResistance}) as target or 2x ATR ($${ta?.atr?.atr2Target}). Stop at 1x ATR ($${ta?.atr?.atr1Stop}) or nearest support ($${ta?.sr?.nearestSupport}).`,
+        targetRule: `Use nearest resistance ($${ta?.sr?.nearestResistance}) or 2x ATR ($${ta?.atr?.atr2Target}). Stop at 1x ATR ($${ta?.atr?.atr1Stop}) or support ($${ta?.sr?.nearestSupport}).`,
         bullFactorFocus: 'trend alignment, MACD cross, BB breakout, S/R setup, volume',
         bearFactorFocus: 'trend breakdown, MACD bearish, BB squeeze failure, resistance rejection',
       },
       position: {
-        label:      'Position Trade (1-3 months)',
-        focus:      'SMA50/200 trend, fundamentals quality, macro tailwinds, sector rotation, ATR-based sizing.',
+        label: 'Position Trade (1-3 months)',
+        focus: 'SMA50/200 trend, fundamentals quality, macro tailwinds, sector rotation.',
         indicators: `RSI=${ta?.rsi14} [${ta?.rsiSignal}] | MACD=${ta?.macd?.cross} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | ATR=${ta?.atr?.atr} (${ta?.atr?.volatility}) | vs SMA200=${ta?.priceVsSma200}%`,
-        targetRule: `Use analyst target ($${fundamentals?.targetMeanPrice}) or 2x ATR for target. Stop below SMA50 ($${ta?.sma50}) or 2x ATR ($${ta?.atr?.atr2Stop}).`,
+        targetRule: `Use analyst target ($${fundamentals?.targetMeanPrice}) or 2x ATR. Stop below SMA50 ($${ta?.sma50}) or 2x ATR ($${ta?.atr?.atr2Stop}).`,
         bullFactorFocus: 'fundamental strength, SMA50/200 golden cross, macro tailwind, sector leadership',
         bearFactorFocus: 'fundamental deterioration, death cross, macro headwind, sector weakness',
       },
       longterm: {
-        label:      'Long Term (6-12 months)',
-        focus:      'business quality, earnings growth, valuation, macro cycle, analyst consensus, SMA200 trend.',
+        label: 'Long Term (6-12 months)',
+        focus: 'business quality, earnings growth, valuation, macro cycle, analyst consensus.',
         indicators: `RSI=${ta?.rsi14} | SMA200=$${ta?.sma200} | Trend=${ta?.trendSignal} | vs SMA200=${ta?.priceVsSma200}% | Analyst Target=$${fundamentals?.targetMeanPrice} | Rec=${fundamentals?.recommendationKey?.toUpperCase()} | P/E=${fundamentals?.pe} | ROE=${fundamentals?.roe ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'}`,
-        targetRule: `Use analyst consensus target ($${fundamentals?.targetMeanPrice}) as primary target. Stop at SMA200 ($${ta?.sma200}) or major support ($${ta?.sr?.nearestSupport}).`,
-        bullFactorFocus: 'earnings growth, strong fundamentals, undervaluation, macro tailwind, analyst upgrades',
+        targetRule: `Use analyst consensus target ($${fundamentals?.targetMeanPrice}). Stop at SMA200 ($${ta?.sma200}) or major support ($${ta?.sr?.nearestSupport}).`,
+        bullFactorFocus: 'earnings growth, undervaluation, macro tailwind, analyst upgrades, business moat',
         bearFactorFocus: 'slowing growth, overvaluation, macro headwind, analyst downgrades, competitive threats',
       },
     };
     const tf = tfMeta[timeframeKey] || tfMeta.swing;
 
-    // ── Step 1: Compute signal deterministically ────────────────────────────────
-    // Load optimized weights + market regime + earnings date + sector return
+    // ── Step 1: Run quant model to get factor scores (context for Claude) ─────
     const [optimizedWeights, regime, earningsInfo, sectorReturn] = await Promise.all([
-      Promise.resolve(null), // backtest weights disabled — using defaultWeights
+      Promise.resolve(null),
       market === 'US' ? Promise.race([detectMarketRegime().catch(() => null), new Promise(r => setTimeout(() => r(null), 2000))]) : Promise.resolve(null),
-      // Earnings date from Finnhub (US only)
       (async () => {
         if (isIndia) return null;
         try {
           const today = new Date().toISOString().split('T')[0];
           const fut   = new Date(Date.now() + 30*864e5).toISOString().split('T')[0];
           const data  = await finnhubGet(`/calendar/earnings?from=${today}&to=${fut}&symbol=${ticker}`);
-          const next  = data?.earningsCalendar?.[0];
-          return next?.date || null;
+          return data?.earningsCalendar?.[0]?.date || null;
         } catch { return null; }
       })(),
-      // Sector relative strength — 20d stock return vs sector ETF
       (async () => {
         if (isIndia) return null;
         try {
@@ -2261,54 +2232,156 @@ Revenue trend: ${q.slice(0,4).map(r => fmt(r?.revenue)).join(' → ')}`;
 
     const enhancedWithSector = enhanced ? { ...enhanced, sectorReturn } : (sectorReturn != null ? { sectorReturn } : null);
 
+    // Run quant model — scores only, signal is advisory not binding
     const computed = computeSignal({
       ohlcv, ta, fundamentals, financials, enhanced: enhancedWithSector,
       options, market, timeframeKey, news,
       optimizedWeights, regime, bonds, earningsDate: earningsInfo,
     });
+    const { totalScore, scores, flags } = computed;
+    const quantSignal     = computed.signal;
+    const quantConfidence = computed.confidence;
+    const safeScore = isFinite(totalScore) ? totalScore : 0;
 
-    const { signal, confidence, totalScore, scores, flags, debug: sigDebug } = computed;
+    // Earnings flag check — force HOLD if imminent regardless of Claude
+    const forceHold = flags.some(f => f.forceHold);
+
     if (earningsInfo) console.log(`[signal] ${ticker} next earnings: ${earningsInfo}`);
     if (sectorReturn != null) console.log(`[signal] ${ticker} sector return: ${sectorReturn}%`);
-    const safeScore = isFinite(totalScore) ? totalScore : 0;
-    console.log(`[signal] ${ticker} ${signal} ${confidence}% score=${safeScore.toFixed(3)}`);
+    console.log(`[signal] ${ticker} quant=${quantSignal} ${quantConfidence}% score=${safeScore.toFixed(3)} → sending to Claude`);
 
-    // ── Step 2: Claude writes thesis/context ONLY ────────────────────────────────
+    // ── Step 2: Claude evaluates everything and gives final verdict ───────────
+    const prevClose    = ohlcv?.prev;
+    const dayChangePct = price && prevClose ? ((price - prevClose) / prevClose * 100).toFixed(2) : null;
+
+    const quantScoreSummary = `
+QUANT MODEL FACTOR SCORES (each -1 to +1, advisory context):
+  Momentum:          ${scores.momentum?.toFixed(3)}
+  Trend (SMA):       ${scores.trend?.toFixed(3)}
+  RSI:               ${scores.rsi?.toFixed(3)}
+  StochRSI:          ${scores.stochRsi?.toFixed(3)}
+  MACD:              ${scores.macd?.toFixed(3)}
+  Bollinger Bands:   ${scores.bollinger?.toFixed(3)}
+  Volume Accel:      ${scores.volumeAccel?.toFixed(3)}
+  Support/Resist:    ${scores.supportResistance?.toFixed(3)}
+  Revenue Growth:    ${scores.revenue?.toFixed(3)}
+  Earnings Quality:  ${scores.quality?.toFixed(3)}
+  Analyst Consensus: ${scores.analyst?.toFixed(3)}
+  Macro/Regime:      ${scores.macro?.toFixed(3)}
+  News Catalyst:     ${scores.catalyst?.toFixed(3)}
+  IV Rank:           ${scores.ivRank?.toFixed(3)}
+  Sector RelStr:     ${scores.sectorRelStrength?.toFixed(3)}
+QUANT COMPOSITE SCORE: ${safeScore.toFixed(3)} (range -1 to +1)
+QUANT SUGGESTED SIGNAL: ${quantSignal} at ${quantConfidence}% confidence
+FLAGS: ${flags.map(f => f.type + (f.note ? ` (${f.note})` : '')).join(', ') || 'none'}
+MARKET REGIME: ${regime?.regime || 'UNKNOWN'} (composite score: ${regime?.compositeScore?.toFixed(2) || 'N/A'})`;
+
     const claudeResult = await callClaudeAPI({
-      model: 'claude-sonnet-4-20250514', max_tokens: 1000, temperature: 0.2,
-      system: `You are a trading analyst writing the reasoning for a ${tf.label} ${signal} signal on ${ticker}.
-The signal and confidence have already been computed by a quantitative model. Your job is ONLY to:
-1. Write a concise 2-3 sentence thesis explaining WHY this ${signal} signal makes sense given the data
-2. List 3 specific bull factors (even for SELL/HOLD, identify what bulls would argue)
-3. List 3 specific bear factors
-4. Assess risk level, macro impact, and other qualitative fields
-DO NOT change the signal or confidence — they are fixed by the model.
-MARKET: ${isIndia ? 'NSE India — RBI policy, FII flows, INR/USD, domestic consumption' : 'US equities — Fed policy, USD strength, sector dynamics'}
-THESIS RULE: (1) what the company does and its sector position, (2) the key driver for ${tf.label}, (3) the technical/fundamental setup that supports ${signal}.
-Return ONLY JSON with these fields (signal="${signal}", confidence=${confidence} are pre-set, do not change them):`,
-      messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | ${tf.label} | SIGNAL: ${signal} ${confidence}%
-QUANT SCORES: momentum=${scores.momentum?.toFixed(2)} trend=${scores.trend?.toFixed(2)} rsi=${scores.rsi?.toFixed(2)} macd=${scores.macd?.toFixed(2)} revenue=${scores.revenue?.toFixed(2)} quality=${scores.quality?.toFixed(2)} analyst=${scores.analyst?.toFixed(2)} macro=${scores.macro?.toFixed(2)}
-TOTAL SCORE: ${safeScore.toFixed(3)} (range -1 to +1)
-KEY INDICATORS: ${tf.indicators}
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1200,
+      temperature: 0,
+      system: `You are a senior quantitative trading analyst at QuAInt Signal. Your job is to evaluate ALL available data and give the FINAL trading signal verdict for ${tf.label} trades.
+
+You have access to:
+1. A quantitative model's factor scores (systematic, data-driven)
+2. Technical indicators (RSI, MACD, BB, ATR, S/R, StochRSI, SMA)
+3. Fundamental data (earnings, revenue growth, analyst consensus, valuation)
+4. Macro context (regime, bonds, global markets, VIX)
+5. News and catalysts (upgrades, downgrades, insider activity, earnings)
+6. Enhanced data (short interest, institutional ownership, FII/DII flows)
+
+MARKET: ${isIndia ? 'NSE India — weight RBI policy, FII flows, promoter holding, delivery %' : 'US equities — weight Fed policy, sector rotation, institutional flow, options skew'}
+TIMEFRAME FOCUS: ${tf.focus}
+TARGET/STOP RULE: ${tf.targetRule}
+
+YOUR ROLE: The quant model scores factors mechanically. You synthesize everything holistically — including context the model cannot capture (news narrative, macro inflection points, earnings proximity, sector dynamics). You are NOT constrained by the quant signal. Use it as one important input.
+
+SIGNAL RULES:
+- BUY: clear asymmetric upside, multiple confirming factors, manageable risk
+- SELL: deteriorating fundamentals or technicals, downside risk outweighs upside
+- HOLD: conflicting signals, binary event risk, or insufficient conviction
+- Confidence 80-95%: very strong multi-factor conviction
+- Confidence 65-79%: solid signal with some uncertainty
+- Confidence 50-64%: weak signal, lean one way but acknowledge risk
+- NEVER output confidence below 50 or above 95
+- If EARNINGS_IMMINENT flag is set, signal MUST be HOLD regardless
+
+THESIS RULE: 2-3 sentences — (1) what the company does and sector position, (2) key driver for ${tf.label}, (3) what specifically tipped your verdict vs the quant model if you diverged.
+
+Return ONLY valid JSON, no markdown.`,
+      messages: [{ role: 'user', content: `TICKER: ${ticker} | PRICE: ${isIndia ? '₹' : '$'}${price?.toFixed(2)} | TIMEFRAME: ${tf.label}
+DATE: ${new Date().toLocaleDateString()} | MARKET: ${isMarketClosed() ? 'CLOSED' : 'OPEN'}
+${dayChangePct != null ? `TODAY: ${dayChangePct > 0 ? '+' : ''}${dayChangePct}% vs prev close $${prevClose?.toFixed(2)}` : ''}
+
+${quantScoreSummary}
+
+=== TECHNICALS ===
+${tf.indicators}
 ${taCtx}
-FUNDAMENTALS: P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'} | 52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'} | Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey ?? 'N/A'} | ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'}
+
+=== FUNDAMENTALS ===
+P/E=${fundamentals?.pe ?? 'N/A'} | EPS=${isIndia ? '₹' : '$'}${fundamentals?.eps != null ? fundamentals.eps.toFixed(2) : 'N/A'} | Beta=${fundamentals?.beta ?? 'N/A'}
+52W High=${fundamentals?.fiftyTwoWeekHigh ?? 'N/A'} | 52W Low=${fundamentals?.fiftyTwoWeekLow ?? 'N/A'}
+Analyst Target=${fundamentals?.targetMeanPrice ?? 'N/A'} | Rec=${fundamentals?.recommendationKey?.toUpperCase() ?? 'N/A'}
+ROE=${fundamentals?.roe != null ? (fundamentals.roe*100).toFixed(1)+'%' : 'N/A'} | GrossMargin=${fundamentals?.grossMargins != null ? (fundamentals.grossMargins*100).toFixed(1)+'%' : 'N/A'}
 ${financialsCtx ? financialsCtx : ''}
 ${enhancedCtx ? enhancedCtx : ''}
-${(!isIndia && timeframeKey !== 'longterm') ? `OPTIONS: P/C=${options?.putCallRatio?.toFixed(2)} | CallIV=${options?.avgCallIV}% | PutIV=${options?.avgPutIV}%` : ''}
-${hasUpgrade?'🟢 ANALYST UPGRADE':''}${hasDowngrade?'🔴 ANALYST DOWNGRADE':''}${hasFund?'🏦 INSTITUTIONAL ACTIVITY':''}${hasShort?'⚠ SHORT ATTACK':''}${hasEarnings?'📊 EARNINGS NEWS':''}
-NEWS: ${categorized.slice(0,6).join(' | ')}
+
+=== OPTIONS FLOW (US only) ===
+${(!isIndia && timeframeKey !== 'longterm') ? `P/C Ratio=${options?.putCallRatio?.toFixed(2) ?? 'N/A'} | CallIV=${options?.avgCallIV ?? 'N/A'}% | PutIV=${options?.avgPutIV ?? 'N/A'}%` : 'N/A'}
+
+=== NEWS & CATALYSTS ===
+${hasUpgrade ? '🟢 ANALYST UPGRADE' : ''}${hasDowngrade ? ' 🔴 ANALYST DOWNGRADE' : ''}${hasFund ? ' 🏦 INSTITUTIONAL ACTIVITY' : ''}${hasShort ? ' ⚠ SHORT ATTACK' : ''}${hasEarnings ? ' 📊 EARNINGS NEWS' : ''}
+${categorized.slice(0, 6).join('\n')}
+
 ${macroCtx}
-Return JSON: {"signal":"${signal}","confidence":${confidence},"priceTarget":number,"stopLoss":number,"timeframe":"${tf.label}","thesis":"string","bullFactors":["","",""],"bearFactors":["","",""],"riskLevel":"LOW"|"MEDIUM"|"HIGH","sentimentScore":0,"macroImpact":"BULLISH"|"BEARISH"|"NEUTRAL","bondSignal":"string","geopoliticalRisk":"LOW"|"MEDIUM"|"HIGH","globalMarketTrend":"RISK_ON"|"RISK_OFF"|"MIXED","calendarRisk":"string"}` }]
+
+Return JSON:
+{
+  "signal": "BUY"|"SELL"|"HOLD",
+  "confidence": 0-100,
+  "priceTarget": number,
+  "stopLoss": number,
+  "timeframe": "${tf.label}",
+  "thesis": "string",
+  "bullFactors": ["string", "string", "string"],
+  "bearFactors": ["string", "string", "string"],
+  "riskLevel": "LOW"|"MEDIUM"|"HIGH",
+  "sentimentScore": number,
+  "macroImpact": "BULLISH"|"BEARISH"|"NEUTRAL",
+  "bondSignal": "string",
+  "geopoliticalRisk": "LOW"|"MEDIUM"|"HIGH",
+  "globalMarketTrend": "RISK_ON"|"RISK_OFF"|"MIXED",
+  "calendarRisk": "string",
+  "quantAgreement": "AGREE"|"DISAGREE"|"PARTIAL",
+  "quantDivergenceReason": "string or null"
+}` }]
     });
 
-    // Merge: computed signal/confidence override Claude's (in case Claude tries to change them)
+    // Enforce earnings imminent override
+    if (forceHold) {
+      claudeResult.signal     = 'HOLD';
+      claudeResult.confidence = 50;
+      claudeResult.thesis     = `Earnings imminent — signal forced to HOLD due to binary event risk. ${claudeResult.thesis || ''}`;
+    }
+
+    // Enforce confidence bounds
+    claudeResult.confidence = Math.max(50, Math.min(95, claudeResult.confidence || 60));
+
     const result = {
       ...claudeResult,
-      signal,
-      confidence,
-      _quant: { totalScore: safeScore, scores },
+      _quant: {
+        signal:     quantSignal,
+        confidence: quantConfidence,
+        totalScore: safeScore,
+        scores,
+        agreement:  claudeResult.quantAgreement,
+      },
     };
+
+    console.log(`[signal] ${ticker} FINAL=${result.signal} ${result.confidence}% | quant=${quantSignal} ${quantConfidence}% | agreement=${claudeResult.quantAgreement}`);
     res.json(result);
+
   } catch (e) {
     console.error('[analyze/price]', e.message);
     res.status(500).json({ error: e.message });
@@ -5994,16 +6067,51 @@ async function runBatchSignals(market = 'US') {
           try { regime = regimeCache.data || null; } catch {}
         }
 
-        // Compute signal deterministically
+// Compute quant scores (advisory context for Claude)
         const computed = computeSignal({
           ohlcv, ta, fundamentals, financials,
           enhanced: null, options: null,
           market, timeframeKey, news: [],
           optimizedWeights: null, regime, bonds: null,
         });
+        const { totalScore, scores, flags } = computed;
+        const forceHold = flags.some(f => f.forceHold);
 
-        const { signal, confidence, totalScore } = computed;
-        const atr      = ta?.atr?.atr || null;
+        // Claude gives final verdict
+        let signal, confidence, thesis;
+        try {
+          const quantScoreSummary = `QUANT SCORES: momentum=${scores.momentum?.toFixed(2)} trend=${scores.trend?.toFixed(2)} rsi=${scores.rsi?.toFixed(2)} macd=${scores.macd?.toFixed(2)} revenue=${scores.revenue?.toFixed(2)} quality=${scores.quality?.toFixed(2)} analyst=${scores.analyst?.toFixed(2)} macro=${scores.macro?.toFixed(2)} | COMPOSITE: ${totalScore.toFixed(3)} | QUANT SUGGESTED: ${computed.signal} ${computed.confidence}%`;
+          const tfLabels = { short: 'Short Term (1-5 days)', swing: 'Swing Trade (1-4 weeks)', position: 'Position Trade (1-3 months)', longterm: 'Long Term (6-12 months)' };
+          const tfLabel  = tfLabels[timeframeKey] || 'Swing Trade (1-4 weeks)';
+
+          const batchResult = await callClaudeAPI({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 400,
+            temperature: 0,
+            system: `You are a quantitative trading analyst. Give a final ${tfLabel} signal for ${ticker} based on all data provided. Return ONLY JSON: {"signal":"BUY"|"SELL"|"HOLD","confidence":50-95,"thesis":"2 sentence reasoning"}. If EARNINGS_IMMINENT flag present, signal must be HOLD.`,
+            messages: [{ role: 'user', content: `${ticker} @ ${isIndia ? '₹' : '$'}${price} | ${tfLabel} | Market: ${market}
+${quantScoreSummary}
+FLAGS: ${flags.map(f => f.type).join(', ') || 'none'}
+REGIME: ${regime?.regime || 'UNKNOWN'}
+RSI=${ta?.rsi14} | Trend=${ta?.trendSignal} | MACD=${ta?.macd?.cross || ta?.macd?.trend}
+SMA20=$${ta?.sma20} | SMA50=$${ta?.sma50} | SMA200=$${ta?.sma200}
+Analyst Rec=${fundamentals?.recommendationKey || 'N/A'} | Target=$${fundamentals?.targetMeanPrice || 'N/A'}
+Revenue YoY=${financials?.yoy?.revenueYoY?.toFixed(1) || 'N/A'}% | EPS YoY=${financials?.yoy?.epsYoY?.toFixed(1) || 'N/A'}%
+Return JSON only.` }]
+          });
+
+          signal     = forceHold ? 'HOLD' : (batchResult.signal || computed.signal);
+          confidence = forceHold ? 50    : Math.max(50, Math.min(95, batchResult.confidence || computed.confidence));
+          thesis     = batchResult.thesis || `Batch signal. Score: ${totalScore.toFixed(3)}. Regime: ${regime?.regime || 'N/A'}.`;
+          await sleep(500);
+        } catch (claudeErr) {
+          console.warn(`[batch] Claude failed for ${ticker}/${timeframeKey}, falling back to quant:`, claudeErr.message);
+          signal     = forceHold ? 'HOLD' : computed.signal;
+          confidence = forceHold ? 50    : computed.confidence;
+          thesis     = `Batch signal (quant fallback). Score: ${totalScore.toFixed(3)}. Regime: ${regime?.regime || 'N/A'}.`;
+        }
+
+        const atr         = ta?.atr?.atr || null;
         const priceTarget = atr ? parseFloat((signal === 'SELL' ? price - atr*2 : price + atr*2).toFixed(2)) : null;
         const stopLoss    = atr ? parseFloat((signal === 'SELL' ? price + atr   : price - atr).toFixed(2))   : null;
 
@@ -6018,16 +6126,13 @@ async function runBatchSignals(market = 'US') {
           price_target:    priceTarget,
           stop_loss:       stopLoss,
           timeframe:       timeframeKey,
-          thesis:          `Batch signal. Score: ${totalScore.toFixed(3)}. Regime: ${regime?.regime || 'N/A'}.`,
+          thesis,
           outcome_result:  'PENDING',
         }).select('id').single();
-
         if (saveErr) throw saveErr;
-
         results.generated++;
         results.signals.push({ ticker, timeframeKey, signal, confidence, price });
         console.log(`[batch] ${ticker}/${timeframeKey}: ${signal} ${confidence}% @ ${isIndia ? '₹' : '$'}${price}`);
-
         // Small delay to avoid rate limits
         await sleep(200);
 
