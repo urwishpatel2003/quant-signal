@@ -7130,7 +7130,7 @@ async function runSimAutoClose() {
           exitReason = 'STOP'; exitPrice = curPremium;
         }
         // 3. 60% premium target
-        else if (curPremium && pos.premium && curPremium >= pos.premium * 1.6) {
+        else if (curPremium && pos.premium && curPremium >= pos.premium * 1.4) {
           exitReason = 'TARGET'; exitPrice = curPremium;
         }
       } else {
