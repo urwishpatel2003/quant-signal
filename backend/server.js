@@ -1663,6 +1663,239 @@ app.get('/regime', async (req, res) => {
 });
 
 // ─── QuAInt Signal Engine — Deterministic ───────────────────────────────────
+// ─── Timeframe config ─────────────────────────────────────────────────────────
+const TIMEFRAMES = {
+  short:    { range: '1mo',  label: 'Short Term (1-5 days)'        },
+  swing:    { range: '3mo',  label: 'Swing Trade (1-4 weeks)'      },
+  position: { range: '6mo',  label: 'Position Trade (1-3 months)'  },
+  longterm: { range: '1y',   label: 'Long Term (6-12 months)'      },
+};
+
+// ─── computeTA — compute technical indicators from OHLCV ─────────────────────
+function computeTA(ohlcv, timeframeKey = 'swing') {
+  const closes  = (ohlcv?.close  || []).filter(c => c != null);
+  const highs   = (ohlcv?.high   || []).filter(h => h != null);
+  const lows    = (ohlcv?.low    || []).filter(l => l != null);
+  const volumes = (ohlcv?.volume || []).filter(v => v != null);
+  if (closes.length < 10) return null;
+
+  const cur = closes[closes.length - 1];
+  const prev = closes[closes.length - 2] || cur;
+
+  // SMAs
+  const sma = (arr, n) => arr.length >= n ? arr.slice(-n).reduce((s,v)=>s+v,0)/n : null;
+  const sma20  = sma(closes, 20);
+  const sma50  = sma(closes, 50);
+  const sma200 = sma(closes, 200);
+
+  // RSI-14
+  let rsi14 = null, rsiSignal = 'NEUTRAL';
+  if (closes.length >= 15) {
+    const gains = [], losses = [];
+    for (let i = closes.length - 14; i < closes.length; i++) {
+      const d = closes[i] - closes[i-1];
+      d > 0 ? gains.push(d) : losses.push(Math.abs(d));
+    }
+    const avgG = gains.reduce((s,v)=>s+v,0)/14;
+    const avgL = losses.reduce((s,v)=>s+v,0)/14;
+    rsi14 = avgL === 0 ? 100 : parseFloat((100 - 100/(1+avgG/avgL)).toFixed(1));
+    rsiSignal = rsi14 > 70 ? 'OVERBOUGHT' : rsi14 < 30 ? 'OVERSOLD' : 'NEUTRAL';
+  }
+
+  // MACD
+  const ema = (arr, n) => {
+    if (arr.length < n) return null;
+    const k = 2/(n+1);
+    let e = arr.slice(0, n).reduce((s,v)=>s+v,0)/n;
+    for (let i = n; i < arr.length; i++) e = arr[i]*k + e*(1-k);
+    return e;
+  };
+  const ema12 = ema(closes, 12), ema26 = ema(closes, 26);
+  const macdLine = ema12 && ema26 ? ema12 - ema26 : null;
+  const macd = {
+    macdLine:   macdLine?.toFixed(3) || null,
+    signalLine: null,
+    histogram:  null,
+    trend:      macdLine > 0 ? 'BULLISH' : 'BEARISH',
+    cross:      null,
+  };
+
+  // Bollinger Bands
+  let bb = null;
+  if (closes.length >= 20 && sma20) {
+    const std = Math.sqrt(closes.slice(-20).reduce((s,v)=>s+(v-sma20)**2,0)/20);
+    const upper = sma20 + 2*std, lower = sma20 - 2*std;
+    const bWidth = parseFloat(((upper-lower)/sma20*100).toFixed(2));
+    const bPct   = parseFloat(((cur-lower)/(upper-lower)).toFixed(2));
+    bb = {
+      upper: parseFloat(upper.toFixed(2)),
+      middle: parseFloat(sma20.toFixed(2)),
+      lower:  parseFloat(lower.toFixed(2)),
+      bWidth, bPct,
+      position: bPct > 0.8 ? 'NEAR_UPPER' : bPct < 0.2 ? 'NEAR_LOWER' : 'MIDDLE',
+      squeeze: bWidth < 4,
+    };
+  }
+
+  // ATR-14
+  let atr = null;
+  if (highs.length >= 14 && lows.length >= 14 && closes.length >= 15) {
+    const trs = [];
+    for (let i = highs.length - 14; i < highs.length; i++) {
+      const prevC = closes[i-1] || closes[i];
+      trs.push(Math.max(highs[i]-lows[i], Math.abs(highs[i]-prevC), Math.abs(lows[i]-prevC)));
+    }
+    const atrVal = parseFloat((trs.reduce((s,v)=>s+v,0)/14).toFixed(2));
+    const atrPct = parseFloat((atrVal/cur*100).toFixed(2));
+    atr = {
+      atr: atrVal, atrPct,
+      volatility: atrPct > 3 ? 'HIGH' : atrPct < 1 ? 'LOW' : 'NORMAL',
+      atr1Stop:   parseFloat((cur - atrVal).toFixed(2)),
+      atr2Stop:   parseFloat((cur - atrVal*2).toFixed(2)),
+      atr1Target: parseFloat((cur + atrVal).toFixed(2)),
+      atr2Target: parseFloat((cur + atrVal*2).toFixed(2)),
+      shortStop:  parseFloat((cur + atrVal).toFixed(2)),
+    };
+  }
+
+  // StochRSI
+  let stochRSI = null;
+  if (closes.length >= 28) {
+    const rsis = [];
+    for (let i = closes.length - 14; i < closes.length; i++) {
+      const slice = closes.slice(i - 14, i + 1);
+      const g = [], l = [];
+      for (let j = 1; j < slice.length; j++) {
+        const d = slice[j] - slice[j-1];
+        d > 0 ? g.push(d) : l.push(Math.abs(d));
+      }
+      const ag = g.reduce((s,v)=>s+v,0)/14, al = l.reduce((s,v)=>s+v,0)/14;
+      rsis.push(al === 0 ? 100 : 100 - 100/(1+ag/al));
+    }
+    const minR = Math.min(...rsis), maxR = Math.max(...rsis);
+    const k = maxR === minR ? 50 : parseFloat(((rsis[rsis.length-1]-minR)/(maxR-minR)*100).toFixed(1));
+    const d = parseFloat((rsis.slice(-3).reduce((s,v,_,a)=>{ const mn=Math.min(...rsis.slice(-a.length)),mx=Math.max(...rsis.slice(-a.length)); return s+(mx===mn?50:(v-mn)/(mx-mn)*100); },0)/3).toFixed(1));
+    stochRSI = {
+      k, d,
+      signal: k > 80 ? 'OVERBOUGHT' : k < 20 ? 'OVERSOLD' : 'NEUTRAL',
+      crossover: k > d ? 'BULLISH_CROSS' : k < d ? 'BEARISH_CROSS' : null,
+    };
+  }
+
+  // S/R levels (simplified)
+  const period = Math.min(closes.length, 60);
+  const periodHigh = parseFloat(Math.max(...closes.slice(-period)).toFixed(2));
+  const periodLow  = parseFloat(Math.min(...closes.slice(-period)).toFixed(2));
+  const nearestResistance = periodHigh;
+  const nearestSupport    = periodLow;
+  const distToResistance  = parseFloat(((nearestResistance - cur)/cur*100).toFixed(2));
+  const distToSupport     = parseFloat(((cur - nearestSupport)/cur*100).toFixed(2));
+  const sr = {
+    supportLevels:    [nearestSupport],
+    resistanceLevels: [nearestResistance],
+    nearestSupport, nearestResistance,
+    distToSupport, distToResistance,
+    srRatio: distToResistance > 0 ? parseFloat((distToSupport/distToResistance).toFixed(2)) : null,
+    periodHigh, periodLow,
+  };
+
+  // Volume
+  const volRatio = volumes.length >= 20
+    ? parseFloat((volumes[volumes.length-1] / (volumes.slice(-20).reduce((s,v)=>s+v,0)/20)).toFixed(2))
+    : null;
+
+  const trendSignal = sma200
+    ? (cur > sma200 ? 'UPTREND' : 'DOWNTREND')
+    : (cur > (sma50||cur) ? 'UPTREND' : 'DOWNTREND');
+
+  return {
+    sma20:  sma20  ? parseFloat(sma20.toFixed(2))  : null,
+    sma50:  sma50  ? parseFloat(sma50.toFixed(2))  : null,
+    sma200: sma200 ? parseFloat(sma200.toFixed(2)) : null,
+    rsi14, rsiSignal, macd, bb, atr, stochRSI, sr,
+    trendSignal, volumeSignal: volRatio > 1.5 ? 'HIGH' : volRatio < 0.7 ? 'LOW' : 'NORMAL',
+    volumeRatio: volRatio,
+    priceVsSma20:  sma20  ? parseFloat(((cur-sma20)/sma20*100).toFixed(2))   : null,
+    priceVsSma50:  sma50  ? parseFloat(((cur-sma50)/sma50*100).toFixed(2))   : null,
+    priceVsSma200: sma200 ? parseFloat(((cur-sma200)/sma200*100).toFixed(2)) : null,
+  };
+}
+
+// ─── getSignalWeights / saveSignalWeights ─────────────────────────────────────
+async function getSignalWeights() {
+  try {
+    const { data, error } = await supabase
+      .from('signal_weights')
+      .select('weights')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (error || !data) return null;
+    return data.weights;
+  } catch { return null; }
+}
+
+async function saveSignalWeights(weights, metadata = {}) {
+  try {
+    await supabase.from('signal_weights').insert({
+      weights,
+      metadata,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (e) { console.warn('[weights] save failed:', e.message); }
+}
+
+// ─── getFinnhubFinancials — lightweight fundamentals for batch signals ─────────
+async function getFinnhubFinancials(ticker) {
+  try {
+    const [metrics, earnings] = await Promise.all([
+      finnhubGet(`/stock/metric?symbol=${ticker}&metric=all`),
+      finnhubGet(`/stock/earnings?symbol=${ticker}`),
+    ]);
+
+    const m = metrics?.metric || {};
+    const fundamentals = {
+      pe:                m['peNormalizedAnnual']   || m['peTTM']          || null,
+      eps:               m['epsTTM']               || null,
+      beta:              m['beta']                 || null,
+      roe:               m['roeTTM'] != null ? m['roeTTM'] / 100 : null,
+      revenueGrowth:     m['revenueGrowthTTMYoy'] != null ? m['revenueGrowthTTMYoy'] / 100 : null,
+      grossMargins:      m['grossMarginTTM'] != null ? m['grossMarginTTM'] / 100 : null,
+      fiftyTwoWeekHigh:  m['52WeekHigh']           || null,
+      fiftyTwoWeekLow:   m['52WeekLow']            || null,
+      targetMeanPrice:   null,
+      recommendationKey: null,
+      numberOfAnalystOpinions: 0,
+    };
+
+    const epsHistory = (earnings || []).slice(0, 4).map(e => ({
+      quarter:     e.period    ?? null,
+      epsActual:   e.actual    ?? null,
+      epsEstimate: e.estimate  ?? null,
+      surprisePct: e.actual != null && e.estimate
+        ? parseFloat(((e.actual - e.estimate) / Math.abs(e.estimate) * 100).toFixed(1)) : null,
+      beat: (e.actual ?? 0) >= (e.estimate ?? 0),
+    }));
+
+    const financials = {
+      yoy: {
+        revenueYoY:   m['revenueGrowthTTMYoy'] || null,
+        netIncomeYoY: m['netIncomeGrowthTTMYoy'] || null,
+        epsYoY:       null,
+      },
+      quarters:   [],
+      epsHistory,
+    };
+
+    return { fundamentals, financials };
+  } catch (e) {
+    console.warn('[getFinnhubFinancials]', ticker, e.message);
+    return { fundamentals: null, financials: null };
+  }
+}
+
+// ─── QuAInt Signal Engine — Deterministic ───────────────────────────────────
+
 function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options, market, timeframeKey, news = [], optimizedWeights = null, regime = null, bonds = null, earningsDate = null }) {
   const isIndia = market === 'INDIA';
   const scores  = {};
