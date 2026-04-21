@@ -2259,13 +2259,98 @@ function computeSignal({ ohlcv, ta, fundamentals, financials, enhanced, options,
     if (isBear&&scores.trend<0) scores.trend=Math.max(-1,scores.trend*(1+.2*rw));
   }
 
-  // ── WEIGHTS — timeframe-scaled ────────────────────────────────────────────────
-  const defaultWeights = {
+// ── DYNAMIC REGIME-BASED WEIGHTS ─────────────────────────────────────────────
+  // Base weights per timeframe — these are the neutral/default starting point
+  const baseWeights = {
     short:    { momentum:.20, trend:.15, rsi:.08, stochRsi:.06, macd:.09, bollinger:.05, atr:.03, supportResistance:.04, volumeAccel:.06, ivRank:.03, sectorRelStrength:.03, revenue:.04, quality:.03, analyst:.03, macro:.05, catalyst:.06 },
     swing:    { momentum:.14, trend:.10, rsi:.06, stochRsi:.04, macd:.07, bollinger:.05, atr:.02, supportResistance:.04, volumeAccel:.05, ivRank:.03, sectorRelStrength:.04, revenue:.10, quality:.07, analyst:.08, macro:.08, catalyst:.07 },
     position: { momentum:.10, trend:.07, rsi:.04, stochRsi:.02, macd:.04, bollinger:.03, atr:.02, supportResistance:.03, volumeAccel:.03, ivRank:.02, sectorRelStrength:.05, revenue:.17, quality:.12, analyst:.12, macro:.10, catalyst:.08 },
     longterm: { momentum:.06, trend:.03, rsi:.02, stochRsi:.01, macd:.02, bollinger:.02, atr:.01, supportResistance:.02, volumeAccel:.02, ivRank:.01, sectorRelStrength:.05, revenue:.22, quality:.17, analyst:.17, macro:.10, catalyst:.07 },
   };
+
+  // Regime multipliers — how much each factor weight shifts per regime
+  // Values > 1 = boost that factor, < 1 = suppress it
+  // Applied as: finalWeight = baseWeight * multiplier, then renormalized
+  const regimeMultipliers = {
+    STRONG_BULL: {
+      momentum:.20, trend:.15, rsi:.08, stochRsi:.06, macd:.09, bollinger:.05, atr:.03,
+      supportResistance:.04, volumeAccel:.06, ivRank:.03, sectorRelStrength:.03,
+      // Technical boosted, fundamentals neutral
+      _tech: 1.35, _fundamental: 0.85, _macro: 0.80,
+      // Specific factor multipliers
+      momentum: 1.5, trend: 1.4, macd: 1.3, volumeAccel: 1.3, sectorRelStrength: 1.2,
+      rsi: 0.7,  // RSI less reliable in strong uptrend (can stay overbought)
+      quality: 0.7, revenue: 0.8,  // fundamentals less important in momentum regime
+      macro: 0.8, catalyst: 1.1,
+    },
+    BULL: {
+      momentum: 1.2, trend: 1.2, macd: 1.1, volumeAccel: 1.1, sectorRelStrength: 1.1,
+      rsi: 0.9, bollinger: 0.9,
+      quality: 0.9, revenue: 0.95,
+      macro: 0.95, catalyst: 1.0, analyst: 1.0,
+      supportResistance: 1.0, stochRsi: 0.9, atr: 1.0, ivRank: 1.0,
+    },
+    NEUTRAL: {
+      // Balanced — fundamentals get slight boost since technicals are noisy
+      momentum: 0.9, trend: 0.9, macd: 0.9, volumeAccel: 0.9, sectorRelStrength: 1.0,
+      rsi: 1.0, bollinger: 1.0, stochRsi: 1.0,
+      quality: 1.2, revenue: 1.2, analyst: 1.2,
+      macro: 1.1, catalyst: 1.1,
+      supportResistance: 1.1, atr: 1.0, ivRank: 1.0,
+    },
+    BEAR: {
+      // Fundamentals and macro dominate, momentum signals less reliable
+      momentum: 0.6, trend: 0.7, macd: 0.7, volumeAccel: 0.8, sectorRelStrength: 0.9,
+      rsi: 1.1, bollinger: 1.1, stochRsi: 1.1,
+      quality: 1.5, revenue: 1.4, analyst: 1.3,
+      macro: 1.4, catalyst: 1.2,
+      supportResistance: 1.2, atr: 1.1, ivRank: 1.1,
+    },
+    STRONG_BEAR: {
+      // Defensive — quality, macro, and catalyst dominate everything
+      momentum: 0.4, trend: 0.5, macd: 0.5, volumeAccel: 0.6, sectorRelStrength: 0.7,
+      rsi: 1.2, bollinger: 1.2, stochRsi: 1.2,
+      quality: 1.8, revenue: 1.6, analyst: 1.4,
+      macro: 1.6, catalyst: 1.4,
+      supportResistance: 1.3, atr: 1.2, ivRank: 1.2,
+    },
+  };
+
+  // Build dynamic weights: start from base, apply regime multipliers, renormalize
+  const buildDynamicWeights = (base, regimeKey) => {
+    const multipliers = regimeMultipliers[regimeKey];
+    if (!multipliers) return base;
+
+    // Apply multipliers to base weights
+    const adjusted = {};
+    for (const [factor, baseW] of Object.entries(base)) {
+      adjusted[factor] = baseW * (multipliers[factor] || 1.0);
+    }
+
+    // Renormalize so weights still sum to 1.0
+    const total = Object.values(adjusted).reduce((s, v) => s + v, 0);
+    const normalized = {};
+    for (const [factor, w] of Object.entries(adjusted)) {
+      normalized[factor] = parseFloat((w / total).toFixed(4));
+    }
+    return normalized;
+  };
+
+  const currentRegime = regime?.regime || 'NEUTRAL';
+  const defaultWeights = {
+    short:    buildDynamicWeights(baseWeights.short,    currentRegime),
+    swing:    buildDynamicWeights(baseWeights.swing,    currentRegime),
+    position: buildDynamicWeights(baseWeights.position, currentRegime),
+    longterm: buildDynamicWeights(baseWeights.longterm, currentRegime),
+  };
+
+  // Log regime weight shift for debugging
+  if (regime?.regime && regime.regime !== 'NEUTRAL') {
+    debug.regimeWeightShift = regime.regime;
+    debug.momentumWeight = defaultWeights[timeframeKey]?.momentum?.toFixed(3);
+    debug.qualityWeight  = defaultWeights[timeframeKey]?.quality?.toFixed(3);
+  }
+
   const weights = optimizedWeights || defaultWeights;
   const w = weights[timeframeKey] || weights.swing;
 
