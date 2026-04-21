@@ -200,11 +200,11 @@ export default function SignalHistoryTab({ market = 'US' }) {
     : stats.avgOutcomePct ?? null;
 
   // All-in win rate including live pending
-  const totalWithPending = stockResolved + livePendingPcts.length;
-  const winsWithPending  = stockWins + pendingWinning;
-  const allWinRate = totalWithPending > 0
-    ? Math.round(winsWithPending / totalWithPending * 100)
-    : stockWinRate;
+  const totalWithPending = stockResolved;
+  const winsWithPending  = stockWins;
+  const allWinRate = stockResolved > 0
+    ? Math.round(stockWins / stockResolved * 100)
+    : null;
 
   const hasStockStats = stockTotal > 0 || stockPending > 0;
 
