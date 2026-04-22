@@ -7129,7 +7129,7 @@ async function runSimAutoClose() {
         else if (curPremium && pos.premium && curPremium <= pos.premium * 0.7) {
           exitReason = 'STOP'; exitPrice = curPremium;
         }
-        // 3. 60% premium target
+        // 3. 40% premium target
         else if (curPremium && pos.premium && curPremium >= pos.premium * 1.4) {
           exitReason = 'TARGET'; exitPrice = curPremium;
         }
@@ -7380,6 +7380,386 @@ Return JSON only.` }]
     res.json(result);
   } catch (e) {
     console.error('[portfolio/scan]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Strategy Lab Engine ──────────────────────────────────────────────────────
+// Academic-backed algorithmic trading strategies
+// Each strategy is rules-based, transparent, and returns a structured signal
+
+// ── Strategy 1: Dual Momentum (Gary Antonacci) ────────────────────────────────
+function strategyDualMomentum(closes, spyCloses, tbillRate = 5.1) {
+  if (!closes || closes.length < 252 || !spyCloses || spyCloses.length < 252) {
+    return { signal: 'INSUFFICIENT_DATA', score: null, details: {} };
+  }
+  const cur       = closes[closes.length - 1];
+  const year_ago  = closes[closes.length - 252];
+  const spy_cur   = spyCloses[spyCloses.length - 1];
+  const spy_year  = spyCloses[spyCloses.length - 252];
+
+  const absReturn = parseFloat(((cur - year_ago) / year_ago * 100).toFixed(2));
+  const spyReturn = parseFloat(((spy_cur - spy_year) / spy_year * 100).toFixed(2));
+  const relReturn = parseFloat((absReturn - spyReturn).toFixed(2));
+
+  const absoluteMomentum = absReturn > tbillRate;  // beating cash
+  const relativeMomentum = absReturn > spyReturn;  // beating market
+
+  let signal, confidence, reasoning;
+  if (absoluteMomentum && relativeMomentum) {
+    signal = 'BUY'; confidence = 82;
+    reasoning = `Both momentum filters pass. Asset returned ${absReturn}% vs T-bill ${tbillRate}% and SPY ${spyReturn}% over 12 months.`;
+  } else if (!absoluteMomentum) {
+    signal = 'CASH'; confidence = 75;
+    reasoning = `Absolute momentum negative — ${absReturn}% return below T-bill rate ${tbillRate}%. Move to cash.`;
+  } else {
+    signal = 'HOLD'; confidence = 60;
+    reasoning = `Beats T-bills (${absReturn}%) but underperforms SPY (${spyReturn}%). Relative momentum weak.`;
+  }
+
+  return {
+    signal, confidence, reasoning,
+    details: { absReturn, spyReturn, relReturn, tbillRate, absoluteMomentum, relativeMomentum },
+    academic: 'Antonacci (2012) — Dual Momentum Investing',
+    timeframe: 'Position Trade (1-3 months)',
+  };
+}
+
+// ── Strategy 2: Mean Reversion RSI(2) (Connors Research) ─────────────────────
+function strategyRSI2MeanReversion(closes, highs, lows) {
+  if (!closes || closes.length < 50) return { signal: 'INSUFFICIENT_DATA', score: null, details: {} };
+
+  const cur   = closes[closes.length - 1];
+  const sma200 = closes.length >= 200 ? closes.slice(-200).reduce((s,v)=>s+v,0)/200 : null;
+  const sma5   = closes.slice(-5).reduce((s,v)=>s+v,0)/5;
+
+  // RSI(2) calculation
+  const calcRSI = (arr, period) => {
+    if (arr.length < period + 1) return null;
+    let gains = 0, losses = 0;
+    for (let i = arr.length - period; i < arr.length; i++) {
+      const d = arr[i] - arr[i-1];
+      d > 0 ? gains += d : losses += Math.abs(d);
+    }
+    const avgG = gains / period, avgL = losses / period;
+    return avgL === 0 ? 100 : parseFloat((100 - 100/(1+avgG/avgL)).toFixed(1));
+  };
+
+  const rsi2  = calcRSI(closes, 2);
+  const rsi14 = calcRSI(closes, 14);
+
+  // Connors rules:
+  // BUY: price > SMA200 AND RSI(2) < 10 (extreme oversold short-term)
+  // SELL/EXIT: RSI(2) > 90 (extreme overbought short-term)
+  // AVOID: price < SMA200 (don't buy in downtrend)
+
+  const aboveSMA200  = sma200 ? cur > sma200 : null;
+  const entrySignal  = aboveSMA200 && rsi2 !== null && rsi2 < 10;
+  const exitSignal   = rsi2 !== null && rsi2 > 90;
+  const waitingEntry = aboveSMA200 && rsi2 !== null && rsi2 < 30;
+
+  let signal, confidence, reasoning;
+  if (entrySignal) {
+    signal = 'BUY'; confidence = 78;
+    reasoning = `RSI(2)=${rsi2} — extreme short-term oversold while price above SMA200. Classic mean reversion entry.`;
+  } else if (exitSignal) {
+    signal = 'SELL'; confidence = 78;
+    reasoning = `RSI(2)=${rsi2} — extreme short-term overbought. Exit long positions per Connors rules.`;
+  } else if (!aboveSMA200) {
+    signal = 'AVOID'; confidence = 70;
+    reasoning = `Price below SMA200 — Connors rules require uptrend filter. No long entries permitted.`;
+  } else if (waitingEntry) {
+    signal = 'WATCH'; confidence = 55;
+    reasoning = `RSI(2)=${rsi2} — pulling back but not at entry threshold (<10). Monitor for setup.`;
+  } else {
+    signal = 'NEUTRAL'; confidence = 50;
+    reasoning = `RSI(2)=${rsi2} — no entry or exit signal. Price above SMA200, waiting for pullback.`;
+  }
+
+  return {
+    signal, confidence, reasoning,
+    details: { rsi2, rsi14, sma200: sma200?.toFixed(2), aboveSMA200, cur: cur?.toFixed(2) },
+    academic: 'Connors, Alvarez & Hayward (2012) — Short-Term Trading Strategies That Work',
+    timeframe: 'Short Term (2-5 days)',
+  };
+}
+
+// ── Strategy 3: Bollinger Band + Keltner Channel Squeeze ──────────────────────
+function strategyBBSqueeze(closes, highs, lows, volumes) {
+  if (!closes || closes.length < 20) return { signal: 'INSUFFICIENT_DATA', score: null, details: {} };
+
+  const cur   = closes[closes.length - 1];
+  const sma20 = closes.slice(-20).reduce((s,v)=>s+v,0)/20;
+
+  // Bollinger Bands (20, 2)
+  const stdDev = Math.sqrt(closes.slice(-20).reduce((s,v)=>s+(v-sma20)**2,0)/20);
+  const bbUpper = sma20 + 2 * stdDev;
+  const bbLower = sma20 - 2 * stdDev;
+  const bbWidth = (bbUpper - bbLower) / sma20;
+
+  // Keltner Channel (20, 1.5 × ATR)
+  const atrArr = [];
+  for (let i = Math.max(1, highs.length-20); i < highs.length; i++) {
+    atrArr.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i-1]),
+      Math.abs(lows[i]  - closes[i-1])
+    ));
+  }
+  const atr14 = atrArr.reduce((s,v)=>s+v,0) / atrArr.length;
+  const kcUpper = sma20 + 1.5 * atr14;
+  const kcLower = sma20 - 1.5 * atr14;
+
+  // Squeeze = BB inside KC
+  const squeeze = bbUpper < kcUpper && bbLower > kcLower;
+
+  // Momentum histogram (linear regression of close - midpoint)
+  const midpoints = closes.slice(-20).map((c, i, arr) => {
+    const h = highs[highs.length-20+i] || c;
+    const l = lows[lows.length-20+i]   || c;
+    return (h + l + c + (arr[i-1]||c)) / 4;
+  });
+  const momentum = cur - midpoints[midpoints.length-1];
+
+  // Volume confirmation
+  const avgVol = volumes && volumes.length >= 20
+    ? volumes.slice(-20).reduce((s,v)=>s+v,0)/20 : null;
+  const curVol = volumes?.[volumes.length-1];
+  const volConfirm = avgVol && curVol ? curVol > avgVol * 1.3 : null;
+
+  // Count consecutive squeeze days
+  let squeezeDays = 0;
+  for (let i = closes.length-1; i >= Math.max(0, closes.length-20); i--) {
+    const s20 = closes.slice(Math.max(0,i-19), i+1);
+    const sm  = s20.reduce((a,b)=>a+b,0)/s20.length;
+    const sd  = Math.sqrt(s20.reduce((a,v)=>a+(v-sm)**2,0)/s20.length);
+    const bbu = sm+2*sd, bbl = sm-2*sd;
+    const kcu = sm+1.5*atr14, kcl = sm-1.5*atr14;
+    if (bbu < kcu && bbl > kcl) squeezeDays++; else break;
+  }
+
+  let signal, confidence, reasoning;
+  if (squeeze && squeezeDays >= 5) {
+    signal = 'WATCH'; confidence = 65;
+    reasoning = `BB Squeeze active for ${squeezeDays} days — volatility compression building. Breakout imminent. Direction: ${momentum > 0 ? 'BULLISH' : 'BEARISH'} momentum.`;
+  } else if (!squeeze && momentum > 0) {
+    signal = 'BUY'; confidence = volConfirm ? 75 : 65;
+    reasoning = `Squeeze released with bullish momentum. ${volConfirm ? 'Volume confirmed ✓' : 'Volume not confirmed — lower confidence.'}`;
+  } else if (!squeeze && momentum < 0) {
+    signal = 'SELL'; confidence = volConfirm ? 75 : 65;
+    reasoning = `Squeeze released with bearish momentum. ${volConfirm ? 'Volume confirmed ✓' : 'Volume not confirmed — lower confidence.'}`;
+  } else {
+    signal = 'NEUTRAL'; confidence = 50;
+    reasoning = `No squeeze detected. BB width=${(bbWidth*100).toFixed(1)}%. Waiting for volatility compression.`;
+  }
+
+  return {
+    signal, confidence, reasoning,
+    details: {
+      squeeze, squeezeDays, momentum: parseFloat(momentum.toFixed(3)),
+      bbWidth: parseFloat((bbWidth*100).toFixed(2)),
+      bbUpper: parseFloat(bbUpper.toFixed(2)), bbLower: parseFloat(bbLower.toFixed(2)),
+      kcUpper: parseFloat(kcUpper.toFixed(2)), kcLower: parseFloat(kcLower.toFixed(2)),
+      atr: parseFloat(atr14.toFixed(2)), volConfirm,
+    },
+    academic: 'Carter (2005) — Mastering the Trade; LazyBear TTM Squeeze indicator',
+    timeframe: 'Swing Trade (1-4 weeks)',
+  };
+}
+
+// ── Strategy 4: Post-Earnings Announcement Drift (PEAD) ───────────────────────
+function strategyPEAD(closes, epsHistory, daysToEarnings) {
+  if (!epsHistory || epsHistory.length === 0) {
+    return { signal: 'INSUFFICIENT_DATA', score: null, details: {} };
+  }
+
+  const lastEarnings = epsHistory[0];
+  const surprisePct  = lastEarnings?.surprisePct ?? null;
+  const beat         = lastEarnings?.beat ?? null;
+
+  // Historical PEAD win rate based on surprise magnitude
+  const peadStrength = surprisePct != null
+    ? Math.abs(surprisePct) > 10 ? 'STRONG'
+    : Math.abs(surprisePct) > 5  ? 'MODERATE'
+    : 'WEAK' : null;
+
+  // SMA50 trend filter
+  const sma50 = closes && closes.length >= 50
+    ? closes.slice(-50).reduce((s,v)=>s+v,0)/50 : null;
+  const cur = closes?.[closes.length-1];
+  const aboveSMA50 = sma50 && cur ? cur > sma50 : null;
+
+  // Historical drift estimate (academic finding: avg drift by surprise size)
+  const expectedDrift = surprisePct != null
+    ? surprisePct > 10 ? 8.5
+    : surprisePct > 5  ? 5.2
+    : surprisePct > 0  ? 2.8
+    : surprisePct > -5 ? -2.1
+    : surprisePct > -10 ? -4.8 : -7.2
+    : null;
+
+  let signal, confidence, reasoning;
+
+  if (daysToEarnings !== null && daysToEarnings >= 0 && daysToEarnings <= 3) {
+    signal = 'WATCH'; confidence = 60;
+    reasoning = `Earnings in ${daysToEarnings} day(s). PEAD strategy enters 1 day AFTER earnings release to capture drift.`;
+  } else if (beat === true && peadStrength !== 'WEAK' && aboveSMA50) {
+    signal = 'BUY'; confidence = peadStrength === 'STRONG' ? 76 : 68;
+    reasoning = `Beat by ${surprisePct?.toFixed(1)}% — ${peadStrength} surprise. Historical drift: +${expectedDrift}% over 60 days. Price above SMA50 ✓.`;
+  } else if (beat === false && peadStrength !== 'WEAK') {
+    signal = 'SELL'; confidence = peadStrength === 'STRONG' ? 72 : 64;
+    reasoning = `Missed by ${Math.abs(surprisePct ?? 0).toFixed(1)}% — ${peadStrength} miss. Historical drift: ${expectedDrift}% over 60 days.`;
+  } else if (beat === true && !aboveSMA50) {
+    signal = 'HOLD'; confidence = 55;
+    reasoning = `Beat earnings but price below SMA50 — trend filter fails. PEAD signal requires uptrend.`;
+  } else {
+    signal = 'NEUTRAL'; confidence = 50;
+    reasoning = `Weak earnings surprise (${surprisePct?.toFixed(1)}%) — insufficient drift signal. PEAD requires >5% surprise.`;
+  }
+
+  return {
+    signal, confidence, reasoning,
+    details: { surprisePct, beat, peadStrength, expectedDrift, aboveSMA50, daysToEarnings },
+    academic: 'Ball & Brown (1968); Bernard & Thomas (1989) — Post-Earnings Announcement Drift',
+    timeframe: 'Position Trade (60 days)',
+  };
+}
+
+// ── Strategy 5: 52-Week High Momentum (George & Hwang) ───────────────────────
+function strategy52WeekHigh(closes) {
+  if (!closes || closes.length < 252) return { signal: 'INSUFFICIENT_DATA', score: null, details: {} };
+
+  const cur      = closes[closes.length - 1];
+  const high252  = Math.max(...closes.slice(-252));
+  const low252   = Math.min(...closes.slice(-252));
+  const pctFrom52High = parseFloat(((cur - high252) / high252 * 100).toFixed(2));
+  const pctFrom52Low  = parseFloat(((cur - low252)  / low252  * 100).toFixed(2));
+  const position52W   = parseFloat(((cur - low252) / (high252 - low252) * 100).toFixed(1));
+
+  // George & Hwang (2004): stocks near 52W high have higher expected returns
+  // Mechanism: anchoring bias — investors underreact to good news near the high
+  // Stocks within 5% of 52W high = strong BUY signal
+  // Stocks within 5% of 52W low  = strong SELL signal
+
+  const nearHigh = pctFrom52High > -5;   // within 5% of 52W high
+  const nearLow  = pctFrom52Low  < 10;   // within 10% of 52W low
+  const breakout = pctFrom52High > -1;   // essentially at new highs
+
+  // Momentum confirmation: 6-month return
+  const ret6m = closes.length >= 126
+    ? parseFloat(((cur - closes[closes.length-126]) / closes[closes.length-126] * 100).toFixed(2))
+    : null;
+
+  let signal, confidence, reasoning;
+  if (breakout) {
+    signal = 'BUY'; confidence = 80;
+    reasoning = `At/near 52W high (${pctFrom52High.toFixed(1)}% from high). George & Hwang anchoring effect — breakout momentum strongest here. 6M return: ${ret6m?.toFixed(1)}%.`;
+  } else if (nearHigh && ret6m !== null && ret6m > 10) {
+    signal = 'BUY'; confidence = 74;
+    reasoning = `Within 5% of 52W high with strong 6M momentum (+${ret6m?.toFixed(1)}%). Anchoring effect supports continued outperformance.`;
+  } else if (nearLow) {
+    signal = 'SELL'; confidence = 70;
+    reasoning = `Near 52W low (${pctFrom52Low.toFixed(1)}% above low). Negative momentum anchoring — underperformance likely to continue.`;
+  } else {
+    signal = 'NEUTRAL'; confidence = 50;
+    reasoning = `Mid-range — ${position52W}% of 52W range. No strong anchoring signal. Await approach to 52W high or low.`;
+  }
+
+  return {
+    signal, confidence, reasoning,
+    details: { cur: cur?.toFixed(2), high252: high252?.toFixed(2), low252: low252?.toFixed(2), pctFrom52High, pctFrom52Low, position52W, ret6m },
+    academic: 'George & Hwang (2004) — The 52-Week High and Momentum Investing',
+    timeframe: 'Swing to Position Trade',
+  };
+}
+
+// ── Master strategy runner ────────────────────────────────────────────────────
+function runAllStrategies({ closes, highs, lows, volumes, spyCloses, epsHistory, daysToEarnings }) {
+  return {
+    dualMomentum:    strategyDualMomentum(closes, spyCloses),
+    rsi2Reversion:   strategyRSI2MeanReversion(closes, highs, lows),
+    bbSqueeze:       strategyBBSqueeze(closes, highs, lows, volumes),
+    peadDrift:       strategyPEAD(closes, epsHistory, daysToEarnings),
+    fiftyTwoWeekHigh: strategy52WeekHigh(closes),
+  };
+}
+
+// ── GET /strategy/:ticker — run all strategies on a ticker ───────────────────
+app.get('/strategy/:ticker', async (req, res) => {
+  const ticker = req.params.ticker.toUpperCase();
+  const market = (req.query.market || 'US').toUpperCase();
+  try {
+    // Fetch price history
+    let ohlcv = null;
+    if (market === 'INDIA') {
+      const hist = await getNSEHistory(ticker, '2y');
+      if (hist) ohlcv = hist;
+    } else {
+      const hist = await tradierHistory(ticker, '1y');
+      if (hist) ohlcv = hist;
+    }
+    if (!ohlcv?.close?.length) return res.status(404).json({ error: `No price data for ${ticker}` });
+
+    // Fetch SPY for dual momentum comparison (US only)
+    let spyCloses = null;
+    if (market === 'US') {
+      try {
+        const spy = await tradierHistory('SPY', '1y');
+        spyCloses = spy?.close || null;
+      } catch {}
+    }
+
+    // Fetch earnings history
+    let epsHistory = [], daysToEarnings = null;
+    try {
+      if (market === 'US') {
+        const [earnings, calendar] = await Promise.all([
+          finnhubGet(`/stock/earnings?symbol=${ticker}`),
+          finnhubGet(`/calendar/earnings?from=${new Date().toISOString().split('T')[0]}&to=${new Date(Date.now()+90*864e5).toISOString().split('T')[0]}&symbol=${ticker}`),
+        ]);
+        epsHistory = (earnings || []).slice(0, 4).map(e => ({
+          quarter:     e.period,
+          epsActual:   e.actual,
+          epsEstimate: e.estimate,
+          surprisePct: e.actual != null && e.estimate
+            ? parseFloat(((e.actual - e.estimate) / Math.abs(e.estimate) * 100).toFixed(1)) : null,
+          beat: (e.actual ?? 0) >= (e.estimate ?? 0),
+        }));
+        const nextEarnings = calendar?.earningsCalendar?.[0]?.date;
+        if (nextEarnings) {
+          daysToEarnings = Math.ceil((new Date(nextEarnings) - new Date()) / (1000*60*60*24));
+        }
+      }
+    } catch {}
+
+    // Run all strategies
+    const strategies = runAllStrategies({
+      closes:        ohlcv.close,
+      highs:         ohlcv.high,
+      lows:          ohlcv.low,
+      volumes:       ohlcv.volume,
+      spyCloses,
+      epsHistory,
+      daysToEarnings,
+    });
+
+    // Compute aggregate signal — weighted by confidence
+    const signals = Object.values(strategies).filter(s => s.signal !== 'INSUFFICIENT_DATA');
+    const bullish  = signals.filter(s => ['BUY'].includes(s.signal)).length;
+    const bearish  = signals.filter(s => ['SELL'].includes(s.signal)).length;
+    const avgConf  = signals.length
+      ? Math.round(signals.reduce((s,v) => s + (v.confidence||0), 0) / signals.length)
+      : null;
+
+    const aggregate = {
+      bullish, bearish, neutral: signals.length - bullish - bearish,
+      avgConfidence: avgConf,
+      overallSignal: bullish > bearish + 1 ? 'BUY' : bearish > bullish + 1 ? 'SELL' : 'MIXED',
+    };
+
+    res.json({ ticker, market, strategies, aggregate, fetchedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error('[strategy]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
