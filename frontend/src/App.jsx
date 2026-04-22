@@ -291,7 +291,7 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
+           <div style={{ display: activeTab === 'watchlist' ? 'block' : 'none' }}>
               <WatchlistTab
                 onOpenScanner={ticker => { setActiveTab('scanner'); scan.runScan(ticker); }}
                 onOpenOptions={ticker => { setOptionsTicker(ticker); setActiveTab('options'); }}
@@ -300,6 +300,9 @@ export default function App() {
                 onTickerRemoved={ticker => setWatchlistTickers(prev => prev.filter(t => t !== ticker))}
                 market={market}
               />
+          </div>
+            <div style={{ display: activeTab === 'strategy' ? 'block' : 'none' }}>
+              <StrategyLabTab market={market} />
             </div>
             {market === 'INDIA' && (
               <div style={{ display: activeTab === 'invest' ? 'block' : 'none' }}>
