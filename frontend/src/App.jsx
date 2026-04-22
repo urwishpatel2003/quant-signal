@@ -29,6 +29,7 @@ import { TermsModal, PrivacyModal, AboutModal, ContactModal } from './components
 import ErrorBoundary  from './components/ErrorBoundary';
 import BlogTab        from './tabs/BlogTab';
 import BlogAdmin      from './tabs/BlogAdmin';
+import StrategyLabTab from './tabs/StrategyLabTab';
 
 const BASE = import.meta.env.VITE_API_BASE;
 
